@@ -1,0 +1,78 @@
+export interface Group {
+  id: string;
+  parent_id: string | null;
+  name: string;
+  sort_order: number;
+}
+
+export interface GroupInput {
+  parent_id: string | null;
+  name: string;
+  sort_order: number;
+}
+
+export type AuthMethod = "password" | "private_key" | "agent";
+
+export interface Identity {
+  id: string;
+  label: string;
+  username: string;
+  auth_method: AuthMethod;
+  ssh_key_id: string | null;
+  has_password: boolean;
+}
+
+export interface IdentityInput {
+  label: string;
+  username: string;
+  auth_method: AuthMethod;
+  ssh_key_id: string | null;
+  // undefined/null = leave existing password unchanged (on update).
+  // "" = clear it. Any other string = set/replace it.
+  password: string | null;
+}
+
+export interface SshKey {
+  id: string;
+  label: string;
+  key_type: string;
+  public_key: string;
+  fingerprint: string;
+  created_at: string;
+}
+
+export interface GenerateKeyInput {
+  label: string;
+}
+
+export interface ImportKeyInput {
+  label: string;
+  private_key_pem: string;
+  passphrase: string | null;
+}
+
+export interface Host {
+  id: string;
+  group_id: string | null;
+  label: string;
+  hostname: string;
+  port: number;
+  identity_id: string | null;
+  jump_host_id: string | null;
+  color: string | null;
+  notes: string | null;
+  sort_order: number;
+  last_connected_at: string | null;
+}
+
+export interface HostInput {
+  group_id: string | null;
+  label: string;
+  hostname: string;
+  port: number;
+  identity_id: string | null;
+  jump_host_id: string | null;
+  color: string | null;
+  notes: string | null;
+  sort_order: number;
+}

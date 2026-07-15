@@ -1,0 +1,133 @@
+import {
+  CursorStyle,
+  KEYBINDINGS,
+  TERMINAL_THEME_PRESETS,
+  TerminalThemeKey,
+  ThemeMode,
+  useSettingsStore,
+} from "../../state/settingsStore";
+import { inputClass, labelClass, selectClass } from "../forms/formStyles";
+
+const THEME_MODES: ThemeMode[] = ["system", "light", "dark"];
+const CURSOR_STYLES: CursorStyle[] = ["block", "bar", "underline"];
+const AUTO_LOCK_OPTIONS = [
+  { minutes: 5, label: "5 minutes" },
+  { minutes: 15, label: "15 minutes" },
+  { minutes: 30, label: "30 minutes" },
+  { minutes: 60, label: "1 hour" },
+  { minutes: 0, label: "Never" },
+];
+
+export default function SettingsPanel() {
+  const theme = useSettingsStore((s) => s.theme);
+  const setTheme = useSettingsStore((s) => s.setTheme);
+  const terminalFontFamily = useSettingsStore((s) => s.terminalFontFamily);
+  const setTerminalFontFamily = useSettingsStore((s) => s.setTerminalFontFamily);
+  const terminalFontSize = useSettingsStore((s) => s.terminalFontSize);
+  const setTerminalFontSize = useSettingsStore((s) => s.setTerminalFontSize);
+  const terminalCursorStyle = useSettingsStore((s) => s.terminalCursorStyle);
+  const setTerminalCursorStyle = useSettingsStore((s) => s.setTerminalCursorStyle);
+  const terminalThemeKey = useSettingsStore((s) => s.terminalThemeKey);
+  const setTerminalThemeKey = useSettingsStore((s) => s.setTerminalThemeKey);
+  const autoLockMinutes = useSettingsStore((s) => s.autoLockMinutes);
+  const setAutoLockMinutes = useSettingsStore((s) => s.setAutoLockMinutes);
+
+  return (
+    <div className="max-w-xl">
+      <h2 className="mb-4 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Settings</h2>
+
+      <section className="mb-6">
+        <h3 className="mb-2 text-sm font-semibold text-neutral-800 dark:text-neutral-200">Appearance</h3>
+        <label className={labelClass}>Theme</label>
+        <select
+          value={theme}
+          onChange={(e) => setTheme(e.target.value as ThemeMode)}
+          className={selectClass}
+        >
+          {THEME_MODES.map((t) => (
+            <option key={t} value={t}>
+              {t === "system" ? "Match system" : t === "light" ? "Light" : "Dark"}
+            </option>
+          ))}
+        </select>
+      </section>
+
+      <section className="mb-6">
+        <h3 className="mb-2 text-sm font-semibold text-neutral-800 dark:text-neutral-200">Terminal</h3>
+
+        <label className={labelClass}>Font family</label>
+        <input
+          value={terminalFontFamily}
+          onChange={(e) => setTerminalFontFamily(e.target.value)}
+          className={`${inputClass} font-mono`}
+        />
+
+        <label className={labelClass}>Font size ({terminalFontSize}px)</label>
+        <input
+          type="range"
+          min={10}
+          max={24}
+          value={terminalFontSize}
+          onChange={(e) => setTerminalFontSize(Number(e.target.value))}
+          className="mb-4 w-full"
+        />
+
+        <label className={labelClass}>Cursor style</label>
+        <select
+          value={terminalCursorStyle}
+          onChange={(e) => setTerminalCursorStyle(e.target.value as CursorStyle)}
+          className={selectClass}
+        >
+          {CURSOR_STYLES.map((c) => (
+            <option key={c} value={c}>
+              {c[0].toUpperCase() + c.slice(1)}
+            </option>
+          ))}
+        </select>
+
+        <label className={labelClass}>Color theme</label>
+        <select
+          value={terminalThemeKey}
+          onChange={(e) => setTerminalThemeKey(e.target.value as TerminalThemeKey)}
+          className={selectClass}
+        >
+          {(Object.keys(TERMINAL_THEME_PRESETS) as TerminalThemeKey[]).map((key) => (
+            <option key={key} value={key}>
+              {TERMINAL_THEME_PRESETS[key].label}
+            </option>
+          ))}
+        </select>
+      </section>
+
+      <section className="mb-6">
+        <h3 className="mb-2 text-sm font-semibold text-neutral-800 dark:text-neutral-200">Security</h3>
+        <label className={labelClass}>Auto-lock vault after inactivity</label>
+        <select
+          value={autoLockMinutes}
+          onChange={(e) => setAutoLockMinutes(Number(e.target.value))}
+          className={selectClass}
+        >
+          {AUTO_LOCK_OPTIONS.map((o) => (
+            <option key={o.minutes} value={o.minutes}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </section>
+
+      <section>
+        <h3 className="mb-2 text-sm font-semibold text-neutral-800 dark:text-neutral-200">Keybindings</h3>
+        <div className="divide-y divide-neutral-200 rounded-md border border-neutral-200 dark:divide-neutral-800 dark:border-neutral-800">
+          {KEYBINDINGS.map((k) => (
+            <div key={k.keys} className="flex items-center justify-between px-3 py-2 text-sm">
+              <span className="text-neutral-600 dark:text-neutral-300">{k.action}</span>
+              <kbd className="rounded border border-neutral-300 bg-neutral-100 px-2 py-0.5 font-mono text-xs text-neutral-700 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
+                {k.keys}
+              </kbd>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
