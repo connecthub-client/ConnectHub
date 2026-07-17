@@ -232,6 +232,7 @@ mod live_sshd_tests {
                 port: 22,
                 identity_id: Some(identity.id),
                 jump_host_id: None,
+                vpn_profile_id: None,
                 color: None,
                 notes: None,
                 sort_order: 0,
@@ -246,6 +247,7 @@ mod live_sshd_tests {
             sessions: Arc::new(DashMap::new()),
             sftp_sessions: Arc::new(DashMap::new()),
             tunnels: Arc::new(DashMap::new()),
+            vpn_connections: Arc::new(DashMap::new()),
         };
 
         let sftp_sessions = app_state.sftp_sessions.clone();

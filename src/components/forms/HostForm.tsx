@@ -1,6 +1,7 @@
 import { FormEvent, useState } from "react";
 import { AuthMethod, Host } from "../../lib/tauri-bridge";
 import { useHostsStore } from "../../state/hostsStore";
+import { useVpnStore } from "../../state/vpnStore";
 import { errorClass, inputClass, labelClass, primaryButtonClass, selectClass } from "./formStyles";
 
 interface HostFormProps {
@@ -19,6 +20,7 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
   const createHost = useHostsStore((s) => s.createHost);
   const updateHost = useHostsStore((s) => s.updateHost);
   const createIdentity = useHostsStore((s) => s.createIdentity);
+  const vpnProfiles = useVpnStore((s) => s.profiles);
 
   const [label, setLabel] = useState(host?.label ?? "");
   const [hostname, setHostname] = useState(host?.hostname ?? "");
@@ -35,6 +37,7 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
   const [sshKeyId, setSshKeyId] = useState("");
 
   const [jumpHostId, setJumpHostId] = useState(host?.jump_host_id ?? "");
+  const [vpnProfileId, setVpnProfileId] = useState(host?.vpn_profile_id ?? "");
   const [notes, setNotes] = useState(host?.notes ?? "");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -70,6 +73,7 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
         port,
         identity_id: resolvedIdentityId,
         jump_host_id: jumpHostId || null,
+        vpn_profile_id: vpnProfileId || null,
         color: host?.color ?? null,
         notes: notes || null,
         sort_order: host?.sort_order ?? 0,
@@ -244,6 +248,20 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
               {h.label}
             </option>
           ))}
+      </select>
+
+      <label className={labelClass}>VPN profile</label>
+      <select
+        value={vpnProfileId}
+        onChange={(e) => setVpnProfileId(e.currentTarget.value)}
+        className={selectClass}
+      >
+        <option value="">(none - directly reachable)</option>
+        {vpnProfiles.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.label}
+          </option>
+        ))}
       </select>
 
       <label className={labelClass}>Notes</label>

@@ -5,6 +5,7 @@ pub mod hosts;
 pub mod identities;
 pub mod snippets;
 pub mod ssh_keys;
+pub mod vpn_profiles;
 
 use rusqlite::Connection;
 
@@ -45,6 +46,16 @@ pub fn init_schema(conn: &Connection) -> AppResult<()> {
             password_ciphertext BLOB
         );
 
+        CREATE TABLE IF NOT EXISTS vpn_profiles (
+            id TEXT PRIMARY KEY,
+            label TEXT NOT NULL,
+            config TEXT NOT NULL,
+            auth_username TEXT,
+            auth_password_nonce BLOB,
+            auth_password_ciphertext BLOB,
+            created_at TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS hosts (
             id TEXT PRIMARY KEY,
             group_id TEXT REFERENCES groups(id) ON DELETE SET NULL,
@@ -53,6 +64,7 @@ pub fn init_schema(conn: &Connection) -> AppResult<()> {
             port INTEGER NOT NULL DEFAULT 22,
             identity_id TEXT REFERENCES identities(id) ON DELETE SET NULL,
             jump_host_id TEXT REFERENCES hosts(id) ON DELETE SET NULL,
+            vpn_profile_id TEXT REFERENCES vpn_profiles(id) ON DELETE SET NULL,
             color TEXT,
             notes TEXT,
             sort_order INTEGER NOT NULL DEFAULT 0,
@@ -76,5 +88,37 @@ pub fn init_schema(conn: &Connection) -> AppResult<()> {
         );
         ",
     )?;
+
+    // `hosts.vpn_profile_id` was added after some installs already created
+    // their `hosts` table without it - `CREATE TABLE IF NOT EXISTS` above is
+    // a no-op for those, so backfill the column by hand. No REFERENCES
+    // clause here (unlike the fresh-install column above): rather than lean
+    // on SQLite's ADD COLUMN + foreign key semantics, `vpn_profiles::delete`
+    // clears any referencing `hosts.vpn_profile_id` rows itself before
+    // deleting, so behavior is identical on fresh and migrated databases.
+    add_column_if_missing(conn, "hosts", "vpn_profile_id", "TEXT")?;
+
+    Ok(())
+}
+
+fn add_column_if_missing(
+    conn: &Connection,
+    table: &str,
+    column: &str,
+    decl: &str,
+) -> AppResult<()> {
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+    let mut exists = false;
+    for name in stmt.query_map((), |row| row.get::<_, String>(1))? {
+        if name? == column {
+            exists = true;
+            break;
+        }
+    }
+    drop(stmt);
+
+    if !exists {
+        conn.execute(&format!("ALTER TABLE {table} ADD COLUMN {column} {decl}"), ())?;
+    }
     Ok(())
 }

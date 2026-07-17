@@ -203,6 +203,7 @@ pub fn import_csv(conn: &Connection, content: &str) -> AppResult<ImportSummary> 
                 port: record.port,
                 identity_id,
                 jump_host_id: None,
+                vpn_profile_id: None,
                 color: None,
                 notes: if record.notes.trim().is_empty() {
                     None
@@ -241,6 +242,7 @@ pub fn import_csv(conn: &Connection, content: &str) -> AppResult<ImportSummary> 
                         port: host.port,
                         identity_id: host.identity_id,
                         jump_host_id: Some(jump_id),
+                        vpn_profile_id: None,
                         color: host.color,
                         notes: host.notes,
                         sort_order: host.sort_order,
@@ -317,6 +319,7 @@ mod tests {
                 port: 22,
                 identity_id: None,
                 jump_host_id: None,
+                vpn_profile_id: None,
                 color: None,
                 notes: None,
                 sort_order: 0,
@@ -332,6 +335,7 @@ mod tests {
                 port: 2222,
                 identity_id: Some(identity.id),
                 jump_host_id: Some(bastion.id),
+                vpn_profile_id: None,
                 color: None,
                 notes: Some("primary web node".into()),
                 sort_order: 0,

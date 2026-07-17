@@ -52,6 +52,7 @@ export default function HostTree(props: HostTreeProps) {
       port: host.port,
       identity_id: host.identity_id,
       jump_host_id: host.jump_host_id,
+      vpn_profile_id: host.vpn_profile_id,
       color: host.color,
       notes: host.notes,
       sort_order: host.sort_order,

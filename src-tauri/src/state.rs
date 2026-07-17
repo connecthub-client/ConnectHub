@@ -8,6 +8,7 @@ use crate::ssh::session::SessionCommand;
 use crate::ssh::sftp::SftpMap;
 use crate::ssh::tunnel::TunnelMap;
 use crate::vault::VaultKey;
+use crate::vpn::VpnMap;
 
 pub struct AppState {
     pub db: Mutex<Connection>,
@@ -16,6 +17,7 @@ pub struct AppState {
     pub sessions: Arc<DashMap<uuid::Uuid, tokio::sync::mpsc::UnboundedSender<SessionCommand>>>,
     pub sftp_sessions: SftpMap,
     pub tunnels: TunnelMap,
+    pub vpn_connections: VpnMap,
 }
 
 impl AppState {
@@ -31,6 +33,7 @@ impl AppState {
             sessions: Arc::new(DashMap::new()),
             sftp_sessions: Arc::new(DashMap::new()),
             tunnels: Arc::new(DashMap::new()),
+            vpn_connections: Arc::new(DashMap::new()),
         })
     }
 

@@ -59,6 +59,7 @@ export interface Host {
   port: number;
   identity_id: string | null;
   jump_host_id: string | null;
+  vpn_profile_id: string | null;
   color: string | null;
   notes: string | null;
   sort_order: number;
@@ -72,6 +73,7 @@ export interface HostInput {
   port: number;
   identity_id: string | null;
   jump_host_id: string | null;
+  vpn_profile_id: string | null;
   color: string | null;
   notes: string | null;
   sort_order: number;
@@ -80,4 +82,34 @@ export interface HostInput {
 export interface ImportSummary {
   imported: number;
   warnings: string[];
+}
+
+export interface VpnProfile {
+  id: string;
+  label: string;
+  config: string;
+  auth_username: string | null;
+  has_auth_password: boolean;
+  created_at: string;
+}
+
+export interface VpnProfileInput {
+  label: string;
+  config: string;
+  auth_username: string | null;
+  // undefined/null = leave existing password unchanged (on update).
+  // "" = clear it. Any other string = set/replace it.
+  auth_password: string | null;
+}
+
+export type VpnState = "connecting" | "connected" | "disconnecting" | "disconnected" | "error";
+
+export interface VpnStatus {
+  state: VpnState;
+  message: string | null;
+}
+
+export interface VpnConnectionStatus {
+  profile_id: string;
+  status: VpnStatus;
 }

@@ -38,6 +38,8 @@ pub enum AppError {
     Csv(String),
     #[error("Google account error: {0}")]
     Google(String),
+    #[error("VPN error: {0}")]
+    Vpn(String),
 }
 
 // Tauri serializes command errors to the frontend as JSON; a plain string

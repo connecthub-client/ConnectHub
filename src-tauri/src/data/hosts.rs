@@ -13,14 +13,15 @@ fn row_to_host(row: &rusqlite::Row) -> rusqlite::Result<Host> {
         port: row.get(4)?,
         identity_id: row.get(5)?,
         jump_host_id: row.get(6)?,
-        color: row.get(7)?,
-        notes: row.get(8)?,
-        sort_order: row.get(9)?,
-        last_connected_at: row.get(10)?,
+        vpn_profile_id: row.get(7)?,
+        color: row.get(8)?,
+        notes: row.get(9)?,
+        sort_order: row.get(10)?,
+        last_connected_at: row.get(11)?,
     })
 }
 
-const SELECT_COLUMNS: &str = "id, group_id, label, hostname, port, identity_id, jump_host_id, color, notes, sort_order, last_connected_at";
+const SELECT_COLUMNS: &str = "id, group_id, label, hostname, port, identity_id, jump_host_id, vpn_profile_id, color, notes, sort_order, last_connected_at";
 
 pub fn get(conn: &Connection, id: Uuid) -> AppResult<Host> {
     conn.query_row(
@@ -45,8 +46,8 @@ pub fn list(conn: &Connection) -> AppResult<Vec<Host>> {
 pub fn create(conn: &Connection, input: HostInput) -> AppResult<Host> {
     let id = Uuid::new_v4();
     conn.execute(
-        "INSERT INTO hosts (id, group_id, label, hostname, port, identity_id, jump_host_id, color, notes, sort_order)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+        "INSERT INTO hosts (id, group_id, label, hostname, port, identity_id, jump_host_id, vpn_profile_id, color, notes, sort_order)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
         rusqlite::params![
             &id,
             &input.group_id,
@@ -55,6 +56,7 @@ pub fn create(conn: &Connection, input: HostInput) -> AppResult<Host> {
             input.port,
             &input.identity_id,
             &input.jump_host_id,
+            &input.vpn_profile_id,
             &input.color,
             &input.notes,
             input.sort_order,
@@ -69,6 +71,7 @@ pub fn create(conn: &Connection, input: HostInput) -> AppResult<Host> {
         port: input.port,
         identity_id: input.identity_id,
         jump_host_id: input.jump_host_id,
+        vpn_profile_id: input.vpn_profile_id,
         color: input.color,
         notes: input.notes,
         sort_order: input.sort_order,
@@ -79,7 +82,7 @@ pub fn create(conn: &Connection, input: HostInput) -> AppResult<Host> {
 pub fn update(conn: &Connection, id: Uuid, input: HostInput) -> AppResult<Host> {
     let changed = conn.execute(
         "UPDATE hosts SET group_id = ?1, label = ?2, hostname = ?3, port = ?4, identity_id = ?5,
-            jump_host_id = ?6, color = ?7, notes = ?8, sort_order = ?9 WHERE id = ?10",
+            jump_host_id = ?6, vpn_profile_id = ?7, color = ?8, notes = ?9, sort_order = ?10 WHERE id = ?11",
         rusqlite::params![
             &input.group_id,
             &input.label,
@@ -87,6 +90,7 @@ pub fn update(conn: &Connection, id: Uuid, input: HostInput) -> AppResult<Host> 
             input.port,
             &input.identity_id,
             &input.jump_host_id,
+            &input.vpn_profile_id,
             &input.color,
             &input.notes,
             input.sort_order,
@@ -111,6 +115,7 @@ pub fn update(conn: &Connection, id: Uuid, input: HostInput) -> AppResult<Host> 
         port: input.port,
         identity_id: input.identity_id,
         jump_host_id: input.jump_host_id,
+        vpn_profile_id: input.vpn_profile_id,
         color: input.color,
         notes: input.notes,
         sort_order: input.sort_order,
@@ -152,6 +157,7 @@ mod tests {
             port: 22,
             identity_id: None,
             jump_host_id: None,
+            vpn_profile_id: None,
             color: None,
             notes: None,
             sort_order: 0,

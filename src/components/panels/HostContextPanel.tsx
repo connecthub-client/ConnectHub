@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Host, HostExecResult } from "../../lib/tauri-bridge";
 import { useHostsStore } from "../../state/hostsStore";
 import { useSnippetsStore } from "../../state/snippetsStore";
+import { useVpnStore } from "../../state/vpnStore";
 
 interface HostContextPanelProps {
   host: Host;
@@ -24,14 +25,67 @@ export default function HostContextPanel({
   const hosts = useHostsStore((s) => s.hosts);
   const snippets = useSnippetsStore((s) => s.snippets);
   const runOnHosts = useSnippetsStore((s) => s.runOnHosts);
+  const vpnProfiles = useVpnStore((s) => s.profiles);
+  const vpnStatuses = useVpnStore((s) => s.statuses);
+  const vpnConnect = useVpnStore((s) => s.connect);
+  const vpnDisconnect = useVpnStore((s) => s.disconnect);
+  const refreshVpnActive = useVpnStore((s) => s.refreshActive);
 
   const identity = identities.find((i) => i.id === host.identity_id);
   const jumpHost = hosts.find((h) => h.id === host.jump_host_id);
+  const vpnProfile = host.vpn_profile_id
+    ? vpnProfiles.find((p) => p.id === host.vpn_profile_id)
+    : undefined;
+  const vpnStatus = host.vpn_profile_id ? vpnStatuses[host.vpn_profile_id] : undefined;
+  const vpnConnected = vpnStatus?.state === "connected";
+  const vpnBusy = vpnStatus?.state === "connecting" || vpnStatus?.state === "disconnecting";
 
   const [runningId, setRunningId] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<{ label: string; result: HostExecResult } | null>(
     null,
   );
+  const [vpnError, setVpnError] = useState<string | null>(null);
+  const [vpnToggling, setVpnToggling] = useState(false);
+
+  useEffect(() => {
+    if (!vpnBusy) return;
+    const interval = setInterval(refreshVpnActive, 1500);
+    return () => clearInterval(interval);
+  }, [vpnBusy, refreshVpnActive]);
+
+  async function handleToggleVpn() {
+    if (!host.vpn_profile_id) return;
+    setVpnError(null);
+    setVpnToggling(true);
+    try {
+      if (vpnConnected) {
+        await vpnDisconnect(host.vpn_profile_id);
+      } else {
+        await vpnConnect(host.vpn_profile_id);
+      }
+    } catch (e) {
+      setVpnError(String(e));
+    } finally {
+      setVpnToggling(false);
+    }
+  }
+
+  // If this host needs a VPN that isn't up yet, give the user a chance to
+  // bring it up first instead of an SSH connection quietly timing out
+  // against an unreachable private IP.
+  function guardedAction(action: () => void) {
+    if (host.vpn_profile_id && !vpnConnected) {
+      const proceed = confirm(
+        `This host uses VPN profile "${vpnProfile?.label ?? "unknown"}", which isn't connected. ` +
+          "Connect it now? (Cancel to proceed without it.)",
+      );
+      if (proceed) {
+        handleToggleVpn();
+        return;
+      }
+    }
+    action();
+  }
 
   async function handleQuickCommand(snippetId: string, label: string, body: string) {
     setRunningId(snippetId);
@@ -58,7 +112,7 @@ export default function HostContextPanel({
       <div className="flex gap-2 p-4">
         <button
           type="button"
-          onClick={onConnect}
+          onClick={() => guardedAction(onConnect)}
           disabled={!host.identity_id}
           title={host.identity_id ? undefined : "Assign an identity to this host first"}
           className="flex-1 rounded-md bg-teal-600 px-2 py-1.5 text-xs font-medium text-white hover:bg-teal-700 disabled:opacity-40"
@@ -67,7 +121,7 @@ export default function HostContextPanel({
         </button>
         <button
           type="button"
-          onClick={onOpenSftp}
+          onClick={() => guardedAction(onOpenSftp)}
           disabled={!host.identity_id}
           title={host.identity_id ? undefined : "Assign an identity to this host first"}
           className="flex-1 rounded-md border border-neutral-300 px-2 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
@@ -76,12 +130,34 @@ export default function HostContextPanel({
         </button>
         <button
           type="button"
-          onClick={onNewTunnel}
+          onClick={() => guardedAction(onNewTunnel)}
           className="flex-1 rounded-md border border-neutral-300 px-2 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
         >
           Tunnel
         </button>
+        <button
+          type="button"
+          onClick={handleToggleVpn}
+          disabled={!host.vpn_profile_id || vpnToggling || vpnBusy}
+          title={host.vpn_profile_id ? undefined : "Assign a VPN profile in Edit host first"}
+          className={`flex-1 rounded-md border px-2 py-1.5 text-xs font-medium disabled:opacity-40 ${
+            vpnConnected
+              ? "border-emerald-500 text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950"
+              : "border-neutral-300 text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          }`}
+        >
+          {vpnBusy
+            ? vpnStatus?.state === "connecting"
+              ? "Connecting…"
+              : "Disconnecting…"
+            : vpnConnected
+              ? "VPN ●"
+              : "VPN"}
+        </button>
       </div>
+      {vpnError && (
+        <p className="-mt-2 px-4 pb-4 text-xs text-red-600 dark:text-red-400">{vpnError}</p>
+      )}
 
       <section className="border-t border-neutral-200 p-4 dark:border-neutral-800">
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">
@@ -98,6 +174,23 @@ export default function HostContextPanel({
             <>
               <dt className="text-neutral-500 dark:text-neutral-400">Jump host</dt>
               <dd className="text-neutral-900 dark:text-neutral-100">{jumpHost.label}</dd>
+            </>
+          )}
+          {vpnProfile && (
+            <>
+              <dt className="text-neutral-500 dark:text-neutral-400">VPN profile</dt>
+              <dd className="flex items-center gap-1.5 text-neutral-900 dark:text-neutral-100">
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    vpnConnected
+                      ? "bg-emerald-500"
+                      : vpnBusy
+                        ? "bg-amber-500"
+                        : "bg-neutral-400 dark:bg-neutral-600"
+                  }`}
+                />
+                {vpnProfile.label}
+              </dd>
             </>
           )}
         </dl>

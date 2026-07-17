@@ -14,14 +14,17 @@ import TunnelForm from "../components/forms/TunnelForm";
 import SnippetsPanel from "../components/panels/SnippetsPanel";
 import SnippetForm from "../components/forms/SnippetForm";
 import RunSnippetForm from "../components/forms/RunSnippetForm";
+import VpnPanel from "../components/panels/VpnPanel";
+import VpnProfileForm from "../components/forms/VpnProfileForm";
 import SettingsPanel from "../components/panels/SettingsPanel";
 import TerminalView from "../components/terminal/TerminalView";
 import SftpBrowser from "../components/sftp/SftpBrowser";
-import { Group, Host, Identity, ImportSummary, localReadTextFile, localWriteTextFile, Snippet } from "../lib/tauri-bridge";
+import { Group, Host, Identity, ImportSummary, localReadTextFile, localWriteTextFile, Snippet, VpnProfile } from "../lib/tauri-bridge";
 import { useHostsStore } from "../state/hostsStore";
 import { useSessionsStore } from "../state/sessionsStore";
+import { useVpnStore } from "../state/vpnStore";
 
-type ManageTab = "hosts" | "identities" | "keys" | "tunnels" | "snippets" | "settings";
+type ManageTab = "hosts" | "identities" | "keys" | "tunnels" | "snippets" | "vpn" | "settings";
 type MainView = { type: "manage"; tab: ManageTab } | { type: "session"; tabId: string };
 
 type ModalState =
@@ -32,6 +35,7 @@ type ModalState =
   | { kind: "tunnel"; defaultHostId?: string }
   | { kind: "snippet"; snippet?: Snippet }
   | { kind: "run-snippet"; snippet: Snippet }
+  | { kind: "vpn-profile"; profile?: VpnProfile }
   | null;
 
 export default function AppShell() {
@@ -45,6 +49,8 @@ export default function AppShell() {
   const openSession = useSessionsStore((s) => s.openSession);
   const closeSession = useSessionsStore((s) => s.closeSession);
 
+  const loadVpnAll = useVpnStore((s) => s.loadAll);
+
   const [selectedHostId, setSelectedHostId] = useState<string | null>(null);
   const [mainView, setMainView] = useState<MainView>({ type: "manage", tab: "hosts" });
   const [modal, setModal] = useState<ModalState>(null);
@@ -53,8 +59,8 @@ export default function AppShell() {
   const [csvError, setCsvError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadAll().catch((e) => setLoadError(String(e)));
-  }, [loadAll]);
+    Promise.all([loadAll(), loadVpnAll()]).catch((e) => setLoadError(String(e)));
+  }, [loadAll, loadVpnAll]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -232,18 +238,18 @@ export default function AppShell() {
 
       <main className="flex flex-1 flex-col overflow-hidden">
         <nav className="flex items-center gap-1 overflow-x-auto border-b border-neutral-200 p-2 dark:border-neutral-800">
-          {(["hosts", "identities", "keys", "tunnels", "snippets", "settings"] as ManageTab[]).map((t) => (
+          {(["hosts", "identities", "keys", "tunnels", "snippets", "vpn", "settings"] as ManageTab[]).map((t) => (
             <button
               key={t}
               type="button"
               onClick={() => setMainView({ type: "manage", tab: t })}
-              className={`shrink-0 rounded-md px-3 py-1.5 text-sm font-medium capitalize ${
+              className={`shrink-0 rounded-md px-3 py-1.5 text-sm font-medium ${t === "vpn" ? "" : "capitalize"} ${
                 mainView.type === "manage" && mainView.tab === t
                   ? "bg-teal-600 text-white"
                   : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
               }`}
             >
-              {t}
+              {t === "vpn" ? "VPN" : t}
             </button>
           ))}
         </nav>
@@ -327,6 +333,12 @@ export default function AppShell() {
                 onRun={(snippet) => setModal({ kind: "run-snippet", snippet })}
               />
             )}
+            {mainView.type === "manage" && mainView.tab === "vpn" && (
+              <VpnPanel
+                onNew={() => setModal({ kind: "vpn-profile" })}
+                onEdit={(profile) => setModal({ kind: "vpn-profile", profile })}
+              />
+            )}
             {mainView.type === "manage" && mainView.tab === "settings" && <SettingsPanel />}
           </div>
 
@@ -397,6 +409,11 @@ export default function AppShell() {
       {modal?.kind === "run-snippet" && (
         <Modal title={`Run "${modal.snippet.label}"`} onClose={() => setModal(null)}>
           <RunSnippetForm snippet={modal.snippet} onDone={() => setModal(null)} />
+        </Modal>
+      )}
+      {modal?.kind === "vpn-profile" && (
+        <Modal title={modal.profile ? "Edit VPN profile" : "New VPN profile"} onClose={() => setModal(null)}>
+          <VpnProfileForm profile={modal.profile} onDone={() => setModal(null)} />
         </Modal>
       )}
       {importResult && (

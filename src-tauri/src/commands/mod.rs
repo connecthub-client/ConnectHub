@@ -9,3 +9,4 @@ pub mod sftp_commands;
 pub mod snippet_commands;
 pub mod tunnel_commands;
 pub mod vault_commands;
+pub mod vpn_commands;

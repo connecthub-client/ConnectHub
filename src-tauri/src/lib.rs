@@ -6,6 +6,7 @@ mod models;
 mod ssh;
 mod state;
 mod vault;
+mod vpn;
 
 use commands::backup_commands::{
     google_backup_now, google_login, google_logout, google_restore, google_status,
@@ -34,6 +35,10 @@ use commands::snippet_commands::{
 };
 use commands::tunnel_commands::{tunnel_list, tunnel_start, tunnel_stop};
 use commands::vault_commands::vault_auto_unlock;
+use commands::vpn_commands::{
+    vpn_active_statuses, vpn_connect, vpn_disconnect, vpn_profile_create, vpn_profile_delete,
+    vpn_profile_list, vpn_profile_update, vpn_setup_install, vpn_setup_status, vpn_status,
+};
 use state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -98,6 +103,16 @@ pub fn run() {
             google_logout,
             google_backup_now,
             google_restore,
+            vpn_profile_list,
+            vpn_profile_create,
+            vpn_profile_update,
+            vpn_profile_delete,
+            vpn_setup_status,
+            vpn_setup_install,
+            vpn_connect,
+            vpn_disconnect,
+            vpn_status,
+            vpn_active_statuses,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
