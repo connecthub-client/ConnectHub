@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import AppShell from "./pages/AppShell";
-import { vaultCreate, vaultStatus, vaultUnlock } from "./lib/tauri-bridge";
-import { VAULT_AUTO_UNLOCK_PASSWORD } from "./lib/constants";
+import { vaultAutoUnlock } from "./lib/tauri-bridge";
 import { useSettingsStore } from "./state/settingsStore";
 import "./App.css";
 
@@ -47,12 +46,7 @@ function App() {
   useEffect(() => {
     (async () => {
       try {
-        const status = await vaultStatus();
-        if (status.initialized) {
-          await vaultUnlock(VAULT_AUTO_UNLOCK_PASSWORD);
-        } else {
-          await vaultCreate(VAULT_AUTO_UNLOCK_PASSWORD);
-        }
+        await vaultAutoUnlock();
         setBoot("ready");
       } catch (e) {
         setBoot("error");

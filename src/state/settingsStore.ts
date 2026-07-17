@@ -41,7 +41,7 @@ interface SettingsState {
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
-      theme: "system",
+      theme: "dark",
       terminalFontFamily: "Menlo, Monaco, 'Courier New', monospace",
       terminalFontSize: 13,
       terminalCursorStyle: "block",

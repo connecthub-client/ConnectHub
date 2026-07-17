@@ -66,14 +66,14 @@ export default function KeyForm({ onDone }: KeyFormProps) {
         <button
           type="button"
           onClick={() => setMode("generate")}
-          className={`flex-1 rounded px-3 py-1.5 ${mode === "generate" ? "bg-blue-600 text-white" : "text-neutral-600 dark:text-neutral-300"}`}
+          className={`flex-1 rounded px-3 py-1.5 ${mode === "generate" ? "bg-teal-600 text-white" : "text-neutral-600 dark:text-neutral-300"}`}
         >
           Generate new
         </button>
         <button
           type="button"
           onClick={() => setMode("import")}
-          className={`flex-1 rounded px-3 py-1.5 ${mode === "import" ? "bg-blue-600 text-white" : "text-neutral-600 dark:text-neutral-300"}`}
+          className={`flex-1 rounded px-3 py-1.5 ${mode === "import" ? "bg-teal-600 text-white" : "text-neutral-600 dark:text-neutral-300"}`}
         >
           Import existing
         </button>
@@ -100,7 +100,7 @@ export default function KeyForm({ onDone }: KeyFormProps) {
             <button
               type="button"
               onClick={handleBrowse}
-              className="mb-1 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400"
+              className="mb-1 text-xs font-medium text-teal-600 hover:text-teal-700 dark:text-teal-400"
             >
               Browse for file…
             </button>

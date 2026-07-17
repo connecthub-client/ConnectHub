@@ -1,5 +1,8 @@
+use base64::Engine;
+use rand::RngCore;
 use rusqlite::Connection;
 use std::path::PathBuf;
+use uuid::Uuid;
 
 use super::crypto::{self};
 use super::kdf::{self, KdfParams, VaultKey};
@@ -37,6 +40,178 @@ pub fn open() -> AppResult<Connection> {
     let conn = Connection::open(db_path()?)?;
     init_schema(&conn)?;
     Ok(conn)
+}
+
+pub fn local_secret_path() -> AppResult<PathBuf> {
+    let mut dir = dirs::data_dir().ok_or_else(|| {
+        AppError::Crypto("could not determine platform data directory".into())
+    })?;
+    dir.push("sshtool");
+    std::fs::create_dir_all(&dir)?;
+    dir.push(".local_secret");
+    Ok(dir)
+}
+
+// There is no user-facing master password prompt - the app unlocks itself
+// on launch. Unlike an earlier version of this file, the password used to
+// do that is a per-installation random secret generated on first run and
+// kept ONLY in this local file (never in source control), not a constant
+// baked into the (public) app binary. That matters the moment the vault
+// ever leaves this machine (e.g. a cloud backup): a fixed public password
+// would make any copy of the encrypted vault trivially decryptable by
+// anyone who can read the source, whereas this secret is only ever as
+// exposed as the machine (or backup) it lives on.
+fn get_or_create_local_secret() -> AppResult<String> {
+    get_or_create_local_secret_at(&local_secret_path()?)
+}
+
+// Overwrites the local secret with one restored from a backup, so the
+// vault it travelled with can be unlocked again on this machine.
+pub fn write_local_secret(secret: &str) -> AppResult<()> {
+    let path = local_secret_path()?;
+    std::fs::write(&path, secret)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
+    }
+    Ok(())
+}
+
+fn get_or_create_local_secret_at(path: &std::path::Path) -> AppResult<String> {
+    if let Ok(existing) = std::fs::read_to_string(path) {
+        let trimmed = existing.trim();
+        if !trimmed.is_empty() {
+            return Ok(trimmed.to_string());
+        }
+    }
+
+    let mut bytes = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut bytes);
+    let secret = base64::engine::general_purpose::STANDARD.encode(bytes);
+
+    std::fs::write(path, &secret)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+    }
+
+    Ok(secret)
+}
+
+// Password baked into the app between the "disable master password" change
+// and the introduction of per-installation secrets above - a public
+// constant (visible in source control), so any vault still encrypted under
+// it is migrated to a real random secret the first time this code runs
+// against it, rather than left on a password anyone can read on GitHub.
+const LEGACY_PUBLIC_PASSWORD: &str = "CorrectHorseBattery1";
+
+pub fn auto_unlock(conn: &Connection) -> AppResult<VaultKey> {
+    let secret = get_or_create_local_secret()?;
+
+    if !is_initialized(conn)? {
+        return create(conn, &secret);
+    }
+
+    match unlock(conn, &secret) {
+        Ok(key) => Ok(key),
+        Err(AppError::InvalidPassword) => match unlock(conn, LEGACY_PUBLIC_PASSWORD) {
+            Ok(legacy_key) => migrate_to_new_secret(conn, &legacy_key, &secret),
+            Err(_) => Err(AppError::InvalidPassword),
+        },
+        Err(e) => Err(e),
+    }
+}
+
+// Re-encrypts every secret field (identity passwords, ssh key private keys
+// and passphrases) from `old_key` to a freshly derived key, then replaces
+// vault_meta so the vault can only ever be unlocked with the new secret
+// from here on. Used once per vault, the first time auto_unlock encounters
+// one still protected by the old public constant password.
+fn migrate_to_new_secret(
+    conn: &Connection,
+    old_key: &VaultKey,
+    new_password: &str,
+) -> AppResult<VaultKey> {
+    let salt = kdf::generate_salt();
+    let params = KdfParams::default();
+    let new_key = kdf::derive_key(new_password, &salt, &params)?;
+
+    let mut stmt = conn.prepare(
+        "SELECT id, password_nonce, password_ciphertext FROM identities
+         WHERE password_ciphertext IS NOT NULL",
+    )?;
+    let identity_rows: Vec<(Uuid, Vec<u8>, Vec<u8>)> = stmt
+        .query_map((), |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+        .collect::<Result<_, _>>()?;
+    drop(stmt);
+    for (id, nonce, ciphertext) in identity_rows {
+        let plaintext = crypto::decrypt(old_key, &nonce, &ciphertext)?;
+        let enc = crypto::encrypt(&new_key, &plaintext)?;
+        conn.execute(
+            "UPDATE identities SET password_nonce = ?1, password_ciphertext = ?2 WHERE id = ?3",
+            (&enc.nonce[..], &enc.ciphertext[..], &id),
+        )?;
+    }
+
+    let mut stmt = conn.prepare(
+        "SELECT id, private_key_nonce, private_key_ciphertext, passphrase_nonce, passphrase_ciphertext
+         FROM ssh_keys",
+    )?;
+    let key_rows: Vec<(Uuid, Vec<u8>, Vec<u8>, Option<Vec<u8>>, Option<Vec<u8>>)> = stmt
+        .query_map((), |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
+        })?
+        .collect::<Result<_, _>>()?;
+    drop(stmt);
+    for (id, pk_nonce, pk_ciphertext, pass_nonce, pass_ciphertext) in key_rows {
+        let pk_plaintext = crypto::decrypt(old_key, &pk_nonce, &pk_ciphertext)?;
+        let pk_enc = crypto::encrypt(&new_key, &pk_plaintext)?;
+
+        let new_pass: (Option<Vec<u8>>, Option<Vec<u8>>) = match (pass_nonce, pass_ciphertext) {
+            (Some(n), Some(c)) => {
+                let plaintext = crypto::decrypt(old_key, &n, &c)?;
+                let enc = crypto::encrypt(&new_key, &plaintext)?;
+                (Some(enc.nonce.to_vec()), Some(enc.ciphertext))
+            }
+            _ => (None, None),
+        };
+
+        conn.execute(
+            "UPDATE ssh_keys SET private_key_nonce = ?1, private_key_ciphertext = ?2,
+                passphrase_nonce = ?3, passphrase_ciphertext = ?4 WHERE id = ?5",
+            (
+                &pk_enc.nonce[..],
+                &pk_enc.ciphertext[..],
+                new_pass.0,
+                new_pass.1,
+                &id,
+            ),
+        )?;
+    }
+
+    let verifier = crypto::encrypt(&new_key, VERIFIER_PLAINTEXT)?;
+    conn.execute(
+        "UPDATE vault_meta SET salt = ?1, kdf_m_cost = ?2, kdf_t_cost = ?3, kdf_p_cost = ?4,
+            verifier_nonce = ?5, verifier_ciphertext = ?6 WHERE id = 0",
+        (
+            &salt[..],
+            params.m_cost,
+            params.t_cost,
+            params.p_cost,
+            &verifier.nonce[..],
+            &verifier.ciphertext[..],
+        ),
+    )?;
+
+    Ok(new_key)
 }
 
 pub fn is_initialized(conn: &Connection) -> AppResult<bool> {
@@ -158,5 +333,102 @@ mod tests {
         create(&conn, "first password").unwrap();
         let result = create(&conn, "second password");
         assert!(matches!(result, Err(AppError::VaultAlreadyInitialized)));
+    }
+
+    fn temp_secret_path() -> std::path::PathBuf {
+        std::env::temp_dir().join(format!("sshtool-test-secret-{}", uuid::Uuid::new_v4()))
+    }
+
+    #[test]
+    fn local_secret_is_generated_once_and_reused() {
+        let path = temp_secret_path();
+        let first = get_or_create_local_secret_at(&path).unwrap();
+        assert!(!first.is_empty());
+
+        let second = get_or_create_local_secret_at(&path).unwrap();
+        assert_eq!(first, second, "the same file must yield the same secret every time");
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn local_secret_differs_per_installation() {
+        let a = get_or_create_local_secret_at(&temp_secret_path()).unwrap();
+        let b = get_or_create_local_secret_at(&temp_secret_path()).unwrap();
+        assert_ne!(a, b, "each fresh install must get its own random secret");
+    }
+
+    #[test]
+    fn auto_unlock_creates_then_reuses_the_vault() {
+        let conn = test_conn();
+        let path = temp_secret_path();
+        let secret = get_or_create_local_secret_at(&path).unwrap();
+        assert!(!is_initialized(&conn).unwrap());
+
+        create(&conn, &secret).unwrap();
+        let first = unlock(&conn, &secret);
+        assert!(first.is_ok());
+
+        // A second "auto_unlock" (using the same persisted secret, matching
+        // what a real restart does) must succeed against the now-initialized
+        // vault rather than trying (and failing) to create it again.
+        let second = unlock(&conn, &get_or_create_local_secret_at(&path).unwrap());
+        assert!(second.is_ok());
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn migrate_to_new_secret_reencrypts_every_secret_and_retires_the_old_password() {
+        use crate::models::identity::{AuthMethod, IdentityInput};
+        use crate::models::ssh_key::GenerateKeyInput;
+
+        let conn = test_conn();
+        crate::data::init_schema(&conn).unwrap();
+        let old_key = create(&conn, LEGACY_PUBLIC_PASSWORD).unwrap();
+
+        let identity = crate::data::identities::create(
+            &conn,
+            &old_key,
+            IdentityInput {
+                label: "test".into(),
+                username: "root".into(),
+                auth_method: AuthMethod::Password,
+                ssh_key_id: None,
+                password: Some("hunter2".into()),
+            },
+        )
+        .unwrap();
+        let key = crate::data::ssh_keys::generate(
+            &conn,
+            &old_key,
+            GenerateKeyInput { label: "test-key".into() },
+        )
+        .unwrap();
+
+        let new_key = migrate_to_new_secret(&conn, &old_key, "brand-new-secret").unwrap();
+
+        // The legacy password must no longer work - that's the whole point.
+        assert!(matches!(
+            unlock(&conn, LEGACY_PUBLIC_PASSWORD),
+            Err(AppError::InvalidPassword)
+        ));
+        assert!(unlock(&conn, "brand-new-secret").is_ok());
+
+        // Every secret must still decrypt correctly, just under the new key.
+        let (_, password) =
+            crate::data::identities::get_with_decrypted_password(&conn, &new_key, identity.id)
+                .unwrap();
+        assert_eq!(password.as_deref(), Some("hunter2"));
+
+        let (pem, _) =
+            crate::data::ssh_keys::get_decrypted_private_key(&conn, &new_key, key.id).unwrap();
+        assert!(pem.contains("BEGIN OPENSSH PRIVATE KEY"));
+
+        // And decrypting with the retired key must now fail (proves the
+        // ciphertext was actually re-encrypted, not just re-labeled).
+        assert!(
+            crate::data::ssh_keys::get_decrypted_private_key(&conn, &old_key, key.id).is_err()
+        );
     }
 }

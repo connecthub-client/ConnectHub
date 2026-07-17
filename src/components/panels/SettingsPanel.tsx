@@ -7,6 +7,7 @@ import {
   useSettingsStore,
 } from "../../state/settingsStore";
 import { inputClass, labelClass, selectClass } from "../forms/formStyles";
+import GoogleBackupSection from "./GoogleBackupSection";
 
 const THEME_MODES: ThemeMode[] = ["system", "light", "dark"];
 const CURSOR_STYLES: CursorStyle[] = ["block", "bar", "underline"];
@@ -88,6 +89,11 @@ export default function SettingsPanel() {
             </option>
           ))}
         </select>
+      </section>
+
+      <section className="mb-6">
+        <h3 className="mb-2 text-sm font-semibold text-neutral-800 dark:text-neutral-200">Backup</h3>
+        <GoogleBackupSection />
       </section>
 
       <section>

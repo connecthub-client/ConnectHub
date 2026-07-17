@@ -36,7 +36,7 @@ export default function TunnelsPanel({ onNew }: TunnelsPanelProps) {
         <button
           type="button"
           onClick={onNew}
-          className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+          className="rounded-md bg-teal-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-teal-700"
         >
           New tunnel
         </button>

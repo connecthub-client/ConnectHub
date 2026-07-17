@@ -1,39 +1,17 @@
-use serde::Serialize;
 use tauri::State;
 
 use crate::error::AppResult;
 use crate::state::AppState;
 use crate::vault::store;
 
-#[derive(Serialize)]
-pub struct VaultStatus {
-    pub initialized: bool,
-    pub unlocked: bool,
-}
-
+// The app has no master-password prompt - it unlocks itself on launch (and
+// again after a restore) using a per-installation secret store::auto_unlock
+// manages internally. See vault/store.rs for why that secret is generated
+// locally rather than being a fixed constant.
 #[tauri::command]
-pub fn vault_status(state: State<AppState>) -> AppResult<VaultStatus> {
+pub fn vault_auto_unlock(state: State<AppState>) -> AppResult<()> {
     let conn = state.db.lock().unwrap();
-    let initialized = store::is_initialized(&conn)?;
-    let unlocked = state.vault_key.lock().unwrap().is_some();
-    Ok(VaultStatus {
-        initialized,
-        unlocked,
-    })
-}
-
-#[tauri::command]
-pub fn vault_create(state: State<AppState>, password: String) -> AppResult<()> {
-    let conn = state.db.lock().unwrap();
-    let key = store::create(&conn, &password)?;
-    *state.vault_key.lock().unwrap() = Some(key);
-    Ok(())
-}
-
-#[tauri::command]
-pub fn vault_unlock(state: State<AppState>, password: String) -> AppResult<()> {
-    let conn = state.db.lock().unwrap();
-    let key = store::unlock(&conn, &password)?;
+    let key = store::auto_unlock(&conn)?;
     *state.vault_key.lock().unwrap() = Some(key);
     Ok(())
 }

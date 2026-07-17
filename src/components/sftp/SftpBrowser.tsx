@@ -140,7 +140,7 @@ function FilePane({
               onDoubleClick={() => entry.isDir && onNavigate(entry.path)}
               className={`group flex cursor-pointer items-center justify-between px-3 py-1.5 text-sm ${
                 selected === entry.path
-                  ? "bg-blue-50 dark:bg-blue-950"
+                  ? "bg-teal-50 dark:bg-teal-950"
                   : "hover:bg-neutral-50 dark:hover:bg-neutral-900"
               }`}
             >
@@ -163,7 +163,7 @@ function FilePane({
                     e.stopPropagation();
                     onRename(entry);
                   }}
-                  className="hidden text-xs text-neutral-500 hover:text-blue-600 group-hover:inline"
+                  className="hidden text-xs text-neutral-500 hover:text-teal-600 group-hover:inline"
                 >
                   rename
                 </button>
@@ -426,7 +426,7 @@ export default function SftpBrowser({ host, onClose }: SftpBrowserProps) {
             disabled={!selectedLocal || transferring}
             onClick={handleUpload}
             title="Upload to remote"
-            className="rounded-md bg-blue-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-30"
+            className="rounded-md bg-teal-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-30"
           >
             Upload →
           </button>
@@ -435,7 +435,7 @@ export default function SftpBrowser({ host, onClose }: SftpBrowserProps) {
             disabled={!selectedRemote || transferring}
             onClick={handleDownload}
             title="Download to local"
-            className="rounded-md bg-blue-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-30"
+            className="rounded-md bg-teal-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-30"
           >
             ← Download
           </button>

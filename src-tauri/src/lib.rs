@@ -1,11 +1,15 @@
 mod commands;
 mod data;
 mod error;
+mod google;
 mod models;
 mod ssh;
 mod state;
 mod vault;
 
+use commands::backup_commands::{
+    google_backup_now, google_login, google_logout, google_restore, google_status,
+};
 use commands::group_commands::{group_create, group_delete, group_list, group_update};
 use commands::host_commands::{
     host_create, host_delete, host_export_csv, host_import_csv, host_list, host_update,
@@ -29,7 +33,7 @@ use commands::snippet_commands::{
     snippet_create, snippet_delete, snippet_list, snippet_run_on_hosts, snippet_update,
 };
 use commands::tunnel_commands::{tunnel_list, tunnel_start, tunnel_stop};
-use commands::vault_commands::{vault_create, vault_status, vault_unlock};
+use commands::vault_commands::vault_auto_unlock;
 use state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -41,9 +45,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
-            vault_status,
-            vault_create,
-            vault_unlock,
+            vault_auto_unlock,
             group_list,
             group_create,
             group_update,
@@ -91,6 +93,11 @@ pub fn run() {
             snippet_update,
             snippet_delete,
             snippet_run_on_hosts,
+            google_status,
+            google_login,
+            google_logout,
+            google_backup_now,
+            google_restore,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

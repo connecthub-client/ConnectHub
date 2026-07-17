@@ -11,6 +11,50 @@ body,
   height: 100%;
 }
 
+/* Smooth, consistent hover/focus/active transitions app-wide without having
+   to remember a transition-* utility on every interactive element. */
+button,
+a,
+input,
+select,
+textarea,
+[role="button"] {
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease,
+    opacity 150ms ease,
+    box-shadow 150ms ease,
+    transform 100ms ease;
+}
+
+/* Dark, unobtrusive scrollbars - the OS default light scrollbar is jarring
+   against the app's dark surfaces (Firefox + WebKitGTK both honor this). */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb, #d4d4d4) transparent;
+}
+
+.dark * {
+  --scrollbar-thumb: #3f3f46;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb, #d4d4d4);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 /* WebKitGTK renders native <select> using the OS GTK theme instead of the
    page's CSS, which can leave option text unreadable when the app's theme
    diverges from the system theme. Drawing our own arrow keeps the closed

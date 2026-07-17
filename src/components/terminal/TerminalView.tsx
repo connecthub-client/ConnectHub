@@ -137,9 +137,9 @@ export default function TerminalView({ host, onClose }: TerminalViewProps) {
           <span
             className={`h-2 w-2 rounded-full ${
               status === "connected"
-                ? "bg-green-500"
+                ? "bg-emerald-500"
                 : status === "connecting"
-                  ? "bg-yellow-500"
+                  ? "bg-amber-500"
                   : "bg-red-500"
             }`}
           />
@@ -165,6 +165,16 @@ export default function TerminalView({ host, onClose }: TerminalViewProps) {
 
       <div className="min-h-0 flex-1 p-2" style={{ backgroundColor: themePreset.background }}>
         <div ref={containerRef} className="h-full w-full" />
+      </div>
+
+      <div className="flex items-center justify-between border-t border-neutral-200 bg-neutral-100 px-4 py-1 text-xs text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400">
+        <span>
+          {status === "connected" && `Connected to ${host.label}`}
+          {status === "connecting" && "Connecting…"}
+          {status === "closed" && "Session closed"}
+          {status === "error" && "Connection error"}
+        </span>
+        <span className="capitalize">{status}</span>
       </div>
     </div>
   );

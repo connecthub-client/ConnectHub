@@ -1,3 +1,4 @@
+pub mod google_auth;
 pub mod groups;
 pub mod host_csv;
 pub mod hosts;
@@ -63,6 +64,15 @@ pub fn init_schema(conn: &Connection) -> AppResult<()> {
             label TEXT NOT NULL,
             body TEXT NOT NULL,
             created_at TEXT NOT NULL
+        );
+
+        -- Bundled into the vault backup itself (not device-specific) so a
+        -- restore on a new device can keep syncing without a fresh login.
+        CREATE TABLE IF NOT EXISTS google_auth (
+            id INTEGER PRIMARY KEY CHECK (id = 0),
+            account_email TEXT,
+            refresh_token_nonce BLOB NOT NULL,
+            refresh_token_ciphertext BLOB NOT NULL
         );
         ",
     )?;

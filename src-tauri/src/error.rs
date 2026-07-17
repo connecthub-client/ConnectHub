@@ -36,6 +36,8 @@ pub enum AppError {
     SessionNotFound,
     #[error("CSV error: {0}")]
     Csv(String),
+    #[error("Google account error: {0}")]
+    Google(String),
 }
 
 // Tauri serializes command errors to the frontend as JSON; a plain string

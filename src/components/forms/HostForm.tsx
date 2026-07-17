@@ -143,14 +143,14 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
           <button
             type="button"
             onClick={() => setIdentityMode("new")}
-            className={`flex-1 rounded px-3 py-1.5 ${identityMode === "new" ? "bg-blue-600 text-white" : "text-neutral-600 dark:text-neutral-300"}`}
+            className={`flex-1 rounded px-3 py-1.5 ${identityMode === "new" ? "bg-teal-600 text-white" : "text-neutral-600 dark:text-neutral-300"}`}
           >
             New credentials
           </button>
           <button
             type="button"
             onClick={() => setIdentityMode("existing")}
-            className={`flex-1 rounded px-3 py-1.5 ${identityMode === "existing" ? "bg-blue-600 text-white" : "text-neutral-600 dark:text-neutral-300"}`}
+            className={`flex-1 rounded px-3 py-1.5 ${identityMode === "existing" ? "bg-teal-600 text-white" : "text-neutral-600 dark:text-neutral-300"}`}
           >
             Use saved identity
           </button>

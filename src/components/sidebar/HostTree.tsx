@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Group, Host } from "../../lib/tauri-bridge";
 import { useHostsStore } from "../../state/hostsStore";
+import { useSessionsStore } from "../../state/sessionsStore";
 
 interface HostTreeProps {
   selectedHostId: string | null;
@@ -24,6 +25,8 @@ export default function HostTree(props: HostTreeProps) {
   const deleteGroup = useHostsStore((s) => s.deleteGroup);
   const deleteHost = useHostsStore((s) => s.deleteHost);
   const createHost = useHostsStore((s) => s.createHost);
+  const openSessions = useSessionsStore((s) => s.openSessions);
+  const openHostIds = new Set(openSessions.map((s) => s.host.id));
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
 
@@ -95,7 +98,7 @@ export default function HostTree(props: HostTreeProps) {
                   type="button"
                   title="New host in this group"
                   onClick={() => props.onNewHost(group.id)}
-                  className="rounded px-1 text-xs text-neutral-500 hover:text-blue-600"
+                  className="rounded px-1 text-xs text-neutral-500 hover:text-teal-600"
                 >
                   +host
                 </button>
@@ -103,7 +106,7 @@ export default function HostTree(props: HostTreeProps) {
                   type="button"
                   title="New subgroup"
                   onClick={() => props.onNewSubgroup(group.id)}
-                  className="rounded px-1 text-xs text-neutral-500 hover:text-blue-600"
+                  className="rounded px-1 text-xs text-neutral-500 hover:text-teal-600"
                 >
                   +grp
                 </button>
@@ -111,7 +114,7 @@ export default function HostTree(props: HostTreeProps) {
                   type="button"
                   title="Edit group"
                   onClick={() => props.onEditGroup(group)}
-                  className="rounded px-1 text-xs text-neutral-500 hover:text-blue-600"
+                  className="rounded px-1 text-xs text-neutral-500 hover:text-teal-600"
                 >
                   edit
                 </button>
@@ -137,7 +140,7 @@ export default function HostTree(props: HostTreeProps) {
           <div
             key={host.id}
             className={`group flex items-center justify-between rounded px-2 py-1 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-800 ${
-              props.selectedHostId === host.id ? "bg-blue-50 dark:bg-blue-950" : ""
+              props.selectedHostId === host.id ? "bg-teal-50 dark:bg-teal-950" : ""
             }`}
             style={{ paddingLeft: `${depth * 16 + 24}px` }}
           >
@@ -154,17 +157,22 @@ export default function HostTree(props: HostTreeProps) {
                 setContextMenu({ host, x: e.clientX, y: e.clientY });
               }}
               title={host.identity_id ? "Double-click to connect" : undefined}
-              className="flex-1 text-left text-neutral-700 dark:text-neutral-300"
+              className="flex flex-1 items-center gap-1.5 text-left text-neutral-700 dark:text-neutral-300"
             >
-              {host.label}
-              <span className="ml-2 text-xs text-neutral-400">{host.hostname}</span>
+              <span
+                className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                  openHostIds.has(host.id) ? "bg-emerald-500" : "bg-neutral-300 dark:bg-neutral-700"
+                }`}
+              />
+              <span className="truncate">{host.label}</span>
+              <span className="shrink-0 text-xs text-neutral-400">{host.hostname}</span>
             </button>
             <div className="hidden gap-1 group-hover:flex">
               <button
                 type="button"
                 title="Edit host"
                 onClick={() => props.onEditHost(host)}
-                className="rounded px-1 text-xs text-neutral-500 hover:text-blue-600"
+                className="rounded px-1 text-xs text-neutral-500 hover:text-teal-600"
               >
                 edit
               </button>

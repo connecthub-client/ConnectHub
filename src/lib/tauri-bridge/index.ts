@@ -1,4 +1,5 @@
 export * from "./vault";
+export * from "./backup";
 export * from "./groups";
 export * from "./hosts";
 export * from "./identities";

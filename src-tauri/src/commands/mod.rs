@@ -1,3 +1,4 @@
+pub mod backup_commands;
 pub mod group_commands;
 pub mod host_commands;
 pub mod identity_commands;
