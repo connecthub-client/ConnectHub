@@ -1,6 +1,7 @@
 use tauri::State;
 use uuid::Uuid;
 
+use crate::data::host_csv::{self, ImportSummary};
 use crate::data::hosts;
 use crate::error::AppResult;
 use crate::models::host::{Host, HostInput};
@@ -28,4 +29,16 @@ pub fn host_update(state: State<AppState>, id: Uuid, input: HostInput) -> AppRes
 pub fn host_delete(state: State<AppState>, id: Uuid) -> AppResult<()> {
     let conn = state.db.lock().unwrap();
     hosts::delete(&conn, id)
+}
+
+#[tauri::command]
+pub fn host_export_csv(state: State<AppState>) -> AppResult<String> {
+    let conn = state.db.lock().unwrap();
+    host_csv::export_csv(&conn)
+}
+
+#[tauri::command]
+pub fn host_import_csv(state: State<AppState>, content: String) -> AppResult<ImportSummary> {
+    let conn = state.db.lock().unwrap();
+    host_csv::import_csv(&conn, &content)
 }

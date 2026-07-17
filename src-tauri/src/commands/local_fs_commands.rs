@@ -52,6 +52,17 @@ pub fn local_list(path: String) -> AppResult<Vec<LocalEntry>> {
 }
 
 #[tauri::command]
+pub fn local_read_text_file(path: String) -> AppResult<String> {
+    Ok(std::fs::read_to_string(&path)?)
+}
+
+#[tauri::command]
+pub fn local_write_text_file(path: String, contents: String) -> AppResult<()> {
+    std::fs::write(&path, contents)?;
+    Ok(())
+}
+
+#[tauri::command]
 pub fn local_mkdir(path: String) -> AppResult<()> {
     std::fs::create_dir(&path)?;
     Ok(())

@@ -16,6 +16,14 @@ export function localList(path: string): Promise<LocalEntry[]> {
   return invoke("local_list", { path });
 }
 
+export function localReadTextFile(path: string): Promise<string> {
+  return invoke("local_read_text_file", { path });
+}
+
+export function localWriteTextFile(path: string, contents: string): Promise<void> {
+  return invoke("local_write_text_file", { path, contents });
+}
+
 export function localMkdir(path: string): Promise<void> {
   return invoke("local_mkdir", { path });
 }

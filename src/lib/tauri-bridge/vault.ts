@@ -16,7 +16,3 @@ export function vaultCreate(password: string): Promise<void> {
 export function vaultUnlock(password: string): Promise<void> {
   return invoke("vault_unlock", { password });
 }
-
-export function vaultLock(): Promise<void> {
-  return invoke("vault_lock");
-}

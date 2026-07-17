@@ -34,6 +34,8 @@ pub enum AppError {
     Ssh(String),
     #[error("session not found")]
     SessionNotFound,
+    #[error("CSV error: {0}")]
+    Csv(String),
 }
 
 // Tauri serializes command errors to the frontend as JSON; a plain string

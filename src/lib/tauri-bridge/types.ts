@@ -76,3 +76,8 @@ export interface HostInput {
   notes: string | null;
   sort_order: number;
 }
+
+export interface ImportSummary {
+  imported: number;
+  warnings: string[];
+}

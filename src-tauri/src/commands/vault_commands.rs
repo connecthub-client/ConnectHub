@@ -37,9 +37,3 @@ pub fn vault_unlock(state: State<AppState>, password: String) -> AppResult<()> {
     *state.vault_key.lock().unwrap() = Some(key);
     Ok(())
 }
-
-#[tauri::command]
-pub fn vault_lock(state: State<AppState>) -> AppResult<()> {
-    *state.vault_key.lock().unwrap() = None;
-    Ok(())
-}

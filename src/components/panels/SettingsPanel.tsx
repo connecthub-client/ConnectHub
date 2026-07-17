@@ -10,13 +10,6 @@ import { inputClass, labelClass, selectClass } from "../forms/formStyles";
 
 const THEME_MODES: ThemeMode[] = ["system", "light", "dark"];
 const CURSOR_STYLES: CursorStyle[] = ["block", "bar", "underline"];
-const AUTO_LOCK_OPTIONS = [
-  { minutes: 5, label: "5 minutes" },
-  { minutes: 15, label: "15 minutes" },
-  { minutes: 30, label: "30 minutes" },
-  { minutes: 60, label: "1 hour" },
-  { minutes: 0, label: "Never" },
-];
 
 export default function SettingsPanel() {
   const theme = useSettingsStore((s) => s.theme);
@@ -29,8 +22,6 @@ export default function SettingsPanel() {
   const setTerminalCursorStyle = useSettingsStore((s) => s.setTerminalCursorStyle);
   const terminalThemeKey = useSettingsStore((s) => s.terminalThemeKey);
   const setTerminalThemeKey = useSettingsStore((s) => s.setTerminalThemeKey);
-  const autoLockMinutes = useSettingsStore((s) => s.autoLockMinutes);
-  const setAutoLockMinutes = useSettingsStore((s) => s.setAutoLockMinutes);
 
   return (
     <div className="max-w-xl">
@@ -94,22 +85,6 @@ export default function SettingsPanel() {
           {(Object.keys(TERMINAL_THEME_PRESETS) as TerminalThemeKey[]).map((key) => (
             <option key={key} value={key}>
               {TERMINAL_THEME_PRESETS[key].label}
-            </option>
-          ))}
-        </select>
-      </section>
-
-      <section className="mb-6">
-        <h3 className="mb-2 text-sm font-semibold text-neutral-800 dark:text-neutral-200">Security</h3>
-        <label className={labelClass}>Auto-lock vault after inactivity</label>
-        <select
-          value={autoLockMinutes}
-          onChange={(e) => setAutoLockMinutes(Number(e.target.value))}
-          className={selectClass}
-        >
-          {AUTO_LOCK_OPTIONS.map((o) => (
-            <option key={o.minutes} value={o.minutes}>
-              {o.label}
             </option>
           ))}
         </select>

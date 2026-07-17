@@ -1,4 +1,5 @@
 pub mod groups;
+pub mod host_csv;
 pub mod hosts;
 pub mod identities;
 pub mod snippets;

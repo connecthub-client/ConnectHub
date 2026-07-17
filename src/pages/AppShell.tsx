@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import HostTree from "../components/sidebar/HostTree";
 import Modal from "../components/common/Modal";
 import GroupForm from "../components/forms/GroupForm";
@@ -16,7 +17,7 @@ import RunSnippetForm from "../components/forms/RunSnippetForm";
 import SettingsPanel from "../components/panels/SettingsPanel";
 import TerminalView from "../components/terminal/TerminalView";
 import SftpBrowser from "../components/sftp/SftpBrowser";
-import { Group, Host, Identity, Snippet } from "../lib/tauri-bridge";
+import { Group, Host, Identity, ImportSummary, localReadTextFile, localWriteTextFile, Snippet } from "../lib/tauri-bridge";
 import { useHostsStore } from "../state/hostsStore";
 import { useSessionsStore } from "../state/sessionsStore";
 
@@ -37,6 +38,8 @@ export default function AppShell() {
   const loadAll = useHostsStore((s) => s.loadAll);
   const loaded = useHostsStore((s) => s.loaded);
   const hosts = useHostsStore((s) => s.hosts);
+  const exportHostsCsv = useHostsStore((s) => s.exportHostsCsv);
+  const importHostsCsv = useHostsStore((s) => s.importHostsCsv);
 
   const openSessions = useSessionsStore((s) => s.openSessions);
   const openSession = useSessionsStore((s) => s.openSession);
@@ -46,6 +49,8 @@ export default function AppShell() {
   const [mainView, setMainView] = useState<MainView>({ type: "manage", tab: "hosts" });
   const [modal, setModal] = useState<ModalState>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [importResult, setImportResult] = useState<ImportSummary | null>(null);
+  const [csvError, setCsvError] = useState<string | null>(null);
 
   useEffect(() => {
     loadAll().catch((e) => setLoadError(String(e)));
@@ -100,6 +105,39 @@ export default function AppShell() {
     }
   }
 
+  async function handleExportCsv() {
+    setCsvError(null);
+    try {
+      const csv = await exportHostsCsv();
+      const path = await save({
+        title: "Export hosts to CSV",
+        defaultPath: "termora-hosts.csv",
+        filters: [{ name: "CSV", extensions: ["csv"] }],
+      });
+      if (!path) return;
+      await localWriteTextFile(path, csv);
+    } catch (e) {
+      setCsvError(String(e));
+    }
+  }
+
+  async function handleImportCsv() {
+    setCsvError(null);
+    try {
+      const path = await open({
+        title: "Import hosts from CSV",
+        multiple: false,
+        filters: [{ name: "CSV", extensions: ["csv"] }],
+      });
+      if (!path || Array.isArray(path)) return;
+      const content = await localReadTextFile(path);
+      const summary = await importHostsCsv(content);
+      setImportResult(summary);
+    } catch (e) {
+      setCsvError(String(e));
+    }
+  }
+
   if (loadError) {
     return (
       <div className="flex h-full items-center justify-center bg-neutral-100 dark:bg-neutral-900">
@@ -135,12 +173,39 @@ export default function AppShell() {
             + Group
           </button>
         </div>
+        <div className="flex gap-2 border-b border-neutral-200 p-2 dark:border-neutral-800">
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            title="Export all hosts to a CSV file"
+            className="flex-1 rounded-md border border-neutral-300 px-2 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          >
+            Export CSV
+          </button>
+          <button
+            type="button"
+            onClick={handleImportCsv}
+            title="Import hosts from a CSV file"
+            className="flex-1 rounded-md border border-neutral-300 px-2 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          >
+            Import CSV
+          </button>
+        </div>
+        {csvError && (
+          <p className="border-b border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-400">
+            {csvError}
+          </p>
+        )}
         <div className="flex-1 overflow-y-auto p-2">
           <HostTree
             selectedHostId={selectedHostId}
             onSelectHost={(host) => {
               setSelectedHostId(host.id);
               setMainView({ type: "manage", tab: "hosts" });
+            }}
+            onConnectHost={(host) => {
+              setSelectedHostId(host.id);
+              handleConnect(host);
             }}
             onEditGroup={(group) => setModal({ kind: "group", group })}
             onEditHost={(host) => setModal({ kind: "host", host })}
@@ -299,6 +364,27 @@ export default function AppShell() {
       {modal?.kind === "run-snippet" && (
         <Modal title={`Run "${modal.snippet.label}"`} onClose={() => setModal(null)}>
           <RunSnippetForm snippet={modal.snippet} onDone={() => setModal(null)} />
+        </Modal>
+      )}
+      {importResult && (
+        <Modal title="Import complete" onClose={() => setImportResult(null)}>
+          <p className="mb-3 text-sm text-neutral-700 dark:text-neutral-300">
+            Imported {importResult.imported} host{importResult.imported === 1 ? "" : "s"}.
+          </p>
+          {importResult.warnings.length > 0 && (
+            <div className="mb-4 max-h-56 space-y-1.5 overflow-y-auto rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
+              {importResult.warnings.map((w, i) => (
+                <p key={i}>{w}</p>
+              ))}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setImportResult(null)}
+            className="w-full rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            Close
+          </button>
         </Modal>
       )}
     </div>

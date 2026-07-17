@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import VaultUnlock from "./pages/VaultUnlock";
+import { useEffect, useState } from "react";
 import AppShell from "./pages/AppShell";
-import { vaultLock } from "./lib/tauri-bridge";
+import { vaultCreate, vaultStatus, vaultUnlock } from "./lib/tauri-bridge";
+import { VAULT_AUTO_UNLOCK_PASSWORD } from "./lib/constants";
 import { useSettingsStore } from "./state/settingsStore";
 import "./App.css";
 
@@ -36,49 +36,45 @@ function useThemeEffect() {
   }, [theme]);
 }
 
-function useAutoLock(unlocked: boolean, onLock: () => void) {
-  const autoLockMinutes = useSettingsStore((s) => s.autoLockMinutes);
-  const lastActivityRef = useRef(Date.now());
-
-  useEffect(() => {
-    if (!unlocked || autoLockMinutes <= 0) return;
-
-    // Reset here (not just on activity) - while locked, no activity events are
-    // tracked, so the ref can be arbitrarily stale by the time the vault is
-    // unlocked again. Without this, the first idle check after unlocking
-    // sees that stale timestamp and re-locks almost immediately.
-    lastActivityRef.current = Date.now();
-
-    const markActivity = () => {
-      lastActivityRef.current = Date.now();
-    };
-    const events = ["mousemove", "mousedown", "keydown", "wheel", "touchstart"] as const;
-    events.forEach((evt) => window.addEventListener(evt, markActivity));
-
-    const interval = window.setInterval(() => {
-      const idleMs = Date.now() - lastActivityRef.current;
-      if (idleMs >= autoLockMinutes * 60_000) {
-        vaultLock()
-          .catch(() => undefined)
-          .finally(onLock);
-      }
-    }, 5_000);
-
-    return () => {
-      events.forEach((evt) => window.removeEventListener(evt, markActivity));
-      window.clearInterval(interval);
-    };
-  }, [unlocked, autoLockMinutes, onLock]);
-}
+type BootState = "loading" | "ready" | "error";
 
 function App() {
-  const [unlocked, setUnlocked] = useState(false);
+  const [boot, setBoot] = useState<BootState>("loading");
+  const [error, setError] = useState<string | null>(null);
 
   useThemeEffect();
-  useAutoLock(unlocked, () => setUnlocked(false));
 
-  if (!unlocked) {
-    return <VaultUnlock onUnlocked={() => setUnlocked(true)} />;
+  useEffect(() => {
+    (async () => {
+      try {
+        const status = await vaultStatus();
+        if (status.initialized) {
+          await vaultUnlock(VAULT_AUTO_UNLOCK_PASSWORD);
+        } else {
+          await vaultCreate(VAULT_AUTO_UNLOCK_PASSWORD);
+        }
+        setBoot("ready");
+      } catch (e) {
+        setBoot("error");
+        setError(String(e));
+      }
+    })();
+  }, []);
+
+  if (boot === "loading") {
+    return (
+      <div className="flex h-full items-center justify-center bg-neutral-100 dark:bg-neutral-900">
+        <p className="text-neutral-500 dark:text-neutral-400">Loading…</p>
+      </div>
+    );
+  }
+
+  if (boot === "error") {
+    return (
+      <div className="flex h-full items-center justify-center bg-neutral-100 dark:bg-neutral-900">
+        <p className="text-red-600 dark:text-red-400">{error}</p>
+      </div>
+    );
   }
 
   return <AppShell />;

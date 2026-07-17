@@ -1,4 +1,6 @@
 import { FormEvent, useState } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
+import { localReadTextFile } from "../../lib/tauri-bridge";
 import { useHostsStore } from "../../state/hostsStore";
 import { errorClass, inputClass, labelClass, primaryButtonClass } from "./formStyles";
 
@@ -16,6 +18,25 @@ export default function KeyForm({ onDone }: KeyFormProps) {
   const [passphrase, setPassphrase] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  async function handleBrowse() {
+    setError(null);
+    try {
+      const path = await open({
+        multiple: false,
+        title: "Select a private key file",
+      });
+      if (!path || Array.isArray(path)) return;
+      const contents = await localReadTextFile(path);
+      setPrivateKeyPem(contents);
+      if (!label) {
+        const fileName = path.split(/[/\\]/).pop() ?? "";
+        setLabel(fileName.replace(/\.(pem|key|pub)$/i, ""));
+      }
+    } catch (err) {
+      setError(String(err));
+    }
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -74,7 +95,16 @@ export default function KeyForm({ onDone }: KeyFormProps) {
         </p>
       ) : (
         <>
-          <label className={labelClass}>Private key (OpenSSH format)</label>
+          <div className="mb-1 flex items-center justify-between">
+            <label className={labelClass}>Private key (OpenSSH or PEM format)</label>
+            <button
+              type="button"
+              onClick={handleBrowse}
+              className="mb-1 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400"
+            >
+              Browse for file…
+            </button>
+          </div>
           <textarea
             value={privateKeyPem}
             onChange={(e) => setPrivateKeyPem(e.currentTarget.value)}

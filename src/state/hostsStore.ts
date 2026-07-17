@@ -7,6 +7,7 @@ import type {
   HostInput,
   Identity,
   IdentityInput,
+  ImportSummary,
   SshKey,
   GenerateKeyInput,
   ImportKeyInput,
@@ -28,6 +29,8 @@ interface HostsState {
   createHost: (input: HostInput) => Promise<Host>;
   updateHost: (id: string, input: HostInput) => Promise<Host>;
   deleteHost: (id: string) => Promise<void>;
+  exportHostsCsv: () => Promise<string>;
+  importHostsCsv: (content: string) => Promise<ImportSummary>;
 
   createIdentity: (input: IdentityInput) => Promise<Identity>;
   updateIdentity: (id: string, input: IdentityInput) => Promise<Identity>;
@@ -86,6 +89,12 @@ export const useHostsStore = create<HostsState>((set, get) => ({
   deleteHost: async (id) => {
     await bridge.hostDelete(id);
     await get().loadAll();
+  },
+  exportHostsCsv: () => bridge.hostExportCsv(),
+  importHostsCsv: async (content) => {
+    const summary = await bridge.hostImportCsv(content);
+    await get().loadAll();
+    return summary;
   },
 
   createIdentity: async (input) => {

@@ -31,13 +31,11 @@ interface SettingsState {
   terminalFontSize: number;
   terminalCursorStyle: CursorStyle;
   terminalThemeKey: TerminalThemeKey;
-  autoLockMinutes: number;
   setTheme: (theme: ThemeMode) => void;
   setTerminalFontFamily: (fontFamily: string) => void;
   setTerminalFontSize: (fontSize: number) => void;
   setTerminalCursorStyle: (cursorStyle: CursorStyle) => void;
   setTerminalThemeKey: (themeKey: TerminalThemeKey) => void;
-  setAutoLockMinutes: (minutes: number) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -48,15 +46,13 @@ export const useSettingsStore = create<SettingsState>()(
       terminalFontSize: 13,
       terminalCursorStyle: "block",
       terminalThemeKey: "dark",
-      autoLockMinutes: 15,
 
       setTheme: (theme) => set({ theme }),
       setTerminalFontFamily: (terminalFontFamily) => set({ terminalFontFamily }),
       setTerminalFontSize: (terminalFontSize) => set({ terminalFontSize }),
       setTerminalCursorStyle: (terminalCursorStyle) => set({ terminalCursorStyle }),
       setTerminalThemeKey: (terminalThemeKey) => set({ terminalThemeKey }),
-      setAutoLockMinutes: (autoLockMinutes) => set({ autoLockMinutes }),
     }),
-    { name: "sshtool-settings" },
+    { name: "termora-settings" },
   ),
 );
