@@ -73,11 +73,11 @@ Inspired by tools like [Termius](https://termius.com), [Tabby](https://tabby.sh)
 
 | Platform | Architecture | Package formats | Status |
 | --- | --- | --- | --- |
-| Linux | x86_64 | `.AppImage`, `.deb`, `.rpm` | ✅ Primary development platform |
-| Windows | x86_64 | `.msi` / NSIS installer | ⚠️ Builds via Tauri; community testing welcome |
-| macOS | Intel & Apple Silicon | `.dmg` | ⚠️ Builds via Tauri; not yet code-signed/notarized |
+| Linux | x86_64 | `.AppImage`, `.deb`, `.rpm` | ✅ Published on [Releases](https://github.com/connecthub-client/ConnectHub/releases/latest) |
+| Windows | x86_64 | `.msi` / NSIS installer | ⚠️ Tauri-supported, not yet published — build from source ([BUILD.md](BUILD.md)) |
+| macOS | Intel & Apple Silicon | `.dmg` | ⚠️ Tauri-supported, not yet published — build from source ([BUILD.md](BUILD.md)) |
 
-See [Known Issues](#known-issues) below for the current caveats on Windows/macOS.
+**v1.0.0 ships Linux artifacts only.** Windows and macOS builds are configured and supported by the codebase but haven't been built on those platforms yet (this release was built from a Linux machine, and Tauri's bundler doesn't cross-compile installers for other OSes) — see [Known Issues](#known-issues).
 
 ## Installation
 
@@ -104,19 +104,15 @@ Fedora/RHEL-based distros can use the `.rpm` asset the same way with `dnf instal
 
 ### Windows
 
-Download the installer from the [latest release](https://github.com/connecthub-client/ConnectHub/releases/latest) (`ConnectHub_1.0.0_x64-setup.exe` or `.msi`) and run it. Since builds aren't code-signed yet, Windows SmartScreen may warn on first run — click **More info → Run anyway**.
+Not yet published as a pre-built installer — v1.0.0 only has Linux artifacts on [Releases](https://github.com/connecthub-client/ConnectHub/releases/latest) (see [Supported platforms](#supported-platforms)). Build from source instead: see [BUILD.md](BUILD.md). Once a Windows build is published, it'll be a `ConnectHub_<version>_x64-setup.exe` or `.msi` — run it, and since builds aren't code-signed yet, expect a SmartScreen warning on first run (click **More info → Run anyway**).
 
 ### macOS
 
-Download `ConnectHub_1.0.0_x64.dmg` (Intel) or `ConnectHub_1.0.0_aarch64.dmg` (Apple Silicon) from the [latest release](https://github.com/connecthub-client/ConnectHub/releases/latest), open it, and drag ConnectHub into Applications. The app isn't notarized yet, so Gatekeeper will block the first launch — right-click the app → **Open**, or run:
-
-```bash
-xattr -cr /Applications/ConnectHub.app
-```
+Not yet published as a pre-built installer for the same reason as Windows above. Build from source: see [BUILD.md](BUILD.md). Once a macOS build is published, it'll be a `.dmg` for Intel or Apple Silicon; since it won't be notarized yet, Gatekeeper will block the first launch — right-click the app → **Open**, or run `xattr -cr /Applications/ConnectHub.app`.
 
 ### Build from source
 
-See [BUILD.md](BUILD.md) for a from-source build on any platform.
+See [BUILD.md](BUILD.md) for a from-source build on any platform — the only option for Windows/macOS today.
 
 ## Architecture overview
 
@@ -241,9 +237,8 @@ Yes, alongside password and private-key auth.
 
 ## Known Issues
 
-- Windows and macOS builds are produced by Tauri's bundler but have not been through the same level of manual testing as Linux in this repo's history — please file an issue if you hit a platform-specific bug.
-- macOS builds are not yet code-signed or notarized; Gatekeeper will block the first launch (see [Installation](#macos)).
-- Windows builds are not yet code-signed; SmartScreen will warn on first run (see [Installation](#windows)).
+- **v1.0.0 has no pre-built Windows or macOS installer** — only Linux (`.deb`/`.rpm`/`.AppImage`) was built and published, since this release was built from a Linux machine and Tauri's bundler doesn't cross-compile installers for other OSes. The codebase supports Windows/macOS and builds cleanly there, but hasn't had a release built or tested on either — build from source (see [BUILD.md](BUILD.md)) in the meantime, and please file an issue if you hit a platform-specific bug.
+- Once Windows/macOS builds are published: macOS builds won't be code-signed or notarized yet, so Gatekeeper will block the first launch (see [Installation](#macos)); Windows builds won't be code-signed yet, so SmartScreen will warn on first run (see [Installation](#windows)).
 - VPN profile support (`openvpn` + polkit helper) is Linux-only for now.
 
 ## Contributing

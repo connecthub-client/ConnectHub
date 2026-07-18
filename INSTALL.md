@@ -4,6 +4,8 @@ This covers installing a pre-built release for end users. To build from source i
 
 All releases are published on [GitHub Releases](https://github.com/connecthub-client/ConnectHub/releases/latest). Exact filenames are shown on each release page; the examples below use the `1.0.0` naming pattern.
 
+> **v1.0.0 currently ships Linux artifacts only.** Windows and macOS are supported by the codebase but haven't been built/published yet — see the Windows/macOS sections below for the current workaround (build from source).
+
 ## Linux
 
 **Option A — AppImage (no install, no root):**
@@ -36,23 +38,17 @@ curl -fsSL -o connecthub.rpm https://github.com/connecthub-client/ConnectHub/rel
 
 ## Windows
 
-1. Download the installer from the [latest release](https://github.com/connecthub-client/ConnectHub/releases/latest) — `ConnectHub_1.0.0_x64-setup.exe` (NSIS) or `ConnectHub_1.0.0_x64_en-US.msi` (WiX).
-2. Run it. Builds are not yet code-signed, so **SmartScreen** may show "Windows protected your PC" — click **More info → Run anyway**.
-3. Launch ConnectHub from the Start Menu.
+**No pre-built installer yet** — v1.0.0 was built and published from a Linux machine, and Tauri's bundler doesn't cross-compile a Windows installer from Linux. Build it yourself instead: see [BUILD.md](BUILD.md#prerequisites) for the Windows prerequisites, then `npm run tauri build` on a Windows machine produces `ConnectHub_1.0.0_x64-setup.exe` (NSIS) or `ConnectHub_1.0.0_x64_en-US.msi` (WiX) under `src-tauri/target/release/bundle/`.
 
-**Uninstall:** Settings → Apps → ConnectHub → Uninstall.
+Once a Windows build is published to [Releases](https://github.com/connecthub-client/ConnectHub/releases/latest), installing it will be: download → run → click **More info → Run anyway** if SmartScreen warns (builds aren't code-signed yet) → launch from the Start Menu. Uninstall via Settings → Apps → ConnectHub.
 
 VPN profile support is Linux-only for now; the VPN tab is hidden/inactive on Windows.
 
 ## macOS
 
-1. Download `ConnectHub_1.0.0_x64.dmg` (Intel) or `ConnectHub_1.0.0_aarch64.dmg` (Apple Silicon) from the [latest release](https://github.com/connecthub-client/ConnectHub/releases/latest).
-2. Open the `.dmg` and drag **ConnectHub** into **Applications**.
-3. The app is not yet notarized, so Gatekeeper will block the first launch ("ConnectHub can't be opened because Apple cannot check it for malicious software"). Either:
-   - Right-click (or Control-click) the app in Applications → **Open** → **Open** again in the dialog, or
-   - Run: `xattr -cr /Applications/ConnectHub.app`
+**No pre-built installer yet**, for the same reason as Windows above. Build it yourself: see [BUILD.md](BUILD.md#prerequisites) for the macOS prerequisites, then `npm run tauri build` on a Mac produces a `.dmg` under `src-tauri/target/release/bundle/dmg/`.
 
-**Uninstall:** drag `ConnectHub.app` from Applications to the Trash.
+Once a macOS build is published to [Releases](https://github.com/connecthub-client/ConnectHub/releases/latest), installing it will be: download the `.dmg` → drag **ConnectHub** into **Applications** → since it won't be notarized yet, Gatekeeper will block the first launch — right-click the app → **Open** → **Open** again in the dialog, or run `xattr -cr /Applications/ConnectHub.app`. Uninstall by dragging the app to the Trash.
 
 VPN profile support is Linux-only for now.
 
