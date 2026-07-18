@@ -384,7 +384,9 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
             <span>
               Don&apos;t let this VPN take over my default internet route
               <span className="block text-xs text-neutral-400">
-                Recommended if you use multiple VPN profiles at once (e.g. one per project).
+                This host stays reachable through it either way. Only limits this profile's
+                effect on your other, unrelated traffic - recommended unless it's meant to route
+                your whole connection.
               </span>
             </span>
           </label>

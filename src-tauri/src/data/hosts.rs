@@ -43,6 +43,17 @@ pub fn list(conn: &Connection) -> AppResult<Vec<Host>> {
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }
 
+// Every host that shares a given VPN profile - used at connect time to
+// figure out which specific hosts should get an explicit route through
+// that profile's tunnel once it's up (see vpn::connect).
+pub fn list_by_vpn_profile(conn: &Connection, vpn_profile_id: Uuid) -> AppResult<Vec<Host>> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {SELECT_COLUMNS} FROM hosts WHERE vpn_profile_id = ?1 ORDER BY sort_order"
+    ))?;
+    let rows = stmt.query_map((&vpn_profile_id,), row_to_host)?;
+    Ok(rows.collect::<Result<Vec<_>, _>>()?)
+}
+
 pub fn create(conn: &Connection, input: HostInput) -> AppResult<Host> {
     let id = Uuid::new_v4();
     conn.execute(
@@ -227,5 +238,47 @@ mod tests {
         )
         .unwrap();
         assert_eq!(internal.jump_host_id, Some(bastion.id));
+    }
+
+    #[test]
+    fn list_by_vpn_profile_returns_only_hosts_sharing_that_profile() {
+        use crate::data::vpn_profiles;
+        use crate::models::vpn_profile::VpnProfileInput;
+        use crate::vault::kdf::test_key;
+
+        let conn = test_conn();
+        let key = test_key();
+        let vpn_input = |label: &str| VpnProfileInput {
+            label: label.into(),
+            config: "client\n".into(),
+            auth_username: None,
+            auth_password: None,
+            avoid_default_route: true,
+        };
+        let profile_id = vpn_profiles::create(&conn, &key, vpn_input("profile-a")).unwrap().id;
+        let other_profile_id = vpn_profiles::create(&conn, &key, vpn_input("profile-b")).unwrap().id;
+
+        let matching_a = create(
+            &conn,
+            HostInput { label: "a".into(), vpn_profile_id: Some(profile_id), ..input() },
+        )
+        .unwrap();
+        let matching_b = create(
+            &conn,
+            HostInput { label: "b".into(), vpn_profile_id: Some(profile_id), ..input() },
+        )
+        .unwrap();
+        create(
+            &conn,
+            HostInput { label: "c".into(), vpn_profile_id: Some(other_profile_id), ..input() },
+        )
+        .unwrap();
+        create(&conn, HostInput { label: "d".into(), ..input() }).unwrap();
+
+        let matched = list_by_vpn_profile(&conn, profile_id).unwrap();
+        let matched_ids: Vec<Uuid> = matched.iter().map(|h| h.id).collect();
+        assert_eq!(matched.len(), 2);
+        assert!(matched_ids.contains(&matching_a.id));
+        assert!(matched_ids.contains(&matching_b.id));
     }
 }

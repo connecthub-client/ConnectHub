@@ -110,10 +110,10 @@ export default function VpnProfileForm({ profile, onDone }: VpnProfileFormProps)
         <span>
           Don&apos;t let this VPN take over my default internet route
           <span className="block text-xs text-neutral-400">
-            Recommended if you connect to more than one VPN profile at a time (e.g. one per
-            project) - keeps this one limited to reaching its own private network instead of
-            fighting other profiles over which one owns your internet connection. Turn off only
-            if this profile specifically needs full-tunnel routing.
+            Hosts assigned to this profile are always reachable through it either way - it's
+            already routed explicitly per host, so this doesn't affect that. This only limits
+            everything else: your other, unrelated traffic. Recommended unless this profile is
+            specifically meant to route your whole connection (e.g. a privacy VPN).
           </span>
         </span>
       </label>

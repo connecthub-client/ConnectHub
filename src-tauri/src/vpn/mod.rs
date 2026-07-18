@@ -164,6 +164,17 @@ pub async fn connect(state: &AppState, vpn_map: VpnMap, profile_id: Uuid) -> App
         })?
     };
 
+    // Every host that uses this profile gets an explicit route through its
+    // tunnel once connected (see add_host_routes) - resolved now, before
+    // the connection even starts, so run_vpn doesn't need db/state access.
+    let target_hostnames: Vec<String> = {
+        let conn = state.db.lock().unwrap();
+        crate::data::hosts::list_by_vpn_profile(&conn, profile_id)?
+            .into_iter()
+            .map(|h| h.hostname)
+            .collect()
+    };
+
     let dir = profiles_dir()?;
     let config_path = dir.join(format!("{profile_id}.ovpn"));
     write_private_file(&config_path, &effective_config(&profile))?;
@@ -218,6 +229,7 @@ pub async fn connect(state: &AppState, vpn_map: VpnMap, profile_id: Uuid) -> App
         config_path,
         auth_path,
         ready_tx,
+        target_hostnames,
     ));
 
     // Wait (bounded) for the first Connected/Error transition so the
@@ -241,6 +253,7 @@ async fn run_vpn(
     config_path: PathBuf,
     auth_path: Option<PathBuf>,
     ready_tx: oneshot::Sender<VpnStatus>,
+    target_hostnames: Vec<String>,
 ) {
     let mut ready_tx = Some(ready_tx);
 
@@ -282,10 +295,17 @@ async fn run_vpn(
                 match line {
                     Ok(Some(text)) => {
                         if let Some(update) = parse_management_line(&text) {
+                            let update_state = update.state;
                             *status.lock().unwrap() = update.clone();
-                            if matches!(update.state, VpnState::Connected | VpnState::Error) {
+                            if matches!(update_state, VpnState::Connected | VpnState::Error) {
                                 if let Some(tx) = ready_tx.take() {
                                     let _ = tx.send(update);
+                                }
+                            }
+                            if update_state == VpnState::Connected {
+                                if let Some(local_ip) = extract_local_tunnel_ip(&text) {
+                                    let hostnames = target_hostnames.clone();
+                                    tokio::spawn(add_host_routes(local_ip, hostnames));
                                 }
                             }
                         }
@@ -348,6 +368,103 @@ fn parse_management_line(line: &str) -> Option<VpnStatus> {
         let phase = rest.split(',').nth(1).unwrap_or("");
         if phase == "CONNECTED" {
             return Some(VpnStatus { state: VpnState::Connected, message: None });
+        }
+    }
+    None
+}
+
+// `>STATE:<ts>,CONNECTED,SUCCESS,<local_tunnel_ip>,<remote_ip>,<remote_port>,,` -
+// the local tunnel IP (4th field) is what lets us find which tun interface
+// this particular connection is using, further down in add_host_routes.
+fn extract_local_tunnel_ip(line: &str) -> Option<String> {
+    let rest = line.strip_prefix(">STATE:")?;
+    let mut parts = rest.split(',');
+    parts.next()?; // timestamp
+    if parts.next()? != "CONNECTED" {
+        return None;
+    }
+    parts.next()?; // "SUCCESS"
+    let local_ip = parts.next()?;
+    if local_ip.is_empty() {
+        None
+    } else {
+        Some(local_ip.to_string())
+    }
+}
+
+// Explicitly routes each of this profile's assigned hosts through its own
+// tunnel, once connected - see the comment on setup::ROUTE_HELPER_PATH for
+// why: this makes reachability independent of whatever either VPN server
+// pushes (or doesn't) for routing, and independent of which VPN currently
+// holds the default route, since a /32 host route always outranks a
+// broader one. Best-effort throughout: a failure here (interface not
+// found yet, DNS not resolving, setup not re-run to pick up the route
+// helper) doesn't affect the VPN's own connected status - worst case,
+// reachability falls back to whatever the server/OS would have done
+// anyway, no worse than before this existed.
+async fn add_host_routes(local_tunnel_ip: String, hostnames: Vec<String>) {
+    if hostnames.is_empty() {
+        return;
+    }
+    if !std::path::Path::new(setup::ROUTE_HELPER_PATH).exists() {
+        return;
+    }
+    let Some(iface) = find_tun_interface(&local_tunnel_ip).await else {
+        return;
+    };
+    for hostname in hostnames {
+        if let Some(ip) = resolve_ipv4(&hostname).await {
+            let _ = tokio::process::Command::new("pkexec")
+                .arg(setup::ROUTE_HELPER_PATH)
+                .arg("add")
+                .arg(&iface)
+                .arg(&ip)
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .await;
+        }
+    }
+}
+
+// Finds which tun interface currently has `local_ip` assigned, by shelling
+// out to `ip` (an unprivileged, read-only listing - no elevation needed).
+async fn find_tun_interface(local_ip: &str) -> Option<String> {
+    let output = tokio::process::Command::new("ip")
+        .args(["-4", "-o", "addr", "show"])
+        .output()
+        .await
+        .ok()?;
+    let text = String::from_utf8_lossy(&output.stdout);
+    for line in text.lines() {
+        // e.g. "5: tun0    inet 10.8.0.6/24 scope global tun0\       valid_lft ..."
+        let cols: Vec<&str> = line.split_whitespace().collect();
+        let Some(inet_pos) = cols.iter().position(|c| *c == "inet") else { continue };
+        let Some(iface_pos) = inet_pos.checked_sub(1) else { continue };
+        let Some(iface) = cols.get(iface_pos) else { continue };
+        if !iface.starts_with("tun") {
+            continue;
+        }
+        let Some(addr) = cols.get(inet_pos + 1) else { continue };
+        if addr.split('/').next() == Some(local_ip) {
+            return Some((*iface).to_string());
+        }
+    }
+    None
+}
+
+// A bare IP resolves instantly with no network round-trip; a real hostname
+// goes through the OS resolver. IPv6-only results are skipped rather than
+// failed outright - the route helper only ever adds an IPv4 /32.
+async fn resolve_ipv4(host: &str) -> Option<String> {
+    if host.parse::<std::net::Ipv4Addr>().is_ok() {
+        return Some(host.to_string());
+    }
+    let addrs = tokio::net::lookup_host((host, 0)).await.ok()?;
+    for addr in addrs {
+        if let std::net::SocketAddr::V4(v4) = addr {
+            return Some(v4.ip().to_string());
         }
     }
     None
@@ -454,5 +571,29 @@ mod tests {
 
         assert!(matches!(rx1.try_recv(), Ok(VpnControl::Disconnect)));
         assert!(matches!(rx2.try_recv(), Ok(VpnControl::Disconnect)));
+    }
+
+    #[test]
+    fn extract_local_tunnel_ip_reads_the_fourth_field_on_connected() {
+        let ip = extract_local_tunnel_ip(
+            ">STATE:1700000000,CONNECTED,SUCCESS,10.8.0.6,203.0.113.5,1194,,",
+        );
+        assert_eq!(ip.as_deref(), Some("10.8.0.6"));
+    }
+
+    #[test]
+    fn extract_local_tunnel_ip_ignores_non_connected_states() {
+        assert!(extract_local_tunnel_ip(">STATE:1700000000,WAIT,,,,,,").is_none());
+        assert!(extract_local_tunnel_ip(">STATE:1700000000,AUTH,,,,,,").is_none());
+    }
+
+    #[test]
+    fn extract_local_tunnel_ip_ignores_unrelated_lines() {
+        assert!(extract_local_tunnel_ip(">INFO:OpenVPN Management Interface Version 1").is_none());
+    }
+
+    #[tokio::test]
+    async fn resolve_ipv4_returns_a_literal_ip_without_any_dns_lookup() {
+        assert_eq!(resolve_ipv4("203.0.113.5").await.as_deref(), Some("203.0.113.5"));
     }
 }
