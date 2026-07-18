@@ -46,6 +46,7 @@ export default function HostContextPanel({
   );
   const [vpnError, setVpnError] = useState<string | null>(null);
   const [vpnToggling, setVpnToggling] = useState(false);
+  const [guardBusy, setGuardBusy] = useState(false);
 
   useEffect(() => {
     if (!vpnBusy) return;
@@ -70,18 +71,28 @@ export default function HostContextPanel({
     }
   }
 
-  // If this host needs a VPN that isn't up yet, give the user a chance to
-  // bring it up first instead of an SSH connection quietly timing out
-  // against an unreachable private IP.
-  function guardedAction(action: () => void) {
+  // If this host needs a VPN that isn't up yet, bring it up first and only
+  // then run the requested action - rather than letting an SSH connection
+  // quietly time out against an unreachable private IP.
+  async function guardedAction(action: () => void) {
     if (host.vpn_profile_id && !vpnConnected) {
-      const proceed = confirm(
-        `This host uses VPN profile "${vpnProfile?.label ?? "unknown"}", which isn't connected. ` +
-          "Connect it now? (Cancel to proceed without it.)",
-      );
-      if (proceed) {
-        handleToggleVpn();
+      setVpnError(null);
+      setGuardBusy(true);
+      try {
+        const status = await vpnConnect(host.vpn_profile_id);
+        if (status.state !== "connected") {
+          setVpnError(
+            status.state === "connecting"
+              ? "VPN is taking longer than expected to connect - try again in a moment."
+              : (status.message ?? `Could not connect VPN profile "${vpnProfile?.label ?? ""}".`),
+          );
+          return;
+        }
+      } catch (e) {
+        setVpnError(String(e));
         return;
+      } finally {
+        setGuardBusy(false);
       }
     }
     action();
@@ -113,7 +124,7 @@ export default function HostContextPanel({
         <button
           type="button"
           onClick={() => guardedAction(onConnect)}
-          disabled={!host.identity_id}
+          disabled={!host.identity_id || guardBusy}
           title={host.identity_id ? undefined : "Assign an identity to this host first"}
           className="flex-1 rounded-md bg-teal-600 px-2 py-1.5 text-xs font-medium text-white hover:bg-teal-700 disabled:opacity-40"
         >
@@ -122,7 +133,7 @@ export default function HostContextPanel({
         <button
           type="button"
           onClick={() => guardedAction(onOpenSftp)}
-          disabled={!host.identity_id}
+          disabled={!host.identity_id || guardBusy}
           title={host.identity_id ? undefined : "Assign an identity to this host first"}
           className="flex-1 rounded-md border border-neutral-300 px-2 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
         >
@@ -131,14 +142,15 @@ export default function HostContextPanel({
         <button
           type="button"
           onClick={() => guardedAction(onNewTunnel)}
-          className="flex-1 rounded-md border border-neutral-300 px-2 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          disabled={guardBusy}
+          className="flex-1 rounded-md border border-neutral-300 px-2 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
         >
           Tunnel
         </button>
         <button
           type="button"
           onClick={handleToggleVpn}
-          disabled={!host.vpn_profile_id || vpnToggling || vpnBusy}
+          disabled={!host.vpn_profile_id || vpnToggling || vpnBusy || guardBusy}
           title={host.vpn_profile_id ? undefined : "Assign a VPN profile in Edit host first"}
           className={`flex-1 rounded-md border px-2 py-1.5 text-xs font-medium disabled:opacity-40 ${
             vpnConnected
@@ -146,15 +158,20 @@ export default function HostContextPanel({
               : "border-neutral-300 text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
           }`}
         >
-          {vpnBusy
-            ? vpnStatus?.state === "connecting"
-              ? "Connecting…"
-              : "Disconnecting…"
+          {guardBusy || vpnBusy
+            ? vpnStatus?.state === "disconnecting"
+              ? "Disconnecting…"
+              : "Connecting…"
             : vpnConnected
               ? "VPN ●"
               : "VPN"}
         </button>
       </div>
+      {guardBusy && (
+        <p className="-mt-2 px-4 pb-4 text-xs text-neutral-400">
+          Connecting VPN profile "{vpnProfile?.label}" before continuing…
+        </p>
+      )}
       {vpnError && (
         <p className="-mt-2 px-4 pb-4 text-xs text-red-600 dark:text-red-400">{vpnError}</p>
       )}

@@ -1,5 +1,6 @@
 import { FormEvent, useState } from "react";
-import { AuthMethod, Host } from "../../lib/tauri-bridge";
+import { open } from "@tauri-apps/plugin-dialog";
+import { AuthMethod, Host, localReadTextFile } from "../../lib/tauri-bridge";
 import { useHostsStore } from "../../state/hostsStore";
 import { useVpnStore } from "../../state/vpnStore";
 import { errorClass, inputClass, labelClass, primaryButtonClass, selectClass } from "./formStyles";
@@ -21,6 +22,7 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
   const updateHost = useHostsStore((s) => s.updateHost);
   const createIdentity = useHostsStore((s) => s.createIdentity);
   const vpnProfiles = useVpnStore((s) => s.profiles);
+  const createVpnProfile = useVpnStore((s) => s.createProfile);
 
   const [label, setLabel] = useState(host?.label ?? "");
   const [hostname, setHostname] = useState(host?.hostname ?? "");
@@ -37,10 +39,39 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
   const [sshKeyId, setSshKeyId] = useState("");
 
   const [jumpHostId, setJumpHostId] = useState(host?.jump_host_id ?? "");
+
+  const [vpnMode, setVpnMode] = useState<"none" | "existing" | "new">(
+    host?.vpn_profile_id ? "existing" : "none",
+  );
   const [vpnProfileId, setVpnProfileId] = useState(host?.vpn_profile_id ?? "");
+  const [vpnLabel, setVpnLabel] = useState("");
+  const [vpnConfig, setVpnConfig] = useState("");
+  const [vpnAuthUsername, setVpnAuthUsername] = useState("");
+  const [vpnAuthPassword, setVpnAuthPassword] = useState("");
+
   const [notes, setNotes] = useState(host?.notes ?? "");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  async function handleBrowseVpn() {
+    setError(null);
+    try {
+      const path = await open({
+        multiple: false,
+        title: "Select a .ovpn profile",
+        filters: [{ name: "OpenVPN config", extensions: ["ovpn", "conf"] }],
+      });
+      if (!path || Array.isArray(path)) return;
+      const contents = await localReadTextFile(path);
+      setVpnConfig(contents);
+      if (!vpnLabel) {
+        const fileName = path.split(/[/\\]/).pop() ?? "";
+        setVpnLabel(fileName.replace(/\.(ovpn|conf)$/i, ""));
+      }
+    } catch (err) {
+      setError(String(err));
+    }
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -48,6 +79,10 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
 
     if (identityMode === "new" && authMethod === "private_key" && !sshKeyId) {
       setError("Select an SSH key, or generate/import one in the Keys tab first.");
+      return;
+    }
+    if (vpnMode === "new" && !vpnConfig) {
+      setError("Upload or paste a .ovpn profile, or switch VPN back to \"None\".");
       return;
     }
 
@@ -66,6 +101,18 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
         resolvedIdentityId = identity.id;
       }
 
+      let resolvedVpnProfileId = vpnMode === "existing" ? vpnProfileId || null : null;
+
+      if (vpnMode === "new") {
+        const profile = await createVpnProfile({
+          label: vpnLabel || `${label || hostname} VPN`,
+          config: vpnConfig,
+          auth_username: vpnAuthUsername || null,
+          auth_password: vpnAuthPassword || "",
+        });
+        resolvedVpnProfileId = profile.id;
+      }
+
       const input = {
         group_id: groupId || null,
         label,
@@ -73,7 +120,7 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
         port,
         identity_id: resolvedIdentityId,
         jump_host_id: jumpHostId || null,
-        vpn_profile_id: vpnProfileId || null,
+        vpn_profile_id: resolvedVpnProfileId,
         color: host?.color ?? null,
         notes: notes || null,
         sort_order: host?.sort_order ?? 0,
@@ -250,19 +297,102 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
           ))}
       </select>
 
-      <label className={labelClass}>VPN profile</label>
-      <select
-        value={vpnProfileId}
-        onChange={(e) => setVpnProfileId(e.currentTarget.value)}
-        className={selectClass}
-      >
-        <option value="">(none - directly reachable)</option>
-        {vpnProfiles.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.label}
-          </option>
-        ))}
-      </select>
+      <label className={labelClass}>VPN (optional)</label>
+      <p className="mb-2 -mt-1 text-xs text-neutral-400">
+        If this host is only reachable over a VPN, assign a profile here - connecting will bring
+        the VPN up first automatically.
+      </p>
+      <div className="mb-4 flex rounded-md border border-neutral-300 p-1 text-sm dark:border-neutral-700">
+        <button
+          type="button"
+          onClick={() => setVpnMode("none")}
+          className={`flex-1 rounded px-2 py-1.5 ${vpnMode === "none" ? "bg-teal-600 text-white" : "text-neutral-600 dark:text-neutral-300"}`}
+        >
+          None
+        </button>
+        <button
+          type="button"
+          onClick={() => setVpnMode("new")}
+          className={`flex-1 rounded px-2 py-1.5 ${vpnMode === "new" ? "bg-teal-600 text-white" : "text-neutral-600 dark:text-neutral-300"}`}
+        >
+          Upload profile
+        </button>
+        {vpnProfiles.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setVpnMode("existing")}
+            className={`flex-1 rounded px-2 py-1.5 ${vpnMode === "existing" ? "bg-teal-600 text-white" : "text-neutral-600 dark:text-neutral-300"}`}
+          >
+            Use saved profile
+          </button>
+        )}
+      </div>
+
+      {vpnMode === "existing" && (
+        <select
+          value={vpnProfileId}
+          onChange={(e) => setVpnProfileId(e.currentTarget.value)}
+          className={selectClass}
+        >
+          <option value="">(none)</option>
+          {vpnProfiles.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+      )}
+
+      {vpnMode === "new" && (
+        <div className="mb-4 rounded-md border border-neutral-200 p-3 dark:border-neutral-700">
+          <label className={labelClass}>Label</label>
+          <input
+            value={vpnLabel}
+            onChange={(e) => setVpnLabel(e.currentTarget.value)}
+            className={inputClass}
+            placeholder="e.g. office vpn"
+          />
+
+          <div className="mb-1 flex items-center justify-between">
+            <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+              OpenVPN config (.ovpn)
+            </label>
+            <button
+              type="button"
+              onClick={handleBrowseVpn}
+              className="text-xs text-teal-600 hover:underline dark:text-teal-400"
+            >
+              Browse…
+            </button>
+          </div>
+          <textarea
+            value={vpnConfig}
+            onChange={(e) => setVpnConfig(e.currentTarget.value)}
+            className={`${inputClass} h-28 font-mono text-xs`}
+            placeholder="Paste an .ovpn file's contents, or browse to one above"
+          />
+
+          <p className="mb-3 -mt-2 text-xs text-neutral-400">
+            Only needed if this profile prompts for a separate username/password at login - most
+            profiles with an embedded client certificate don't.
+          </p>
+          <label className={labelClass}>Username (optional)</label>
+          <input
+            value={vpnAuthUsername}
+            onChange={(e) => setVpnAuthUsername(e.currentTarget.value)}
+            className={inputClass}
+          />
+
+          <label className={labelClass}>Password (optional)</label>
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={vpnAuthPassword}
+            onChange={(e) => setVpnAuthPassword(e.currentTarget.value)}
+            className={inputClass}
+          />
+        </div>
+      )}
 
       <label className={labelClass}>Notes</label>
       <textarea
