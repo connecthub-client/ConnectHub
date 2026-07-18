@@ -627,6 +627,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "connecthub"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "argon2",
+ "async-trait",
+ "base64 0.22.1",
+ "chrono",
+ "csv",
+ "dashmap",
+ "dirs 5.0.1",
+ "fast-socks5",
+ "futures",
+ "rand",
+ "rand_core",
+ "reqwest 0.12.28",
+ "rsa",
+ "rusqlite",
+ "russh",
+ "russh-sftp",
+ "serde",
+ "serde_json",
+ "sha2",
+ "ssh-key",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-opener",
+ "thiserror 2.0.18",
+ "tokio",
+ "urlencoding",
+ "uuid",
+ "zeroize",
+]
+
+[[package]]
 name = "const-oid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5011,42 +5047,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5fed54709c5b3a53d09bb1c113ea4f5ceafd1e772ddcb0030a82e1d56c087b08"
 dependencies = [
  "new_debug_unreachable",
-]
-
-[[package]]
-name = "termora"
-version = "0.1.0"
-dependencies = [
- "aes-gcm",
- "argon2",
- "async-trait",
- "base64 0.22.1",
- "chrono",
- "csv",
- "dashmap",
- "dirs 5.0.1",
- "fast-socks5",
- "futures",
- "rand",
- "rand_core",
- "reqwest 0.12.28",
- "rsa",
- "rusqlite",
- "russh",
- "russh-sftp",
- "serde",
- "serde_json",
- "sha2",
- "ssh-key",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-opener",
- "thiserror 2.0.18",
- "tokio",
- "urlencoding",
- "uuid",
- "zeroize",
 ]
 
 [[package]]

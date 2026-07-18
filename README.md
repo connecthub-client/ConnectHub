@@ -1,4 +1,4 @@
-# Termora
+# ConnectHub
 
 A desktop SSH client built with Tauri, React, and Rust — host manager, terminal, SFTP, port forwarding, and snippets, backed by an encrypted local vault. Inspired by tools like Termius, built from scratch.
 
@@ -84,7 +84,7 @@ Until you do this, sign-in will fail immediately with an invalid-client error fr
 
 ## VPN setup
 
-VPN profiles (Settings → VPN, or the VPN tab) need the `openvpn` package installed (Linux only for now). Bringing up a tunnel means creating a network interface and changing routes, which requires root — rather than prompting for your password on every single connect/disconnect, Termora does a **one-time privilege setup** the first time you use the feature:
+VPN profiles (Settings → VPN, or the VPN tab) need the `openvpn` package installed (Linux only for now). Bringing up a tunnel means creating a network interface and changing routes, which requires root — rather than prompting for your password on every single connect/disconnect, ConnectHub does a **one-time privilege setup** the first time you use the feature:
 
 1. Open the **VPN** tab and click **Run one-time setup**. You'll get one native authentication prompt (via `pkexec`).
 2. This installs a polkit rule scoped to exactly one helper script (`/usr/local/libexec/termora-openvpn-helper`), which only ever launches `openvpn` on an uploaded profile that lives under your own `~/.local/share/sshtool/vpn-profiles/` — it is not a blanket "run anything as root" grant, and it forces `--script-security 0` so an `.ovpn` file can never use `up`/`down`/`route-up` hooks to run arbitrary code as root.
@@ -93,6 +93,10 @@ VPN profiles (Settings → VPN, or the VPN tab) need the `openvpn` package insta
 Until setup is run, connecting a VPN-backed host fails with an explanation; every other feature works normally without it.
 
 Lifecycle is hands-off by design: a VPN comes up automatically the moment you Connect/SFTP/Tunnel into (or open a tunnel to) a host that has one assigned, and goes back down automatically once nothing - no open session, no active tunnel - still needs it, even if that profile is shared across several hosts. If a VPN ever gets stuck (e.g. after a crash), the **VPN** tab has a **Disconnect all** button, and closing the app itself always signals every connected profile to shut down as a last-resort safety net.
+
+### Running multiple VPN profiles at once (e.g. one per project)
+
+Every VPN profile has a **"Don't let this VPN take over my default internet route"** checkbox (on by default for new profiles). Many OpenVPN configs push a `redirect-gateway` directive that routes *all* your traffic through the tunnel, not just its own private network — harmless with a single VPN, but if you connect a second profile for a different project at the same time, both try to claim your default route and the result is typically the second one failing to connect properly, or your entire internet connection breaking. With this checkbox on, a profile only reaches its own private subnet(s) and leaves your default route alone, so several profiles for different projects can stay connected side by side without interfering with each other. Turn it off only for a profile that specifically needs full-tunnel routing (e.g. a privacy VPN meant to route your whole connection) — and avoid running that kind alongside any other profile at the same time, since the conflict this checkbox avoids is inherent to what full-tunnel routing does.
 
 ## Security notes
 

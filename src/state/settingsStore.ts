@@ -53,6 +53,6 @@ export const useSettingsStore = create<SettingsState>()(
       setTerminalCursorStyle: (terminalCursorStyle) => set({ terminalCursorStyle }),
       setTerminalThemeKey: (terminalThemeKey) => set({ terminalThemeKey }),
     }),
-    { name: "termora-settings" },
+    { name: "connecthub-settings" },
   ),
 );

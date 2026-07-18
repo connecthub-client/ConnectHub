@@ -10,6 +10,11 @@ use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 use crate::vault::store;
 
+// Deliberately not renamed alongside the app (Termora -> ConnectHub): these
+// are the filenames used in every backup already sitting in a user's Drive
+// appDataFolder. Changing them would make restore_from_drive stop finding
+// backups made before the rename - same reasoning as vault::store::db_path
+// keeping the literal "sshtool" independent of the product name.
 const VAULT_FILE_NAME: &str = "termora-vault.db";
 const SECRET_FILE_NAME: &str = "termora-local-secret";
 

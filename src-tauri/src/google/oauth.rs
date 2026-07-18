@@ -120,7 +120,7 @@ fn await_redirect(listener: TcpListener, expected_state: &str) -> AppResult<Stri
                     .to_string();
 
                 let body = "<html><body style=\"font-family:sans-serif;padding:2rem\">\
-                             <h3>Termora sign-in complete</h3>\
+                             <h3>ConnectHub sign-in complete</h3>\
                              <p>You can close this tab and return to the app.</p></body></html>";
                 let response = format!(
                     "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",

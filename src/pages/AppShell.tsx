@@ -140,7 +140,7 @@ export default function AppShell() {
       const csv = await exportHostsCsv();
       const path = await save({
         title: "Export hosts to CSV",
-        defaultPath: "termora-hosts.csv",
+        defaultPath: "connecthub-hosts.csv",
         filters: [{ name: "CSV", extensions: ["csv"] }],
       });
       if (!path) return;

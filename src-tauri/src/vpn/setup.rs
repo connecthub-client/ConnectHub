@@ -15,12 +15,17 @@ use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
 
+// Not renamed alongside the app (Termora -> ConnectHub): these are the
+// exact path/action id already installed (root-owned) on any machine that
+// ran setup before the rename. Changing them would orphan that install and
+// silently require re-running setup - is_installed() checks these same
+// paths, so it would just show the setup banner again for no real reason.
 pub const HELPER_PATH: &str = "/usr/local/libexec/termora-openvpn-helper";
 const POLICY_PATH: &str = "/usr/share/polkit-1/actions/com.termora.vpn.policy";
 const POLICY_ACTION_ID: &str = "com.termora.vpn.run";
 
 const HELPER_SCRIPT: &str = r#"#!/bin/sh
-# Installed and managed by Termora - do not edit by hand, it will be
+# Installed and managed by ConnectHub - do not edit by hand, it will be
 # overwritten the next time VPN setup runs. Only reachable via the
 # com.termora.vpn.run polkit action (see the matching .policy file), which
 # grants no other privileges.
@@ -64,8 +69,8 @@ fn policy_xml() -> String {
  "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
 <policyconfig>
   <action id="{POLICY_ACTION_ID}">
-    <description>Run the Termora OpenVPN helper</description>
-    <message>Termora wants to start or stop an OpenVPN connection</message>
+    <description>Run the ConnectHub OpenVPN helper</description>
+    <message>ConnectHub wants to start or stop an OpenVPN connection</message>
     <icon_name>network-vpn</icon_name>
     <defaults>
       <allow_any>no</allow_any>
