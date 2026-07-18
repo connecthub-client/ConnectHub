@@ -18,6 +18,11 @@ pub struct AppState {
     pub sftp_sessions: SftpMap,
     pub tunnels: TunnelMap,
     pub vpn_connections: VpnMap,
+    // Set while a Google sign-in is waiting on the browser; letting the
+    // frontend fire this early is the only way to get unstuck if the user
+    // closes the browser tab without finishing, since nothing else signals
+    // that from the loopback server's side. See google::cancel_login.
+    pub google_login_cancel: Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
 }
 
 impl AppState {
@@ -34,6 +39,7 @@ impl AppState {
             sftp_sessions: Arc::new(DashMap::new()),
             tunnels: Arc::new(DashMap::new()),
             vpn_connections: Arc::new(DashMap::new()),
+            google_login_cancel: Mutex::new(None),
         })
     }
 

@@ -13,6 +13,13 @@ export function googleLogin(): Promise<GoogleAuthStatus> {
   return invoke("google_login");
 }
 
+// Aborts a pending googleLogin() call early - e.g. if the user closed the
+// browser tab without finishing. A no-op if no sign-in is currently
+// pending.
+export function googleLoginCancel(): Promise<void> {
+  return invoke("google_login_cancel");
+}
+
 export function googleLogout(): Promise<void> {
   return invoke("google_logout");
 }

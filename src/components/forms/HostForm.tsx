@@ -21,6 +21,7 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
   const createHost = useHostsStore((s) => s.createHost);
   const updateHost = useHostsStore((s) => s.updateHost);
   const createIdentity = useHostsStore((s) => s.createIdentity);
+  const importKey = useHostsStore((s) => s.importKey);
   const vpnProfiles = useVpnStore((s) => s.profiles);
   const createVpnProfile = useVpnStore((s) => s.createProfile);
 
@@ -37,6 +38,10 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
   const [authMethod, setAuthMethod] = useState<InlineAuthMethod>("password");
   const [password, setPassword] = useState("");
   const [sshKeyId, setSshKeyId] = useState("");
+  const [keyMode, setKeyMode] = useState<"existing" | "import">(keys.length > 0 ? "existing" : "import");
+  const [importKeyLabel, setImportKeyLabel] = useState("");
+  const [importKeyPem, setImportKeyPem] = useState("");
+  const [importKeyPassphrase, setImportKeyPassphrase] = useState("");
 
   const [jumpHostId, setJumpHostId] = useState(host?.jump_host_id ?? "");
 
@@ -53,6 +58,25 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
   const [notes, setNotes] = useState(host?.notes ?? "");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  async function handleBrowseKey() {
+    setError(null);
+    try {
+      const path = await open({
+        multiple: false,
+        title: "Select a private key file",
+      });
+      if (!path || Array.isArray(path)) return;
+      const contents = await localReadTextFile(path);
+      setImportKeyPem(contents);
+      if (!importKeyLabel) {
+        const fileName = path.split(/[/\\]/).pop() ?? "";
+        setImportKeyLabel(fileName.replace(/\.(pem|key|pub)$/i, ""));
+      }
+    } catch (err) {
+      setError(String(err));
+    }
+  }
 
   async function handleBrowseVpn() {
     setError(null);
@@ -78,9 +102,15 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
     e.preventDefault();
     setError(null);
 
-    if (identityMode === "new" && authMethod === "private_key" && !sshKeyId) {
-      setError("Select an SSH key, or generate/import one in the Keys tab first.");
-      return;
+    if (identityMode === "new" && authMethod === "private_key") {
+      if (keyMode === "existing" && !sshKeyId) {
+        setError("Select an SSH key, or switch to \"Import new key\".");
+        return;
+      }
+      if (keyMode === "import" && !importKeyPem) {
+        setError("Upload or paste a private key, or switch to \"Use saved key\".");
+        return;
+      }
     }
     if (vpnMode === "new" && !vpnConfig) {
       setError("Upload or paste a .ovpn profile, or switch VPN back to \"None\".");
@@ -92,11 +122,21 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
       let resolvedIdentityId = identityMode === "existing" ? identityId || null : null;
 
       if (identityMode === "new" && username) {
+        let resolvedSshKeyId = sshKeyId;
+        if (authMethod === "private_key" && keyMode === "import") {
+          const key = await importKey({
+            label: importKeyLabel || `${username}@${hostname || label}`,
+            private_key_pem: importKeyPem,
+            passphrase: importKeyPassphrase || null,
+          });
+          resolvedSshKeyId = key.id;
+        }
+
         const identity = await createIdentity({
           label: `${username}@${hostname || label}`,
           username,
           auth_method: authMethod,
-          ssh_key_id: authMethod === "private_key" ? sshKeyId : null,
+          ssh_key_id: authMethod === "private_key" ? resolvedSshKeyId : null,
           password: authMethod === "password" ? password : "",
         });
         resolvedIdentityId = identity.id;
@@ -262,23 +302,80 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
               className={inputClass}
               placeholder="Password"
             />
-          ) : keys.length > 0 ? (
-            <select
-              value={sshKeyId}
-              onChange={(e) => setSshKeyId(e.currentTarget.value)}
-              className={selectClass}
-            >
-              <option value="">Select a key…</option>
-              {keys.map((k) => (
-                <option key={k.id} value={k.id}>
-                  {k.label} ({k.key_type})
-                </option>
-              ))}
-            </select>
           ) : (
-            <p className="mb-4 text-sm text-neutral-400">
-              No SSH keys yet - generate or import one in the Keys tab first.
-            </p>
+            <>
+              {keys.length > 0 && (
+                <div className="mb-3 flex rounded-md border border-neutral-300 p-1 text-sm dark:border-neutral-700">
+                  <button
+                    type="button"
+                    onClick={() => setKeyMode("existing")}
+                    className={`flex-1 rounded px-2 py-1.5 ${keyMode === "existing" ? "bg-teal-600 text-white" : "text-neutral-600 dark:text-neutral-300"}`}
+                  >
+                    Use saved key
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setKeyMode("import")}
+                    className={`flex-1 rounded px-2 py-1.5 ${keyMode === "import" ? "bg-teal-600 text-white" : "text-neutral-600 dark:text-neutral-300"}`}
+                  >
+                    Import new key
+                  </button>
+                </div>
+              )}
+
+              {keyMode === "existing" && keys.length > 0 ? (
+                <select
+                  value={sshKeyId}
+                  onChange={(e) => setSshKeyId(e.currentTarget.value)}
+                  className={selectClass}
+                >
+                  <option value="">Select a key…</option>
+                  {keys.map((k) => (
+                    <option key={k.id} value={k.id}>
+                      {k.label} ({k.key_type})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="rounded-md border border-neutral-200 p-3 dark:border-neutral-700">
+                  <label className={labelClass}>Label</label>
+                  <input
+                    value={importKeyLabel}
+                    onChange={(e) => setImportKeyLabel(e.currentTarget.value)}
+                    className={inputClass}
+                    placeholder="e.g. laptop key"
+                  />
+
+                  <div className="mb-1 flex items-center justify-between">
+                    <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                      Private key (OpenSSH or PEM format)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleBrowseKey}
+                      className="text-xs text-teal-600 hover:underline dark:text-teal-400"
+                    >
+                      Browse…
+                    </button>
+                  </div>
+                  <textarea
+                    value={importKeyPem}
+                    onChange={(e) => setImportKeyPem(e.currentTarget.value)}
+                    className={`${inputClass} h-28 font-mono text-xs`}
+                    placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
+                  />
+
+                  <label className={labelClass}>Passphrase (if the key is encrypted)</label>
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    value={importKeyPassphrase}
+                    onChange={(e) => setImportKeyPassphrase(e.currentTarget.value)}
+                    className={inputClass}
+                  />
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

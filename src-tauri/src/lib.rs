@@ -9,7 +9,8 @@ mod vault;
 mod vpn;
 
 use commands::backup_commands::{
-    google_backup_now, google_login, google_logout, google_restore, google_status,
+    google_backup_now, google_login, google_login_cancel, google_logout, google_restore,
+    google_status,
 };
 use commands::group_commands::{group_create, group_delete, group_list, group_update};
 use commands::host_commands::{
@@ -102,6 +103,7 @@ pub fn run() {
             snippet_run_on_hosts,
             google_status,
             google_login,
+            google_login_cancel,
             google_logout,
             google_backup_now,
             google_restore,

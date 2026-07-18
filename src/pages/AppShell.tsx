@@ -48,6 +48,8 @@ export default function AppShell() {
   const openSessions = useSessionsStore((s) => s.openSessions);
   const openSession = useSessionsStore((s) => s.openSession);
   const closeSession = useSessionsStore((s) => s.closeSession);
+  const reorderSessions = useSessionsStore((s) => s.reorderSessions);
+  const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
 
   const loadVpnAll = useVpnStore((s) => s.loadAll);
   const releaseVpnIfUnused = useVpnStore((s) => s.releaseIfUnused);
@@ -305,16 +307,27 @@ export default function AppShell() {
 
         {openSessions.length > 0 && (
           <div className="flex items-center gap-1 overflow-x-auto border-b border-neutral-200 bg-neutral-100 p-2 dark:border-neutral-800 dark:bg-neutral-950">
-            {openSessions.map((s) => {
+            {openSessions.map((s, index) => {
               const active = mainView.type === "session" && mainView.tabId === s.tabId;
               return (
                 <div
                   key={s.tabId}
+                  draggable
+                  onDragStart={() => setDraggedTabId(s.tabId)}
+                  onDragEnd={() => setDraggedTabId(null)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (!draggedTabId || draggedTabId === s.tabId) return;
+                    const fromIndex = openSessions.findIndex((x) => x.tabId === draggedTabId);
+                    if (fromIndex !== -1) reorderSessions(fromIndex, index);
+                    setDraggedTabId(null);
+                  }}
                   className={`group flex shrink-0 items-center gap-2 rounded-t-md border-b-2 px-3 py-1.5 text-sm ${
                     active
                       ? "border-teal-500 bg-white text-neutral-900 dark:bg-neutral-900 dark:text-neutral-50"
                       : "border-transparent text-neutral-500 hover:bg-neutral-200/60 dark:text-neutral-400 dark:hover:bg-neutral-900/60"
-                  }`}
+                  } ${draggedTabId === s.tabId ? "opacity-40" : ""}`}
                 >
                   <button
                     type="button"

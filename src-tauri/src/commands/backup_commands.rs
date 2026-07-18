@@ -15,6 +15,11 @@ pub async fn google_login(state: State<'_, AppState>) -> AppResult<GoogleAuthSta
 }
 
 #[tauri::command]
+pub fn google_login_cancel(state: State<AppState>) {
+    google::cancel_login(&state)
+}
+
+#[tauri::command]
 pub fn google_logout(state: State<AppState>) -> AppResult<()> {
     google::logout(&state)
 }

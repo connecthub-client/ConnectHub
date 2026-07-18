@@ -40,7 +40,17 @@ pub fn status(state: &AppState) -> AppResult<GoogleAuthStatus> {
 }
 
 pub async fn login(state: &AppState) -> AppResult<GoogleAuthStatus> {
-    let tokens = oauth::login().await?;
+    let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
+    *state.google_login_cancel.lock().unwrap() = Some(cancel_tx);
+
+    let result = oauth::login(cancel_rx).await;
+    // Whether it succeeded, failed, or was cancelled, there's no longer a
+    // pending sign-in to cancel - clear it so a stale sender (which would
+    // just be ignored anyway, since the receiver is already gone) doesn't
+    // linger.
+    state.google_login_cancel.lock().unwrap().take();
+    let tokens = result?;
+
     let refresh_token = tokens.refresh_token.ok_or_else(|| {
         AppError::Google(
             "Google did not return a refresh token - please try signing in again".into(),
@@ -57,6 +67,16 @@ pub async fn login(state: &AppState) -> AppResult<GoogleAuthStatus> {
         connected: true,
         email,
     })
+}
+
+// Lets the frontend abort a pending login() early - the only way to get
+// unstuck if the user closes the browser tab without finishing the flow,
+// since the loopback server has no way to detect that on its own. A no-op
+// if nothing is currently pending.
+pub fn cancel_login(state: &AppState) {
+    if let Some(tx) = state.google_login_cancel.lock().unwrap().take() {
+        let _ = tx.send(());
+    }
 }
 
 pub fn logout(state: &AppState) -> AppResult<()> {

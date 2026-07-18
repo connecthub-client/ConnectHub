@@ -3,6 +3,7 @@ import {
   GoogleAuthStatus,
   googleBackupNow,
   googleLogin,
+  googleLoginCancel,
   googleLogout,
   googleRestore,
   googleStatus,
@@ -34,6 +35,19 @@ export default function GoogleBackupSection() {
       setError(String(e));
     } finally {
       setAction("idle");
+    }
+  }
+
+  // If the user closed the browser tab without finishing, there's no way
+  // for the app to detect that on its own - this lets them bail out
+  // immediately instead of waiting out the backend's timeout. The pending
+  // googleLogin() call above settles (rejected) once this resolves, which
+  // is what actually resets `action` back to "idle".
+  async function handleCancelSignIn() {
+    try {
+      await googleLoginCancel();
+    } catch (e) {
+      setError(String(e));
     }
   }
 
@@ -98,14 +112,33 @@ export default function GoogleBackupSection() {
             Sign in with your own Google account to back up your hosts, identities, keys, and
             snippets to Google Drive, and restore them on another device.
           </p>
-          <button
-            type="button"
-            onClick={handleSignIn}
-            disabled={action !== "idle"}
-            className={primaryButtonClass}
-          >
-            {action === "signing-in" ? "Waiting for sign-in in your browser…" : "Sign in with Google"}
-          </button>
+          {action === "signing-in" ? (
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled
+                className={`${primaryButtonClass} flex-1 cursor-not-allowed opacity-60`}
+              >
+                Waiting for sign-in in your browser…
+              </button>
+              <button
+                type="button"
+                onClick={handleCancelSignIn}
+                className="rounded-md border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handleSignIn}
+              disabled={action !== "idle"}
+              className={primaryButtonClass}
+            >
+              Sign in with Google
+            </button>
+          )}
         </>
       ) : (
         <>

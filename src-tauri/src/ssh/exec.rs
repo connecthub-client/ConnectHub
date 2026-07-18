@@ -164,6 +164,7 @@ mod live_sshd_tests {
             sftp_sessions: Arc::new(DashMap::new()),
             tunnels: Arc::new(DashMap::new()),
             vpn_connections: Arc::new(DashMap::new()),
+            google_login_cancel: std::sync::Mutex::new(None),
         }
     }
 

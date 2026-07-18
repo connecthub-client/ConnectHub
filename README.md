@@ -74,13 +74,16 @@ cargo test --lib -- --ignored          # live tests (requires a reachable local 
 
 ## Google backup setup
 
-The backup feature (Settings → Backup) uses a standard Google OAuth2 "Desktop app" client — every user signs in with their own Google account, and the app only ever accesses a private, hidden `appDataFolder` on their Drive (never the user's visible files). To use it, you must supply your own OAuth client credentials before building:
+The backup feature (Settings → Backup) uses a standard Google OAuth2 "Desktop app" client — every user signs in with their own Google account, and the app only ever accesses a private, hidden `appDataFolder` on their Drive (never the user's visible files). This repo ships with a real, working OAuth client ID/secret already in `src-tauri/src/google/oauth.rs`, so sign-in works out of the box — no setup needed to use the feature as-is.
+
+Google does not treat a Desktop app's `client_secret` as confidential (see [their docs](https://developers.google.com/identity/protocols/oauth2#installed)); the actual security boundary is PKCE, which is what makes this safe to keep in a public repo. Every user still signs in with their *own* Google account and only ever touches their *own* Drive `appDataFolder` — this client ID is just the shared identity the sign-in flow runs through, not a shared credential to anyone's data.
+
+If you've forked this project and want your own separate OAuth identity (your own API quota, your own name on the consent screen), swap in your own:
 
 1. In [Google Cloud Console](https://console.cloud.google.com/), create a project, enable the **Google Drive API**, and configure the OAuth consent screen.
 2. Create an OAuth **Desktop app** client ID.
-3. Replace the placeholder values in `src-tauri/src/google/oauth.rs` (`CLIENT_ID` / `CLIENT_SECRET`) with the ones Google issued you. (Google does not treat a Desktop app's `client_secret` as confidential, so committing it in an open-source repo is expected practice for this client type — see Google's own docs — but the credentials still need to be *yours*, not a placeholder.)
-
-Until you do this, sign-in will fail immediately with an invalid-client error from Google; every other feature works normally without it.
+3. Replace `CLIENT_ID` / `CLIENT_SECRET` in `src-tauri/src/google/oauth.rs` with the ones Google issued you.
+4. If you want more than a handful of testers to be able to sign in, move the OAuth consent screen from "Testing" to "In production" in Cloud Console - while in Testing, only accounts you've explicitly added as test users (max 100) can sign in, and refresh tokens expire after 7 days regardless of who's using it.
 
 ## VPN setup
 
