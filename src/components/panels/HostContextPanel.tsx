@@ -28,7 +28,6 @@ export default function HostContextPanel({
   const vpnProfiles = useVpnStore((s) => s.profiles);
   const vpnStatuses = useVpnStore((s) => s.statuses);
   const vpnConnect = useVpnStore((s) => s.connect);
-  const vpnDisconnect = useVpnStore((s) => s.disconnect);
   const refreshVpnActive = useVpnStore((s) => s.refreshActive);
 
   const identity = identities.find((i) => i.id === host.identity_id);
@@ -45,7 +44,6 @@ export default function HostContextPanel({
     null,
   );
   const [vpnError, setVpnError] = useState<string | null>(null);
-  const [vpnToggling, setVpnToggling] = useState(false);
   const [guardBusy, setGuardBusy] = useState(false);
 
   useEffect(() => {
@@ -54,26 +52,10 @@ export default function HostContextPanel({
     return () => clearInterval(interval);
   }, [vpnBusy, refreshVpnActive]);
 
-  async function handleToggleVpn() {
-    if (!host.vpn_profile_id) return;
-    setVpnError(null);
-    setVpnToggling(true);
-    try {
-      if (vpnConnected) {
-        await vpnDisconnect(host.vpn_profile_id);
-      } else {
-        await vpnConnect(host.vpn_profile_id);
-      }
-    } catch (e) {
-      setVpnError(String(e));
-    } finally {
-      setVpnToggling(false);
-    }
-  }
-
-  // If this host needs a VPN that isn't up yet, bring it up first and only
-  // then run the requested action - rather than letting an SSH connection
-  // quietly time out against an unreachable private IP.
+  // VPN is fully automatic: a host with a VPN profile assigned brings it up
+  // by itself the moment you Connect/SFTP/Tunnel, and it's released again
+  // once nothing is using it (see vpnStore.releaseIfUnused) - there's no
+  // separate VPN button for the user to manage.
   async function guardedAction(action: () => void) {
     if (host.vpn_profile_id && !vpnConnected) {
       setVpnError(null);
@@ -146,25 +128,6 @@ export default function HostContextPanel({
           className="flex-1 rounded-md border border-neutral-300 px-2 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
         >
           Tunnel
-        </button>
-        <button
-          type="button"
-          onClick={handleToggleVpn}
-          disabled={!host.vpn_profile_id || vpnToggling || vpnBusy || guardBusy}
-          title={host.vpn_profile_id ? undefined : "Assign a VPN profile in Edit host first"}
-          className={`flex-1 rounded-md border px-2 py-1.5 text-xs font-medium disabled:opacity-40 ${
-            vpnConnected
-              ? "border-emerald-500 text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950"
-              : "border-neutral-300 text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
-          }`}
-        >
-          {guardBusy || vpnBusy
-            ? vpnStatus?.state === "disconnecting"
-              ? "Disconnecting…"
-              : "Connecting…"
-            : vpnConnected
-              ? "VPN ●"
-              : "VPN"}
         </button>
       </div>
       {guardBusy && (

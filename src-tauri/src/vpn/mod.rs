@@ -107,6 +107,19 @@ pub fn disconnect(vpn_map: &VpnMap, profile_id: Uuid) -> AppResult<()> {
     Ok(())
 }
 
+// Signals every currently-connected (or connecting) profile to shut down -
+// used as a safety net on app exit, so a VPN a user forgot to disconnect
+// (or one left over from a session/tunnel the app didn't get a chance to
+// clean up after) doesn't keep quietly rerouting traffic once the app
+// closes. Doesn't wait for the shutdowns to finish: each openvpn process
+// runs independently of this one, so signaling it to stop is enough even
+// if this process exits before that finishes.
+pub fn disconnect_all(vpn_map: &VpnMap) {
+    for entry in vpn_map.iter() {
+        let _ = entry.commands.send(VpnControl::Disconnect);
+    }
+}
+
 pub async fn connect(state: &AppState, vpn_map: VpnMap, profile_id: Uuid) -> AppResult<VpnStatus> {
     if let Some(entry) = vpn_map.get(&profile_id) {
         let current = entry.status.lock().unwrap().clone();
@@ -351,5 +364,47 @@ mod tests {
     fn ignores_unrelated_lines() {
         assert!(parse_management_line(">INFO:OpenVPN Management Interface Version 1").is_none());
         assert!(parse_management_line(">LOG:1700000000,I,some log line").is_none());
+    }
+
+    fn tracked(vpn_map: &VpnMap, state: VpnState) -> (Uuid, mpsc::UnboundedReceiver<VpnControl>) {
+        let (tx, rx) = mpsc::unbounded_channel();
+        let id = Uuid::new_v4();
+        vpn_map.insert(id, ActiveVpn { commands: tx, status: Arc::new(Mutex::new(VpnStatus { state, message: None })) });
+        (id, rx)
+    }
+
+    #[test]
+    fn status_defaults_to_disconnected_when_not_tracked() {
+        let vpn_map: VpnMap = Arc::new(DashMap::new());
+        assert_eq!(status(&vpn_map, Uuid::new_v4()).state, VpnState::Disconnected);
+    }
+
+    #[test]
+    fn disconnect_is_a_noop_when_profile_not_tracked() {
+        let vpn_map: VpnMap = Arc::new(DashMap::new());
+        assert!(disconnect(&vpn_map, Uuid::new_v4()).is_ok());
+    }
+
+    #[test]
+    fn list_active_reports_every_tracked_profile() {
+        let vpn_map: VpnMap = Arc::new(DashMap::new());
+        let (id, _rx) = tracked(&vpn_map, VpnState::Connected);
+
+        let active = list_active(&vpn_map);
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].profile_id, id);
+        assert_eq!(active[0].status.state, VpnState::Connected);
+    }
+
+    #[test]
+    fn disconnect_all_signals_every_tracked_profile() {
+        let vpn_map: VpnMap = Arc::new(DashMap::new());
+        let (_id1, mut rx1) = tracked(&vpn_map, VpnState::Connected);
+        let (_id2, mut rx2) = tracked(&vpn_map, VpnState::Connecting);
+
+        disconnect_all(&vpn_map);
+
+        assert!(matches!(rx1.try_recv(), Ok(VpnControl::Disconnect)));
+        assert!(matches!(rx2.try_recv(), Ok(VpnControl::Disconnect)));
     }
 }

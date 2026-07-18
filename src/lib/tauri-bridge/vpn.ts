@@ -40,3 +40,7 @@ export function vpnStatus(profileId: string): Promise<VpnStatus> {
 export function vpnActiveStatuses(): Promise<VpnConnectionStatus[]> {
   return invoke("vpn_active_statuses");
 }
+
+export function vpnDisconnectAll(): Promise<void> {
+  return invoke("vpn_disconnect_all");
+}

@@ -36,10 +36,12 @@ use commands::snippet_commands::{
 use commands::tunnel_commands::{tunnel_list, tunnel_start, tunnel_stop};
 use commands::vault_commands::vault_auto_unlock;
 use commands::vpn_commands::{
-    vpn_active_statuses, vpn_connect, vpn_disconnect, vpn_profile_create, vpn_profile_delete,
-    vpn_profile_list, vpn_profile_update, vpn_setup_install, vpn_setup_status, vpn_status,
+    vpn_active_statuses, vpn_connect, vpn_disconnect, vpn_disconnect_all, vpn_profile_create,
+    vpn_profile_delete, vpn_profile_list, vpn_profile_update, vpn_setup_install, vpn_setup_status,
+    vpn_status,
 };
 use state::AppState;
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -113,7 +115,19 @@ pub fn run() {
             vpn_disconnect,
             vpn_status,
             vpn_active_statuses,
+            vpn_disconnect_all,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            // Safety net: if the app is closing while a VPN is still up
+            // (forgotten, or left over from a session the app didn't get a
+            // chance to clean up after), signal every one of them to
+            // disconnect rather than leaving a tunnel silently rerouting
+            // traffic after the app itself is gone.
+            if let tauri::RunEvent::ExitRequested { .. } = event {
+                let state = app_handle.state::<AppState>();
+                vpn::disconnect_all(&state.vpn_connections);
+            }
+        });
 }

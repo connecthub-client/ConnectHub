@@ -44,15 +44,20 @@ export default function VpnPanel({ onNew, onEdit }: VpnPanelProps) {
   const runSetup = useVpnStore((s) => s.runSetup);
   const connect = useVpnStore((s) => s.connect);
   const disconnect = useVpnStore((s) => s.disconnect);
+  const disconnectAll = useVpnStore((s) => s.disconnectAll);
   const refreshActive = useVpnStore((s) => s.refreshActive);
 
   const [settingUp, setSettingUp] = useState(false);
   const [setupError, setSetupError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [disconnectingAll, setDisconnectingAll] = useState(false);
 
   const anyBusy = Object.values(statuses).some(
     (s) => s.state === "connecting" || s.state === "disconnecting",
+  );
+  const anyActive = Object.values(statuses).some(
+    (s) => s.state === "connected" || s.state === "connecting",
   );
   useEffect(() => {
     if (!anyBusy) return;
@@ -88,17 +93,42 @@ export default function VpnPanel({ onNew, onEdit }: VpnPanelProps) {
     }
   }
 
+  async function handleDisconnectAll() {
+    setActionError(null);
+    setDisconnectingAll(true);
+    try {
+      await disconnectAll();
+    } catch (e) {
+      setActionError(String(e));
+    } finally {
+      setDisconnectingAll(false);
+    }
+  }
+
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-neutral-900 dark:text-neutral-50">VPN</h2>
-        <button
-          type="button"
-          onClick={onNew}
-          className="rounded-md bg-teal-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-teal-700"
-        >
-          New VPN profile
-        </button>
+        <div className="flex gap-2">
+          {anyActive && (
+            <button
+              type="button"
+              onClick={handleDisconnectAll}
+              disabled={disconnectingAll}
+              title="Stuck or forgotten VPN connections? Disconnect everything at once."
+              className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+            >
+              {disconnectingAll ? "Disconnecting…" : "Disconnect all"}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onNew}
+            className="rounded-md bg-teal-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-teal-700"
+          >
+            New VPN profile
+          </button>
+        </div>
       </div>
 
       {!setupInstalled && (

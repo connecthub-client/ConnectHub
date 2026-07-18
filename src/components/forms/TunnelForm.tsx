@@ -2,6 +2,7 @@ import { FormEvent, useState } from "react";
 import { TunnelKind } from "../../lib/tauri-bridge";
 import { useHostsStore } from "../../state/hostsStore";
 import { useTunnelsStore } from "../../state/tunnelsStore";
+import { useVpnStore } from "../../state/vpnStore";
 import { errorClass, inputClass, labelClass, primaryButtonClass, selectClass } from "./formStyles";
 
 interface TunnelFormProps {
@@ -12,6 +13,8 @@ interface TunnelFormProps {
 export default function TunnelForm({ defaultHostId, onDone }: TunnelFormProps) {
   const hosts = useHostsStore((s) => s.hosts);
   const startTunnel = useTunnelsStore((s) => s.startTunnel);
+  const vpnStatuses = useVpnStore((s) => s.statuses);
+  const vpnConnect = useVpnStore((s) => s.connect);
 
   const [hostId, setHostId] = useState(defaultHostId ?? "");
   const [kind, setKind] = useState<TunnelKind>("local");
@@ -27,6 +30,19 @@ export default function TunnelForm({ defaultHostId, onDone }: TunnelFormProps) {
     setError(null);
     setSubmitting(true);
     try {
+      const host = hosts.find((h) => h.id === hostId);
+      if (host?.vpn_profile_id && vpnStatuses[host.vpn_profile_id]?.state !== "connected") {
+        const status = await vpnConnect(host.vpn_profile_id);
+        if (status.state !== "connected") {
+          setError(
+            status.state === "connecting"
+              ? "VPN is taking longer than expected to connect - try again in a moment."
+              : (status.message ?? "Could not connect this host's VPN profile."),
+          );
+          return;
+        }
+      }
+
       await startTunnel({
         host_id: hostId,
         kind,

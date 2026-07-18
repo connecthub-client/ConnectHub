@@ -29,7 +29,7 @@ A desktop SSH client built with Tauri, React, and Rust — host manager, termina
 - **SSH terminal** — multi-tab, multi-session, xterm.js-powered, TOFU host-key verification and pinning
 - **SFTP browser** — dual-pane local/remote file transfer with upload/download, mkdir, rename, delete
 - **Port forwarding** — local, remote, and dynamic (SOCKS5) tunnels, managed from one panel
-- **VPN profiles** — upload an OpenVPN (`.ovpn`) profile once and assign it to any host on that private network; a fourth **VPN** button sits next to Connect/SFTP/Tunnel to bring the tunnel up or down, and multiple profiles (for different hosts/networks) can be connected at the same time (see [VPN setup](#vpn-setup))
+- **VPN profiles** — every host can have its own VPN, or none. Upload an OpenVPN (`.ovpn`) profile right from a host's own edit form (or reuse one already saved) and it's fully automatic from there: click **Connect**, **SFTP**, or **Tunnel** and the assigned VPN comes up first by itself, then the host connects - no separate VPN button to manage. It comes back down again on its own once nothing is using it anymore, and multiple different profiles (for different hosts) can be connected at the same time (see [VPN setup](#vpn-setup))
 - **Snippets** — save commands once, run them across one or many hosts, with per-host aggregated output
 - **Import/export SSH keys** — generate new keys, or import existing ones (OpenSSH or legacy PEM/PKCS#1 format) by pasting or browsing to a file
 - **Settings** — light/dark/system theme (dark by default), terminal font/size/cursor/color theme (with live updates to open sessions), keybindings
@@ -88,9 +88,11 @@ VPN profiles (Settings → VPN, or the VPN tab) need the `openvpn` package insta
 
 1. Open the **VPN** tab and click **Run one-time setup**. You'll get one native authentication prompt (via `pkexec`).
 2. This installs a polkit rule scoped to exactly one helper script (`/usr/local/libexec/termora-openvpn-helper`), which only ever launches `openvpn` on an uploaded profile that lives under your own `~/.local/share/sshtool/vpn-profiles/` — it is not a blanket "run anything as root" grant, and it forces `--script-security 0` so an `.ovpn` file can never use `up`/`down`/`route-up` hooks to run arbitrary code as root.
-3. After that, connecting/disconnecting any VPN profile from the VPN tab or a host's context panel no longer prompts for a password.
+3. After that, connecting/disconnecting is fully automatic and no longer prompts for a password.
 
-Until setup is run, the **Connect** button on a VPN profile stays disabled with an explanation; every other feature works normally without it.
+Until setup is run, connecting a VPN-backed host fails with an explanation; every other feature works normally without it.
+
+Lifecycle is hands-off by design: a VPN comes up automatically the moment you Connect/SFTP/Tunnel into (or open a tunnel to) a host that has one assigned, and goes back down automatically once nothing - no open session, no active tunnel - still needs it, even if that profile is shared across several hosts. If a VPN ever gets stuck (e.g. after a crash), the **VPN** tab has a **Disconnect all** button, and closing the app itself always signals every connected profile to shut down as a last-resort safety net.
 
 ## Security notes
 

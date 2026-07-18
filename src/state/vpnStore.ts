@@ -1,6 +1,9 @@
 import { create } from "zustand";
 import * as bridge from "../lib/tauri-bridge";
 import type { VpnConnectionStatus, VpnProfile, VpnProfileInput, VpnStatus } from "../lib/tauri-bridge";
+import { useHostsStore } from "./hostsStore";
+import { useSessionsStore } from "./sessionsStore";
+import { useTunnelsStore } from "./tunnelsStore";
 
 interface VpnStoreState {
   profiles: VpnProfile[];
@@ -18,6 +21,15 @@ interface VpnStoreState {
   runSetup: () => Promise<void>;
   connect: (profileId: string) => Promise<VpnStatus>;
   disconnect: (profileId: string) => Promise<void>;
+  // Disconnects the VPN a host relies on, but only once nothing else (an
+  // open terminal/SFTP session, or an active tunnel) still needs it - safe
+  // to call every time a session/tunnel closes, regardless of what else is
+  // sharing that same profile.
+  releaseIfUnused: (hostId: string) => Promise<void>;
+  // Manual recovery valve: signals every connected/connecting profile to
+  // shut down, for the rare case one gets stuck (e.g. an SSH session that
+  // never registered its VPN usage, or a tunnel left over from a crash).
+  disconnectAll: () => Promise<void>;
 }
 
 function statusMap(list: VpnConnectionStatus[]): Record<string, VpnStatus> {
@@ -82,6 +94,43 @@ export const useVpnStore = create<VpnStoreState>((set, get) => ({
     await bridge.vpnDisconnect(profileId);
     set((s) => ({
       statuses: { ...s.statuses, [profileId]: { state: "disconnecting", message: null } },
+    }));
+  },
+
+  releaseIfUnused: async (hostId) => {
+    const hosts = useHostsStore.getState().hosts;
+    const host = hosts.find((h) => h.id === hostId);
+    const profileId = host?.vpn_profile_id;
+    if (!profileId) return;
+
+    const status = get().statuses[profileId];
+    if (status?.state !== "connected" && status?.state !== "connecting") return;
+
+    const stillUsedBySession = useSessionsStore
+      .getState()
+      .openSessions.some((s) => s.host.vpn_profile_id === profileId);
+    if (stillUsedBySession) return;
+
+    const stillUsedByTunnel = useTunnelsStore.getState().tunnels.some((t) => {
+      const tunnelHost = hosts.find((h) => h.id === t.host_id);
+      return tunnelHost?.vpn_profile_id === profileId;
+    });
+    if (stillUsedByTunnel) return;
+
+    await get().disconnect(profileId);
+  },
+
+  disconnectAll: async () => {
+    await bridge.vpnDisconnectAll();
+    set((s) => ({
+      statuses: Object.fromEntries(
+        Object.entries(s.statuses).map(([id, status]) => [
+          id,
+          status.state === "connected" || status.state === "connecting"
+            ? { state: "disconnecting" as const, message: null }
+            : status,
+        ]),
+      ),
     }));
   },
 }));

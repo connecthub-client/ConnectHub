@@ -65,3 +65,8 @@ pub fn vpn_status(state: State<AppState>, profile_id: Uuid) -> VpnStatus {
 pub fn vpn_active_statuses(state: State<AppState>) -> Vec<VpnConnectionStatus> {
     vpn::list_active(&state.vpn_connections)
 }
+
+#[tauri::command]
+pub fn vpn_disconnect_all(state: State<AppState>) {
+    vpn::disconnect_all(&state.vpn_connections)
+}

@@ -50,6 +50,7 @@ export default function AppShell() {
   const closeSession = useSessionsStore((s) => s.closeSession);
 
   const loadVpnAll = useVpnStore((s) => s.loadAll);
+  const releaseVpnIfUnused = useVpnStore((s) => s.releaseIfUnused);
 
   const [selectedHostId, setSelectedHostId] = useState<string | null>(null);
   const [mainView, setMainView] = useState<MainView>({ type: "manage", tab: "hosts" });
@@ -118,8 +119,15 @@ export default function AppShell() {
   }
 
   function handleCloseTab(tabId: string) {
+    const closing = openSessions.find((s) => s.tabId === tabId);
     const remaining = openSessions.filter((s) => s.tabId !== tabId);
     closeSession(tabId);
+    if (closing) {
+      // Fire-and-forget: disconnects the VPN this session was using, but
+      // only once nothing else (another open session or tunnel) still
+      // needs it - never blocks the tab from closing.
+      releaseVpnIfUnused(closing.host.id);
+    }
     if (mainView.type === "session" && mainView.tabId === tabId) {
       const fallback = remaining[remaining.length - 1];
       setMainView(fallback ? { type: "session", tabId: fallback.tabId } : { type: "manage", tab: "hosts" });

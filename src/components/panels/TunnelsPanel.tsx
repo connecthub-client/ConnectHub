@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { TunnelInfo } from "../../lib/tauri-bridge";
 import { useHostsStore } from "../../state/hostsStore";
 import { useTunnelsStore } from "../../state/tunnelsStore";
+import { useVpnStore } from "../../state/vpnStore";
 
 interface TunnelsPanelProps {
   onNew: () => void;
@@ -23,11 +24,17 @@ export default function TunnelsPanel({ onNew }: TunnelsPanelProps) {
   const tunnels = useTunnelsStore((s) => s.tunnels);
   const loadTunnels = useTunnelsStore((s) => s.loadTunnels);
   const stopTunnel = useTunnelsStore((s) => s.stopTunnel);
+  const releaseVpnIfUnused = useVpnStore((s) => s.releaseIfUnused);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadTunnels().catch((e) => setError(String(e)));
   }, [loadTunnels]);
+
+  async function handleStop(tunnel: TunnelInfo) {
+    await stopTunnel(tunnel.id);
+    await releaseVpnIfUnused(tunnel.host_id);
+  }
 
   return (
     <div>
@@ -64,7 +71,7 @@ export default function TunnelsPanel({ onNew }: TunnelsPanelProps) {
                 </div>
                 <button
                   type="button"
-                  onClick={() => stopTunnel(tunnel.id)}
+                  onClick={() => handleStop(tunnel)}
                   className="text-sm text-neutral-500 hover:text-red-600"
                 >
                   Stop
