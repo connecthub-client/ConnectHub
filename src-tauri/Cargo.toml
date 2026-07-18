@@ -1,8 +1,10 @@
 [package]
 name = "connecthub"
-version = "0.1.0"
-description = "ConnectHub - a desktop SSH client"
-authors = ["you"]
+version = "1.0.0"
+description = "Modern cross-platform SSH client with SSH, SFTP, SCP, port forwarding, tunneling, VPN, and workspace management."
+authors = ["ConnectHub Contributors"]
+license = "MIT"
+repository = "https://github.com/connecthub-client/ConnectHub"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

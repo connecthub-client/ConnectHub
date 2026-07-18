@@ -1,7 +1,33 @@
 {
   "name": "connecthub",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
+  "description": "Modern cross-platform SSH client with SSH, SFTP, SCP, port forwarding, tunneling, VPN, and workspace management.",
+  "author": "ConnectHub Contributors",
+  "license": "MIT",
+  "homepage": "https://github.com/connecthub-client/ConnectHub",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/connecthub-client/ConnectHub.git"
+  },
+  "bugs": {
+    "url": "https://github.com/connecthub-client/ConnectHub/issues"
+  },
+  "keywords": [
+    "ssh",
+    "ssh-client",
+    "sftp",
+    "scp",
+    "terminal",
+    "port-forwarding",
+    "tunneling",
+    "vpn",
+    "tauri",
+    "desktop-app",
+    "devops",
+    "remote-access",
+    "termius-alternative"
+  ],
   "type": "module",
   "scripts": {
     "dev": "vite",

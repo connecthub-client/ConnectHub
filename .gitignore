@@ -1,31 +1,142 @@
-# Logs
-logs
-*.log
+# =============================================================================
+# ConnectHub .gitignore
+# Organized by category. Add new entries under the matching section rather
+# than appending to the bottom, so this stays scannable as the stack grows.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Node.js / npm
+# -----------------------------------------------------------------------------
+node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+.pnpm-store/
 
-node_modules
-dist
-dist-ssr
+# -----------------------------------------------------------------------------
+# Frontend build output (Vite)
+# -----------------------------------------------------------------------------
+dist/
+dist-ssr/
 *.local
 
-# Rust build output
+# -----------------------------------------------------------------------------
+# Rust / Cargo
+# -----------------------------------------------------------------------------
 src-tauri/target/
-src-tauri/gen/schemas
+**/*.rs.bk
 
-# Local tooling state
+# -----------------------------------------------------------------------------
+# Tauri build output
+# -----------------------------------------------------------------------------
+src-tauri/gen/schemas
+src-tauri/gen/android
+src-tauri/gen/apple
+
+# -----------------------------------------------------------------------------
+# Release / bundler artifacts
+# (installers and checksums produced locally by `tauri build` - real release
+# assets are attached to GitHub Releases, never committed to the repo)
+# -----------------------------------------------------------------------------
+*.AppImage
+*.deb
+*.rpm
+*.msi
+*.dmg
+*.sig
+SHA256SUMS*
+
+# -----------------------------------------------------------------------------
+# Debug artifacts
+# -----------------------------------------------------------------------------
+*.pdb
+*.dSYM/
+core.*
+*.stackdump
+
+# -----------------------------------------------------------------------------
+# Logs
+# -----------------------------------------------------------------------------
+logs/
+*.log
+
+# -----------------------------------------------------------------------------
+# Environment / secrets
+# Never commit real credentials. The Google OAuth "Desktop app" client
+# ID/secret intentionally checked into src-tauri/src/google/oauth.rs is a
+# documented exception (see its comment there and README's Google backup
+# section) - it is not a confidential value for that client type.
+# -----------------------------------------------------------------------------
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+credentials.json
+client_secret*.json
+*.p12
+*.pfx
+
+# -----------------------------------------------------------------------------
+# Cache directories
+# -----------------------------------------------------------------------------
+.cache/
+.vite/
+.turbo/
+.eslintcache
+
+# -----------------------------------------------------------------------------
+# Coverage reports
+# -----------------------------------------------------------------------------
+coverage/
+*.lcov
+tarpaulin-report.html
+
+# -----------------------------------------------------------------------------
+# Local tooling / assistant state
+# -----------------------------------------------------------------------------
 .claude/
 
-# Editor directories and files
+# -----------------------------------------------------------------------------
+# Editors / IDEs
+# -----------------------------------------------------------------------------
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
+*.iml
+*.sublime-workspace
+*.sublime-project
+
+# -----------------------------------------------------------------------------
+# OS-specific files
+# -----------------------------------------------------------------------------
 .DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# -----------------------------------------------------------------------------
+# Editor swap / temp files
+# -----------------------------------------------------------------------------
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+*~
+*.tmp
+*.temp
+
+# -----------------------------------------------------------------------------
+# Local, machine-specific data
+# (the app's own vault lives under the OS data dir, never inside a checkout -
+# this only guards against a contributor's local test/scratch db being added)
+# -----------------------------------------------------------------------------
+*.sqlite
+*.sqlite3
+vault.db
