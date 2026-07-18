@@ -51,6 +51,9 @@ export default function AppShell() {
 
   const loadVpnAll = useVpnStore((s) => s.loadAll);
   const releaseVpnIfUnused = useVpnStore((s) => s.releaseIfUnused);
+  const vpnStatuses = useVpnStore((s) => s.statuses);
+  const vpnConnect = useVpnStore((s) => s.connect);
+  const vpnProfiles = useVpnStore((s) => s.profiles);
 
   const [selectedHostId, setSelectedHostId] = useState<string | null>(null);
   const [mainView, setMainView] = useState<MainView>({ type: "manage", tab: "hosts" });
@@ -58,6 +61,8 @@ export default function AppShell() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [importResult, setImportResult] = useState<ImportSummary | null>(null);
   const [csvError, setCsvError] = useState<string | null>(null);
+  const [vpnGateHostId, setVpnGateHostId] = useState<string | null>(null);
+  const [vpnGateError, setVpnGateError] = useState<{ hostId: string; message: string } | null>(null);
 
   useEffect(() => {
     Promise.all([loadAll(), loadVpnAll()]).catch((e) => setLoadError(String(e)));
@@ -108,12 +113,48 @@ export default function AppShell() {
     ? openSessions.some((s) => s.host.id === contextHost.id)
     : false;
 
-  function handleConnect(host: Host) {
+  // The single gate for "is it OK to open a session/tunnel to this host
+  // right now" - every caller (double-click, right-click menu, the host
+  // panel's buttons) must go through this so a host's assigned VPN always
+  // gets a chance to connect first, rather than each entry point needing
+  // its own copy of this check (a host panel-only version of this used to
+  // exist and missed the sidebar's double-click/context-menu paths).
+  async function ensureVpnUp(host: Host): Promise<boolean> {
+    if (!host.vpn_profile_id) return true;
+    if (vpnStatuses[host.vpn_profile_id]?.state === "connected") return true;
+
+    setVpnGateError(null);
+    setVpnGateHostId(host.id);
+    try {
+      const status = await vpnConnect(host.vpn_profile_id);
+      if (status.state !== "connected") {
+        const profileLabel = vpnProfiles.find((p) => p.id === host.vpn_profile_id)?.label ?? "";
+        setVpnGateError({
+          hostId: host.id,
+          message:
+            status.state === "connecting"
+              ? `VPN "${profileLabel}" is taking longer than expected to connect - try again in a moment.`
+              : (status.message ?? `Could not connect VPN profile "${profileLabel}".`),
+        });
+        return false;
+      }
+      return true;
+    } catch (e) {
+      setVpnGateError({ hostId: host.id, message: String(e) });
+      return false;
+    } finally {
+      setVpnGateHostId(null);
+    }
+  }
+
+  async function handleConnect(host: Host) {
+    if (!(await ensureVpnUp(host))) return;
     const tabId = openSession(host, "terminal");
     setMainView({ type: "session", tabId });
   }
 
-  function handleOpenSftp(host: Host) {
+  async function handleOpenSftp(host: Host) {
+    if (!(await ensureVpnUp(host))) return;
     const tabId = openSession(host, "sftp");
     setMainView({ type: "session", tabId });
   }
@@ -377,6 +418,8 @@ export default function AppShell() {
         <HostContextPanel
           host={contextHost}
           sessionOpen={contextHostSessionOpen}
+          vpnBusy={vpnGateHostId === contextHost.id}
+          vpnError={vpnGateError?.hostId === contextHost.id ? vpnGateError.message : null}
           onEdit={() => setModal({ kind: "host", host: contextHost })}
           onConnect={() => handleConnect(contextHost)}
           onOpenSftp={() => handleOpenSftp(contextHost)}

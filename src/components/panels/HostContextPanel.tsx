@@ -7,6 +7,13 @@ import { useVpnStore } from "../../state/vpnStore";
 interface HostContextPanelProps {
   host: Host;
   sessionOpen: boolean;
+  // Whether AppShell is currently bringing this host's VPN up on the way
+  // to a Connect/SFTP/Tunnel action, and any error from the last attempt -
+  // the actual gating lives in AppShell so it applies no matter which UI
+  // path (this panel, sidebar double-click, sidebar right-click menu)
+  // triggered the connect.
+  vpnBusy: boolean;
+  vpnError: string | null;
   onEdit: () => void;
   onConnect: () => void;
   onOpenSftp: () => void;
@@ -16,6 +23,8 @@ interface HostContextPanelProps {
 export default function HostContextPanel({
   host,
   sessionOpen,
+  vpnBusy: guardBusy,
+  vpnError,
   onEdit,
   onConnect,
   onOpenSftp,
@@ -27,7 +36,6 @@ export default function HostContextPanel({
   const runOnHosts = useSnippetsStore((s) => s.runOnHosts);
   const vpnProfiles = useVpnStore((s) => s.profiles);
   const vpnStatuses = useVpnStore((s) => s.statuses);
-  const vpnConnect = useVpnStore((s) => s.connect);
   const refreshVpnActive = useVpnStore((s) => s.refreshActive);
 
   const identity = identities.find((i) => i.id === host.identity_id);
@@ -37,48 +45,18 @@ export default function HostContextPanel({
     : undefined;
   const vpnStatus = host.vpn_profile_id ? vpnStatuses[host.vpn_profile_id] : undefined;
   const vpnConnected = vpnStatus?.state === "connected";
-  const vpnBusy = vpnStatus?.state === "connecting" || vpnStatus?.state === "disconnecting";
+  const vpnTransitioning = vpnStatus?.state === "connecting" || vpnStatus?.state === "disconnecting";
 
   const [runningId, setRunningId] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<{ label: string; result: HostExecResult } | null>(
     null,
   );
-  const [vpnError, setVpnError] = useState<string | null>(null);
-  const [guardBusy, setGuardBusy] = useState(false);
 
   useEffect(() => {
-    if (!vpnBusy) return;
+    if (!vpnTransitioning) return;
     const interval = setInterval(refreshVpnActive, 1500);
     return () => clearInterval(interval);
-  }, [vpnBusy, refreshVpnActive]);
-
-  // VPN is fully automatic: a host with a VPN profile assigned brings it up
-  // by itself the moment you Connect/SFTP/Tunnel, and it's released again
-  // once nothing is using it (see vpnStore.releaseIfUnused) - there's no
-  // separate VPN button for the user to manage.
-  async function guardedAction(action: () => void) {
-    if (host.vpn_profile_id && !vpnConnected) {
-      setVpnError(null);
-      setGuardBusy(true);
-      try {
-        const status = await vpnConnect(host.vpn_profile_id);
-        if (status.state !== "connected") {
-          setVpnError(
-            status.state === "connecting"
-              ? "VPN is taking longer than expected to connect - try again in a moment."
-              : (status.message ?? `Could not connect VPN profile "${vpnProfile?.label ?? ""}".`),
-          );
-          return;
-        }
-      } catch (e) {
-        setVpnError(String(e));
-        return;
-      } finally {
-        setGuardBusy(false);
-      }
-    }
-    action();
-  }
+  }, [vpnTransitioning, refreshVpnActive]);
 
   async function handleQuickCommand(snippetId: string, label: string, body: string) {
     setRunningId(snippetId);
@@ -105,7 +83,7 @@ export default function HostContextPanel({
       <div className="flex gap-2 p-4">
         <button
           type="button"
-          onClick={() => guardedAction(onConnect)}
+          onClick={onConnect}
           disabled={!host.identity_id || guardBusy}
           title={host.identity_id ? undefined : "Assign an identity to this host first"}
           className="flex-1 rounded-md bg-teal-600 px-2 py-1.5 text-xs font-medium text-white hover:bg-teal-700 disabled:opacity-40"
@@ -114,7 +92,7 @@ export default function HostContextPanel({
         </button>
         <button
           type="button"
-          onClick={() => guardedAction(onOpenSftp)}
+          onClick={onOpenSftp}
           disabled={!host.identity_id || guardBusy}
           title={host.identity_id ? undefined : "Assign an identity to this host first"}
           className="flex-1 rounded-md border border-neutral-300 px-2 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
@@ -123,7 +101,7 @@ export default function HostContextPanel({
         </button>
         <button
           type="button"
-          onClick={() => guardedAction(onNewTunnel)}
+          onClick={onNewTunnel}
           disabled={guardBusy}
           className="flex-1 rounded-md border border-neutral-300 px-2 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
         >
@@ -164,7 +142,7 @@ export default function HostContextPanel({
                   className={`h-1.5 w-1.5 rounded-full ${
                     vpnConnected
                       ? "bg-emerald-500"
-                      : vpnBusy
+                      : vpnTransitioning
                         ? "bg-amber-500"
                         : "bg-neutral-400 dark:bg-neutral-600"
                   }`}
