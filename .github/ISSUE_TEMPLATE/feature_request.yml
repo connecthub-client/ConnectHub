@@ -1,0 +1,57 @@
+name: Feature Request
+description: Suggest an idea or improvement for ConnectHub
+title: "[Feature] "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion! Check the [Roadmap](https://github.com/connecthub-client/ConnectHub/blob/main/ROADMAP.md) first — it might already be planned.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: What are you trying to do that ConnectHub doesn't support today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What would you like to see happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any workarounds you're using today, or other approaches you considered.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Host manager
+        - SSH terminal
+        - SFTP browser
+        - Port forwarding / tunnels
+        - VPN profiles
+        - Snippets
+        - Google Drive backup
+        - Settings / UI
+        - Packaging / installation
+        - Other
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues and the Roadmap to make sure this isn't a duplicate
+          required: true

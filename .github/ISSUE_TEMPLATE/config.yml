@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a question
+    url: https://github.com/connecthub-client/ConnectHub/discussions
+    about: Usage questions and general help — see also SUPPORT.md
+  - name: Report a security vulnerability
+    url: https://github.com/connecthub-client/ConnectHub/security/advisories/new
+    about: Please do not report security issues through public GitHub issues — see SECURITY.md
