@@ -2,6 +2,27 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Project
+
+**ConnectHub** is a modern cross-platform desktop SSH client (Tauri 2 + Rust + React): SSH terminal, SFTP, port forwarding/tunneling, per-host VPN, and workspace/host management, backed by a local encrypted vault. MIT licensed. Public docs live at the repo root (`README.md`, `ARCHITECTURE.md`, `BUILD.md`, `INSTALL.md`, `DEVELOPMENT.md`, `ROADMAP.md`, `CHANGELOG.md`, `CONTRIBUTING.md`) — this file is Claude-Code-specific guidance and duplicates some of that content deliberately, since the intended audience and level of implementation detail differ.
+
+## Release workflow
+
+Versioning follows [SemVer](https://semver.org). A release bumps the version in **three** places (they are not derived from one another and must be kept in sync manually): `package.json`, `src-tauri/Cargo.toml` (`[package].version`), and `src-tauri/tauri.conf.json` (`.version`). Then:
+
+1. Add a new section to `CHANGELOG.md` (move anything under `[Unreleased]` into it), following the existing Added/Changed/Fixed/Security grouping.
+2. Commit the version bump + changelog as its own commit.
+3. Tag `vX.Y.Z` and push the tag.
+4. Build platform bundles (see `BUILD.md`) and attach them to a GitHub Release, along with a checksums file.
+
+There is no automated release pipeline yet (see `ROADMAP.md`); `.github/workflows/ci.yml` runs type-checks/tests/clippy on push/PR but does not build or publish release artifacts.
+
+## Repository conventions
+
+- Commit messages: one imperative-mood, capitalized summary line, no enforced prefix (no `feat:`/`fix:` scoping) — see existing `git log` for the established style, and `CONTRIBUTING.md`.
+- Community health files (`CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`, `SECURITY.md`, `SUPPORT.md`) and issue/PR templates (`.github/ISSUE_TEMPLATE/`, `.github/PULL_REQUEST_TEMPLATE.md`) already exist at their standard GitHub locations — don't recreate or relocate them.
+- Report/handle security-sensitive findings per `SECURITY.md` (private GitHub advisory), never as a public issue.
+
 ## Commands
 
 ### Development
@@ -13,7 +34,7 @@ npm run tauri dev          # launches Vite + the Tauri window; Rust changes trig
 ### Building
 ```bash
 npm run build               # frontend only: tsc && vite build
-npm run tauri build         # full production bundle (.deb/.AppImage on Linux, output under src-tauri/target/release/bundle/)
+npm run tauri build         # full production bundle for the current OS (.deb/.AppImage/.rpm on Linux), output under src-tauri/target/release/bundle/ - see BUILD.md for cross-platform details
 ```
 
 ### Rust backend (run from `src-tauri/`)
@@ -77,13 +98,16 @@ VPN is entirely automatic from the user's perspective - there's no manual VPN bu
 ### Google Drive backup
 Settings → Backup lets a user sign in with their own Google account (OAuth2 PKCE, loopback redirect, `google/oauth.rs`) and back up/restore the **entire vault file** plus the local secret to a hidden Drive `appDataFolder` (`google/drive.rs`), invisible in the user's normal Drive UI and readable only by this app. `google/mod.rs::backup_now` snapshots the live SQLite connection via `rusqlite::backup::Backup` (not a raw file read, since another connection has the file open) before uploading; `restore_from_drive` downloads both files, temporarily swaps `AppState.db` to an in-memory connection to release the file handle, overwrites the real db file and local secret, reopens, and re-runs `auto_unlock`. The refresh token is stored *inside* the vault (`google_auth` table) so it survives a restore. `google::oauth::CLIENT_ID`/`CLIENT_SECRET` are real, working credentials for this project's own registered "Desktop app" OAuth client (Drive API enabled) - safe to keep public because the actual security boundary is PKCE (a fresh `code_verifier` per sign-in, never persisted or transmitted except as a one-way hash), not secrecy of these values; see the comment at their definition and the README's "Google backup setup" section for the full reasoning and how to swap in a different client if forking.
 
+Sign-in is cancellable: `oauth.rs::login`/`await_redirect` use an async `tokio::net::TcpListener` + `tokio::select!` racing `listener.accept()` against a `oneshot::Receiver<()>` cancel signal and a `LOGIN_TIMEOUT` (180s) safety-net sleep. `AppState.google_login_cancel: Mutex<Option<oneshot::Sender<()>>>` holds the sender while a sign-in is pending; `google::cancel_login(state)` (Tauri command `google_login_cancel`) fires it if present, a no-op otherwise. This exists because closing the browser tab mid-flow gives the app no other signal that sign-in was abandoned — the frontend's "Cancel" button next to the "Waiting for sign-in…" state (`GoogleBackupSection.tsx`) is the only way to get unstuck short of the timeout.
+
 ### Frontend (`src/`)
 - `lib/tauri-bridge/` — one file per domain, each just wrapping `invoke("command_name", { args })`; `types.ts` holds the shared TS interfaces mirroring the Rust models. Always add new bridge functions here rather than calling `invoke` from components.
 - `state/*Store.ts` — zustand stores. Mutations generally `await` the backend call then re-fetch the full collection (`loadAll()`) rather than patching state in place, since collections are small and this sidesteps subtle bugs from `ON DELETE SET NULL` cascades. `settingsStore.ts`'s theme defaults to `"dark"`.
 - `pages/AppShell.tsx` — the main layout/router-equivalent: owns `mainView` (which manage-tab or which open session tab is active) and `modal` (which create/edit form is open) as local state; every panel/form is a controlled child. It also derives `contextHost` (the host shown in the right-side panel) by looking it up **live** from the `hosts` array by id — never hold onto a session's captured `host` snapshot directly for display, since fields like `last_connected_at` change after the snapshot was taken.
 - `components/panels/HostContextPanel.tsx` — persistent right-side panel for the selected/active host: Connect/SFTP/Tunnel actions, details, live session status, and **Quick Commands** (runs a saved snippet against just this host via the existing `snippetRunOnHosts` exec pathway, showing the single result inline). Replaces the old page-style `HostDetail` component.
 - `components/panels/GoogleBackupSection.tsx` — the Settings → Backup UI (sign in/out, back up now, restore) built on `lib/tauri-bridge/backup.ts`; a destructive restore requires an explicit `confirm()` and reloads the window afterward rather than trying to patch every zustand store in place.
-- `state/vpnStore.ts` + `components/panels/VpnPanel.tsx` / `components/forms/VpnProfileForm.tsx` — VPN profile CRUD follows the `hostsStore.ts` refetch-after-mutation pattern, but connection status (`statuses: Record<profileId, VpnStatus>`) is tracked and refreshed separately via `refreshActive()`/`vpn_active_statuses`, since it changes independently (and asynchronously, mid-connect) from the profile records themselves. Both `VpnPanel` and `HostContextPanel` poll `refreshActive` on a short interval only while at least one profile is `connecting`/`disconnecting`, not continuously. `vpnStore.ts` also imports `hostsStore`/`sessionsStore`/`tunnelsStore` (one-directional only - nothing imports back) to answer "is any other open session/tunnel still using this profile" for `releaseIfUnused`. `HostForm.tsx`'s VPN section is a three-way None/Upload/Use-saved toggle (mirroring its existing identity new/existing toggle) - "Upload" creates the `VpnProfile` inline via `vpnStore.createProfile` at submit time rather than requiring a separate trip to the VPN tab first.
+- `state/vpnStore.ts` + `components/panels/VpnPanel.tsx` / `components/forms/VpnProfileForm.tsx` — VPN profile CRUD follows the `hostsStore.ts` refetch-after-mutation pattern, but connection status (`statuses: Record<profileId, VpnStatus>`) is tracked and refreshed separately via `refreshActive()`/`vpn_active_statuses`, since it changes independently (and asynchronously, mid-connect) from the profile records themselves. Both `VpnPanel` and `HostContextPanel` poll `refreshActive` on a short interval only while at least one profile is `connecting`/`disconnecting`, not continuously. `vpnStore.ts` also imports `hostsStore`/`sessionsStore`/`tunnelsStore` (one-directional only - nothing imports back) to answer "is any other open session/tunnel still using this profile" for `releaseIfUnused`. `HostForm.tsx`'s VPN section is a three-way None/Upload/Use-saved toggle (mirroring its existing identity new/existing toggle) - "Upload" creates the `VpnProfile` inline via `vpnStore.createProfile` at submit time rather than requiring a separate trip to the VPN tab first. `HostForm.tsx`'s private-key auth section has an analogous two-way "Use saved key" / "Import new key" toggle (only shown once at least one key exists; import fields show directly otherwise) - "Import new key" calls `hostsStore.importKey` at submit time the same way the VPN toggle creates a profile inline.
+- `pages/AppShell.tsx` session tabs support drag-to-reorder via native HTML5 DnD (`draggable`, `onDragStart`/`onDragOver`/`onDrop`) - `sessionsStore.ts::reorderSessions(fromIndex, toIndex)` splices `openSessions`. No external DnD library. Note for testing: synthetic mouse events (e.g. `xdotool` under X11) can trigger `dragstart` but generally cannot complete a `drop` in WebKitGTK - this is an automation-tooling limitation, not a signal that the feature is broken; verify manually if GUI-automating this area.
 - `components/common/Modal.tsx` — the backdrop itself scrolls (`overflow-y-auto` on the fixed wrapper, `mx-auto my-8` instead of `flex items-center` on the dialog box) rather than the dialog box being vertically centered with no scroll path - centering-without-scroll was found to make a sufficiently tall form (`HostForm` once the VPN profile field was added) unreachable from its top on an 800x600 window, with no way to scroll up to it. Keep this in mind for any future modal content that could grow tall.
 - `components/terminal/TerminalView.tsx` + `components/sftp/SftpBrowser.tsx` — one instance per open session tab, kept mounted (via CSS `visibility`, not `display:none`/unmount) while switching tabs so the SSH connection and xterm.js scrollback survive. `display:none` was tried first and silently drops the most recent scrollback line in WebKitGTK — don't reintroduce it.
 - `components/sidebar/HostTree.tsx` — double-click a host row to connect (only if it has an identity); right-click opens a small custom context menu (Connect/Duplicate/Edit/Delete) built with a `useEffect` closing it on any outside click/contextmenu/keydown; a status dot per row reflects whether a session is currently open for that host.
