@@ -17,6 +17,7 @@ export default function VpnProfileForm({ profile, onDone }: VpnProfileFormProps)
   const [config, setConfig] = useState(profile?.config ?? "");
   const [authUsername, setAuthUsername] = useState(profile?.auth_username ?? "");
   const [authPassword, setAuthPassword] = useState("");
+  const [avoidDefaultRoute, setAvoidDefaultRoute] = useState(profile?.avoid_default_route ?? true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -52,6 +53,7 @@ export default function VpnProfileForm({ profile, onDone }: VpnProfileFormProps)
         // Leave the stored password untouched on update unless the user typed
         // something in this session; on create, empty just means no password.
         auth_password: authPassword || (profile ? null : ""),
+        avoid_default_route: avoidDefaultRoute,
       };
       if (profile) {
         await updateProfile(profile.id, input);
@@ -97,6 +99,24 @@ export default function VpnProfileForm({ profile, onDone }: VpnProfileFormProps)
         placeholder="Paste an .ovpn file's contents, or browse to one above"
         required
       />
+
+      <label className="mb-4 flex items-start gap-2 text-sm text-neutral-700 dark:text-neutral-300">
+        <input
+          type="checkbox"
+          checked={avoidDefaultRoute}
+          onChange={(e) => setAvoidDefaultRoute(e.currentTarget.checked)}
+          className="mt-0.5"
+        />
+        <span>
+          Don&apos;t let this VPN take over my default internet route
+          <span className="block text-xs text-neutral-400">
+            Recommended if you connect to more than one VPN profile at a time (e.g. one per
+            project) - keeps this one limited to reaching its own private network instead of
+            fighting other profiles over which one owns your internet connection. Turn off only
+            if this profile specifically needs full-tunnel routing.
+          </span>
+        </span>
+      </label>
 
       <p className="mb-4 -mt-2 text-xs text-neutral-400">
         Only needed if this profile prompts for a separate username/password at login - most

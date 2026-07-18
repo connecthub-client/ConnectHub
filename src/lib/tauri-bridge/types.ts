@@ -90,6 +90,10 @@ export interface VpnProfile {
   config: string;
   auth_username: string | null;
   has_auth_password: boolean;
+  // If true, this profile can't take over the default route even if its
+  // server pushes one - lets multiple profiles stay connected at once
+  // without fighting over "the internet". See vpn::connect (Rust).
+  avoid_default_route: boolean;
   created_at: string;
 }
 
@@ -100,6 +104,7 @@ export interface VpnProfileInput {
   // undefined/null = leave existing password unchanged (on update).
   // "" = clear it. Any other string = set/replace it.
   auth_password: string | null;
+  avoid_default_route: boolean;
 }
 
 export type VpnState = "connecting" | "connected" | "disconnecting" | "disconnected" | "error";

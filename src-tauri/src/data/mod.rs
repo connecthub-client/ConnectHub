@@ -53,6 +53,7 @@ pub fn init_schema(conn: &Connection) -> AppResult<()> {
             auth_username TEXT,
             auth_password_nonce BLOB,
             auth_password_ciphertext BLOB,
+            avoid_default_route INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL
         );
 
@@ -97,6 +98,18 @@ pub fn init_schema(conn: &Connection) -> AppResult<()> {
     // clears any referencing `hosts.vpn_profile_id` rows itself before
     // deleting, so behavior is identical on fresh and migrated databases.
     add_column_if_missing(conn, "hosts", "vpn_profile_id", "TEXT")?;
+
+    // Same backfill for installs whose `vpn_profiles` table predates this
+    // column - default to 1 (split-tunnel: don't take over the default
+    // route) since that's what lets multiple profiles for different
+    // projects stay connected at once without one breaking the others'
+    // connectivity, which existing profiles just as much as new ones.
+    add_column_if_missing(
+        conn,
+        "vpn_profiles",
+        "avoid_default_route",
+        "INTEGER NOT NULL DEFAULT 1",
+    )?;
 
     Ok(())
 }

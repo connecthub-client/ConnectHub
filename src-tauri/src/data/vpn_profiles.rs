@@ -14,23 +14,22 @@ fn row_to_profile(row: &rusqlite::Row) -> rusqlite::Result<VpnProfile> {
         config: row.get(2)?,
         auth_username: row.get(3)?,
         has_auth_password: has_password.is_some(),
-        created_at: row.get(5)?,
+        avoid_default_route: row.get(5)?,
+        created_at: row.get(6)?,
     })
 }
 
+const SELECT_COLUMNS: &str = "id, label, config, auth_username, auth_password_ciphertext, avoid_default_route, created_at";
+
 pub fn list(conn: &Connection) -> AppResult<Vec<VpnProfile>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, label, config, auth_username, auth_password_ciphertext, created_at
-         FROM vpn_profiles ORDER BY label",
-    )?;
+    let mut stmt = conn.prepare(&format!("SELECT {SELECT_COLUMNS} FROM vpn_profiles ORDER BY label"))?;
     let rows = stmt.query_map((), row_to_profile)?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }
 
 pub fn get(conn: &Connection, id: Uuid) -> AppResult<VpnProfile> {
     conn.query_row(
-        "SELECT id, label, config, auth_username, auth_password_ciphertext, created_at
-         FROM vpn_profiles WHERE id = ?1",
+        &format!("SELECT {SELECT_COLUMNS} FROM vpn_profiles WHERE id = ?1"),
         (&id,),
         row_to_profile,
     )
@@ -83,8 +82,8 @@ pub fn create(conn: &Connection, key: &VaultKey, input: VpnProfileInput) -> AppR
     };
 
     conn.execute(
-        "INSERT INTO vpn_profiles (id, label, config, auth_username, auth_password_nonce, auth_password_ciphertext, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        "INSERT INTO vpn_profiles (id, label, config, auth_username, auth_password_nonce, auth_password_ciphertext, avoid_default_route, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         rusqlite::params![
             &id,
             &input.label,
@@ -92,6 +91,7 @@ pub fn create(conn: &Connection, key: &VaultKey, input: VpnProfileInput) -> AppR
             &input.auth_username,
             nonce,
             ciphertext,
+            input.avoid_default_route,
             &created_at,
         ],
     )?;
@@ -102,6 +102,7 @@ pub fn create(conn: &Connection, key: &VaultKey, input: VpnProfileInput) -> AppR
         config: input.config,
         auth_username: input.auth_username,
         has_auth_password: password.is_some(),
+        avoid_default_route: input.avoid_default_route,
         created_at,
     })
 }
@@ -130,13 +131,14 @@ pub fn update(
             let enc = crypto::encrypt(key, p.as_bytes())?;
             conn.execute(
                 "UPDATE vpn_profiles SET label = ?1, config = ?2, auth_username = ?3,
-                    auth_password_nonce = ?4, auth_password_ciphertext = ?5 WHERE id = ?6",
+                    auth_password_nonce = ?4, auth_password_ciphertext = ?5, avoid_default_route = ?6 WHERE id = ?7",
                 rusqlite::params![
                     &input.label,
                     &input.config,
                     &input.auth_username,
                     &enc.nonce[..],
                     &enc.ciphertext[..],
+                    input.avoid_default_route,
                     &id,
                 ],
             )?;
@@ -146,15 +148,15 @@ pub fn update(
             // empty string: clear the stored password
             conn.execute(
                 "UPDATE vpn_profiles SET label = ?1, config = ?2, auth_username = ?3,
-                    auth_password_nonce = NULL, auth_password_ciphertext = NULL WHERE id = ?4",
-                rusqlite::params![&input.label, &input.config, &input.auth_username, &id],
+                    auth_password_nonce = NULL, auth_password_ciphertext = NULL, avoid_default_route = ?4 WHERE id = ?5",
+                rusqlite::params![&input.label, &input.config, &input.auth_username, input.avoid_default_route, &id],
             )?;
             false
         }
         None => {
             conn.execute(
-                "UPDATE vpn_profiles SET label = ?1, config = ?2, auth_username = ?3 WHERE id = ?4",
-                rusqlite::params![&input.label, &input.config, &input.auth_username, &id],
+                "UPDATE vpn_profiles SET label = ?1, config = ?2, auth_username = ?3, avoid_default_route = ?4 WHERE id = ?5",
+                rusqlite::params![&input.label, &input.config, &input.auth_username, input.avoid_default_route, &id],
             )?;
             let existing: Option<Vec<u8>> = conn.query_row(
                 "SELECT auth_password_ciphertext FROM vpn_profiles WHERE id = ?1",
@@ -171,6 +173,7 @@ pub fn update(
         config: input.config,
         auth_username: input.auth_username,
         has_auth_password,
+        avoid_default_route: input.avoid_default_route,
         created_at,
     })
 }
@@ -209,7 +212,28 @@ mod tests {
             config: "client\nremote vpn.example.com 1194\n".into(),
             auth_username: auth.map(|(u, _)| u.to_string()),
             auth_password: auth.map(|(_, p)| p.to_string()),
+            avoid_default_route: true,
         }
+    }
+
+    #[test]
+    fn create_defaults_avoid_default_route_as_given_and_update_can_flip_it() {
+        let conn = test_conn();
+        let key = test_key();
+        let created = create(&conn, &key, input(None)).unwrap();
+        assert!(created.avoid_default_route);
+
+        let updated = update(
+            &conn,
+            &key,
+            created.id,
+            VpnProfileInput { avoid_default_route: false, ..input(None) },
+        )
+        .unwrap();
+        assert!(!updated.avoid_default_route);
+
+        let refetched = get(&conn, created.id).unwrap();
+        assert!(!refetched.avoid_default_route);
     }
 
     #[test]

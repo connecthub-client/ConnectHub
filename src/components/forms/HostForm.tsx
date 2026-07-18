@@ -48,6 +48,7 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
   const [vpnConfig, setVpnConfig] = useState("");
   const [vpnAuthUsername, setVpnAuthUsername] = useState("");
   const [vpnAuthPassword, setVpnAuthPassword] = useState("");
+  const [vpnAvoidDefaultRoute, setVpnAvoidDefaultRoute] = useState(true);
 
   const [notes, setNotes] = useState(host?.notes ?? "");
   const [error, setError] = useState<string | null>(null);
@@ -109,6 +110,7 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
           config: vpnConfig,
           auth_username: vpnAuthUsername || null,
           auth_password: vpnAuthPassword || "",
+          avoid_default_route: vpnAvoidDefaultRoute,
         });
         resolvedVpnProfileId = profile.id;
       }
@@ -371,6 +373,21 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
             className={`${inputClass} h-28 font-mono text-xs`}
             placeholder="Paste an .ovpn file's contents, or browse to one above"
           />
+
+          <label className="mb-3 flex items-start gap-2 text-sm text-neutral-700 dark:text-neutral-300">
+            <input
+              type="checkbox"
+              checked={vpnAvoidDefaultRoute}
+              onChange={(e) => setVpnAvoidDefaultRoute(e.currentTarget.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              Don&apos;t let this VPN take over my default internet route
+              <span className="block text-xs text-neutral-400">
+                Recommended if you use multiple VPN profiles at once (e.g. one per project).
+              </span>
+            </span>
+          </label>
 
           <p className="mb-3 -mt-2 text-xs text-neutral-400">
             Only needed if this profile prompts for a separate username/password at login - most

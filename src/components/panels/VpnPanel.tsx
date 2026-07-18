@@ -171,6 +171,7 @@ export default function VpnPanel({ onNew, onEdit }: VpnPanelProps) {
                   <p className="text-xs text-neutral-500 dark:text-neutral-400">
                     {statusLabel(status?.state)}
                     {status?.state === "error" && status.message ? `: ${status.message}` : ""}
+                    {profile.avoid_default_route ? " · Split-tunnel" : " · Full-tunnel"}
                   </p>
                 </div>
                 <div className="flex gap-3 text-sm">

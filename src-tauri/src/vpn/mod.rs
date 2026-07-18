@@ -11,6 +11,7 @@ use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
+use crate::models::vpn_profile::VpnProfile;
 use crate::state::AppState;
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
@@ -81,6 +82,27 @@ fn write_private_file(path: &Path, contents: &str) -> AppResult<()> {
     Ok(())
 }
 
+// When multiple VPN profiles (e.g. one per project) are meant to be
+// connected at once, each grabbing the default route (`redirect-gateway`,
+// commonly pushed even when only a private subnet actually needs to be
+// reached) causes them to fight over which one owns "the internet" -
+// symptoms range from the second profile failing to connect to the whole
+// machine losing connectivity. Appending this filters that specific pushed
+// option back out, so the tunnel still gets whatever subnet routes the
+// server pushes (route(s) to the private network) without taking over
+// 0.0.0.0/0. Appended (not prepended): pull-filter rules are evaluated in
+// order with first-match-wins, so this only has an effect if the uploaded
+// profile doesn't already define its own conflicting pull-filter rule for
+// "redirect-gateway" earlier in the file - true for the overwhelming
+// majority of real-world profiles, which don't touch pull-filter at all.
+fn effective_config(profile: &VpnProfile) -> String {
+    if profile.avoid_default_route {
+        format!("{}\npull-filter ignore \"redirect-gateway\"\n", profile.config)
+    } else {
+        profile.config.clone()
+    }
+}
+
 pub fn status(vpn_map: &VpnMap, profile_id: Uuid) -> VpnStatus {
     vpn_map
         .get(&profile_id)
@@ -144,7 +166,7 @@ pub async fn connect(state: &AppState, vpn_map: VpnMap, profile_id: Uuid) -> App
 
     let dir = profiles_dir()?;
     let config_path = dir.join(format!("{profile_id}.ovpn"));
-    write_private_file(&config_path, &profile.config)?;
+    write_private_file(&config_path, &effective_config(&profile))?;
 
     let auth_path = match &auth {
         Some((username, password)) => {
@@ -334,6 +356,32 @@ fn parse_management_line(line: &str) -> Option<VpnStatus> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn test_profile(config: &str, avoid_default_route: bool) -> VpnProfile {
+        VpnProfile {
+            id: Uuid::new_v4(),
+            label: "test".into(),
+            config: config.into(),
+            auth_username: None,
+            has_auth_password: false,
+            avoid_default_route,
+            created_at: "2024-01-01T00:00:00Z".into(),
+        }
+    }
+
+    #[test]
+    fn effective_config_appends_pull_filter_when_avoiding_default_route() {
+        let profile = test_profile("client\nremote vpn.example.com 1194\n", true);
+        let effective = effective_config(&profile);
+        assert!(effective.starts_with(&profile.config));
+        assert!(effective.contains("pull-filter ignore \"redirect-gateway\""));
+    }
+
+    #[test]
+    fn effective_config_is_unchanged_when_not_avoiding_default_route() {
+        let profile = test_profile("client\nremote vpn.example.com 1194\n", false);
+        assert_eq!(effective_config(&profile), profile.config);
+    }
 
     #[test]
     fn parses_connected_state_line() {
