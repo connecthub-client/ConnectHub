@@ -1,47 +1,156 @@
-# ConnectHub
+<p align="center">
+  <img src="img/banner.svg" alt="ConnectHub banner" width="100%" />
+</p>
 
-A desktop SSH client built with Tauri, React, and Rust — host manager, terminal, SFTP, port forwarding, and snippets, backed by an encrypted local vault. Inspired by tools like Termius, built from scratch.
+<h1 align="center">ConnectHub</h1>
 
-## Screenshots
+<p align="center">
+  <strong>Modern cross-platform SSH client with SSH, SFTP, SCP, port forwarding, tunneling, VPN, and workspace management.</strong>
+</p>
 
-| Host manager | Terminal |
-| --- | --- |
-| ![Host manager](docs/screenshots/hosts.png) | ![Terminal](docs/screenshots/terminal.png) |
+<p align="center">
+  <a href="https://github.com/connecthub-client/ConnectHub/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/connecthub-client/ConnectHub?display_name=tag&sort=semver"></a>
+  <a href="https://github.com/connecthub-client/ConnectHub/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/connecthub-client/ConnectHub/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-14b8a6.svg"></a>
+  <a href="#supported-platforms"><img alt="Platforms" src="https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-14b8a6.svg"></a>
+  <a href="https://github.com/connecthub-client/ConnectHub/issues"><img alt="Open issues" src="https://img.shields.io/github/issues/connecthub-client/ConnectHub"></a>
+  <a href="CONTRIBUTING.md"><img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-14b8a6.svg"></a>
+</p>
 
-| SFTP browser | Port forwarding |
-| --- | --- |
-| ![SFTP browser](docs/screenshots/sftp.png) | ![Tunnels](docs/screenshots/tunnels.png) |
+<p align="center">
+  <a href="#installation">Install</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#screenshots">Screenshots</a> ·
+  <a href="#architecture-overview">Architecture</a> ·
+  <a href="#development">Development</a> ·
+  <a href="#faq">FAQ</a> ·
+  <a href="#contributing">Contributing</a>
+</p>
 
-| Snippets | Settings |
-| --- | --- |
-| ![Snippets](docs/screenshots/snippets.png) | ![Settings](docs/screenshots/settings.png) |
+---
 
-| Dark mode |
-| --- |
-| ![Dark mode](docs/screenshots/dark-mode.png) |
+## What is ConnectHub?
+
+ConnectHub is a desktop SSH client for people who manage a lot of remote hosts across a lot of different networks. It bundles an SSH terminal, an SFTP file browser, port forwarding/tunneling, and per-host VPN handling into one app, backed by a local, field-level-encrypted vault — no cloud account required to use it, with optional Google Drive backup if you want one.
+
+It's built with [Tauri 2](https://tauri.app) (Rust backend, React/TypeScript frontend), so the same codebase targets Linux, Windows, and macOS from a single native binary — no Electron, no bundled Chromium.
+
+Inspired by tools like [Termius](https://termius.com), [Tabby](https://tabby.sh), and [Warp](https://www.warp.dev) — built independently from scratch, not affiliated with any of them.
 
 ## Features
 
-- **Host manager** — nested groups, hosts, reusable identities (password/key/agent auth), jump-host (ProxyJump) chaining
+- **Host manager** — nested groups, hosts, reusable identities (password, private key, or SSH agent auth), jump-host (ProxyJump) chaining
   - Double-click a host to connect instantly; right-click for a Connect/Duplicate/Edit/Delete menu
-  - A persistent right-side panel shows the selected/active host's details, live session status, and one-click **Quick Commands** (run any saved snippet against it instantly)
+  - A persistent side panel shows the selected/active host's details, live session status, and one-click **Quick Commands** (run any saved snippet against it instantly)
   - Import/export your host list as CSV (host/group/identity-reference metadata only — never secrets) for backup or bulk editing
-- **SSH terminal** — multi-tab, multi-session, xterm.js-powered, TOFU host-key verification and pinning
+- **SSH terminal** — multi-tab, multi-session, xterm.js-powered, drag-and-drop tab reordering, TOFU host-key verification and pinning
 - **SFTP browser** — dual-pane local/remote file transfer with upload/download, mkdir, rename, delete
 - **Port forwarding** — local, remote, and dynamic (SOCKS5) tunnels, managed from one panel
-- **VPN profiles** — every host can have its own VPN, or none. Upload an OpenVPN (`.ovpn`) profile right from a host's own edit form (or reuse one already saved) and it's fully automatic from there: click **Connect**, **SFTP**, or **Tunnel** and the assigned VPN comes up first by itself, then the host connects - no separate VPN button to manage. It comes back down again on its own once nothing is using it anymore, and multiple different profiles (for different hosts) can be connected at the same time (see [VPN setup](#vpn-setup))
+- **VPN profiles** — every host can have its own VPN, or none. Upload an OpenVPN (`.ovpn`) profile right from a host's own edit form (or reuse one already saved, or pick "use saved key" style key selection for SSH auth) and it's fully automatic from there: click **Connect**, **SFTP**, or **Tunnel** and the assigned VPN comes up first by itself, then the host connects — no separate VPN button to manage. Multiple different profiles (one per project, say) can be connected at the same time; see [ARCHITECTURE.md](ARCHITECTURE.md#vpn-profiles) for how per-host routing makes that reliable.
 - **Snippets** — save commands once, run them across one or many hosts, with per-host aggregated output
-- **Import/export SSH keys** — generate new keys, or import existing ones (OpenSSH or legacy PEM/PKCS#1 format) by pasting or browsing to a file
-- **Settings** — light/dark/system theme (dark by default), terminal font/size/cursor/color theme (with live updates to open sessions), keybindings
-- **Encrypted vault** — Argon2id + AES-256-GCM field-level encryption; only secrets (passwords, private keys, passphrases) are encrypted, everything else stays plaintext for fast querying
-- **Google Drive backup** — sign in with your own Google account to back up the full encrypted vault to your Drive's private app folder, and restore it on a new device or after a reinstall (see [Security notes](#security-notes) and [Google backup setup](#google-backup-setup))
+- **SSH key management** — generate new keys (Ed25519/RSA), or import existing ones (OpenSSH or legacy PEM/PKCS#1) by pasting or browsing to a file, inline while creating a host
+- **Google Drive backup** *(optional)* — sign in with your own Google account to back up the full encrypted vault to your Drive's private app folder, and restore it on a new device or after a reinstall — cancellable mid-flow, never required to use the app
+- **Encrypted vault** — Argon2id + AES-256-GCM field-level encryption; only secrets (passwords, private keys, passphrases) are encrypted, everything else stays plaintext for fast querying; no master password to remember
+- **Settings** — light/dark/system theme (dark by default), terminal font/size/cursor/color theme with live updates to open sessions, keybindings
 
-## Tech stack
+## Screenshots
 
-- **Backend:** Rust, Tauri 2, [`russh`](https://github.com/Eugeny/russh) (pure-Rust async SSH), `russh-sftp`, `fast-socks5`, `rusqlite`
-- **Frontend:** React + TypeScript + Vite + Tailwind CSS v4, xterm.js, zustand
+> Screenshots below are placeholders pending final UI polish — see [docs/screenshots](docs/screenshots) for the labeled slots this table fills in. Follow the repo for the real ones as they land.
 
-## Getting started
+| Host manager | SSH terminal |
+| --- | --- |
+| ![Host manager](docs/screenshots/host-manager.svg) | ![SSH terminal](docs/screenshots/terminal.svg) |
+
+| SFTP browser | Port forwarding |
+| --- | --- |
+| ![SFTP browser](docs/screenshots/sftp.svg) | ![Port forwarding](docs/screenshots/tunnels.svg) |
+
+| VPN profiles | Settings |
+| --- | --- |
+| ![VPN profiles](docs/screenshots/vpn.svg) | ![Settings](docs/screenshots/settings.svg) |
+
+## Supported platforms
+
+| Platform | Architecture | Package formats | Status |
+| --- | --- | --- | --- |
+| Linux | x86_64 | `.AppImage`, `.deb`, `.rpm` | ✅ Primary development platform |
+| Windows | x86_64 | `.msi` / NSIS installer | ⚠️ Builds via Tauri; community testing welcome |
+| macOS | Intel & Apple Silicon | `.dmg` | ⚠️ Builds via Tauri; not yet code-signed/notarized |
+
+See [Known Issues](#known-issues) below for the current caveats on Windows/macOS.
+
+## Installation
+
+The simplest way to install ConnectHub is to grab the build for your OS from [**GitHub Releases**](https://github.com/connecthub-client/ConnectHub/releases/latest). Exact asset filenames are shown on each release page and follow the pattern below (version number will vary).
+
+### Linux
+
+One command — downloads and launches the AppImage, no install step, no root required:
+
+```bash
+curl -fsSL -o ConnectHub.AppImage https://github.com/connecthub-client/ConnectHub/releases/latest/download/ConnectHub_1.0.0_amd64.AppImage \
+  && chmod +x ConnectHub.AppImage \
+  && ./ConnectHub.AppImage
+```
+
+Prefer a `.deb` (Debian/Ubuntu) that integrates with your app menu instead:
+
+```bash
+curl -fsSL -o connecthub.deb https://github.com/connecthub-client/ConnectHub/releases/latest/download/ConnectHub_1.0.0_amd64.deb \
+  && sudo apt install ./connecthub.deb
+```
+
+Fedora/RHEL-based distros can use the `.rpm` asset the same way with `dnf install ./ConnectHub-1.0.0-1.x86_64.rpm`.
+
+### Windows
+
+Download the installer from the [latest release](https://github.com/connecthub-client/ConnectHub/releases/latest) (`ConnectHub_1.0.0_x64-setup.exe` or `.msi`) and run it. Since builds aren't code-signed yet, Windows SmartScreen may warn on first run — click **More info → Run anyway**.
+
+### macOS
+
+Download `ConnectHub_1.0.0_x64.dmg` (Intel) or `ConnectHub_1.0.0_aarch64.dmg` (Apple Silicon) from the [latest release](https://github.com/connecthub-client/ConnectHub/releases/latest), open it, and drag ConnectHub into Applications. The app isn't notarized yet, so Gatekeeper will block the first launch — right-click the app → **Open**, or run:
+
+```bash
+xattr -cr /Applications/ConnectHub.app
+```
+
+### Build from source
+
+See [BUILD.md](BUILD.md) for a from-source build on any platform.
+
+## Architecture overview
+
+ConnectHub is a Tauri 2 desktop app: a Rust backend exposes typed commands over Tauri's IPC bridge; the React frontend never calls `invoke()` directly, only through a typed bridge layer. Full details, module-by-module, live in [ARCHITECTURE.md](ARCHITECTURE.md).
+
+```mermaid
+flowchart LR
+    subgraph Frontend["React + TypeScript (src/)"]
+        UI[Panels / Forms / Terminal]
+        Bridge[lib/tauri-bridge]
+        Store[zustand stores]
+    end
+    subgraph Backend["Rust (src-tauri/)"]
+        Cmd[Tauri commands]
+        Data[data/ + models/]
+        SSH["ssh/ (russh, russh-sftp, fast-socks5)"]
+        Vault["vault/ (Argon2id + AES-256-GCM)"]
+        VPN["vpn/ (openvpn via polkit helper)"]
+        Google["google/ (OAuth2 PKCE + Drive)"]
+    end
+    SQLite[(SQLite vault.db)]
+    Remote[[Remote SSH hosts]]
+    OVPN[[OpenVPN servers]]
+    Drive[(Google Drive appDataFolder)]
+
+    UI --> Store --> Bridge -->|invoke| Cmd
+    Cmd --> Data --> SQLite
+    Cmd --> SSH --> Remote
+    Cmd --> VPN --> OVPN
+    Cmd --> Google --> Drive
+    Data --> Vault
+```
+
+## Development
 
 ### Prerequisites
 
@@ -49,65 +158,110 @@ A desktop SSH client built with Tauri, React, and Rust — host manager, termina
 - Rust toolchain (via [rustup](https://rustup.rs))
 - Tauri's platform dependencies — see the [Tauri prerequisites guide](https://v2.tauri.app/start/prerequisites/) for your OS
 
-### Development
+### Setup
 
 ```bash
+git clone https://github.com/connecthub-client/ConnectHub.git
+cd ConnectHub
 npm install
-npm run tauri dev
+npm run tauri dev     # launches Vite + the Tauri window; Rust changes trigger an automatic rebuild+restart
 ```
 
-### Build
+See [DEVELOPMENT.md](DEVELOPMENT.md) for the full contributor workflow, project layout, and coding conventions.
+
+## Build
 
 ```bash
-npm run tauri build
+npm run build          # frontend only: tsc && vite build
+npm run tauri build    # full production bundle for your current OS
 ```
+
+Full cross-platform build notes (Linux/Windows/macOS-specific steps, code signing status, bundle targets) are in [BUILD.md](BUILD.md).
 
 ## Testing
 
-The Rust backend has both fast unit tests and live integration tests that exercise real SSH/SFTP/tunnel flows against a local `sshd`:
-
 ```bash
 cd src-tauri
-cargo test --lib                       # unit tests
-cargo test --lib -- --ignored          # live tests (requires a reachable local sshd)
+cargo test --lib                        # unit tests (fast, in-memory SQLite, no network)
+cargo test --lib -- --ignored           # live integration tests against a real local sshd
+cargo clippy --lib --no-default-features
 ```
 
-## Google backup setup
+```bash
+npx tsc --noEmit       # frontend type-check
+```
 
-The backup feature (Settings → Backup) uses a standard Google OAuth2 "Desktop app" client — every user signs in with their own Google account, and the app only ever accesses a private, hidden `appDataFolder` on their Drive (never the user's visible files). This repo ships with a real, working OAuth client ID/secret already in `src-tauri/src/google/oauth.rs`, so sign-in works out of the box — no setup needed to use the feature as-is.
+## Keyboard shortcuts
 
-Google does not treat a Desktop app's `client_secret` as confidential (see [their docs](https://developers.google.com/identity/protocols/oauth2#installed)); the actual security boundary is PKCE, which is what makes this safe to keep in a public repo. Every user still signs in with their *own* Google account and only ever touches their *own* Drive `appDataFolder` — this client ID is just the shared identity the sign-in flow runs through, not a shared credential to anyone's data.
+| Shortcut | Action |
+| --- | --- |
+| `Ctrl/Cmd + W` | Close the active session tab |
+| `Ctrl/Cmd + Tab` | Switch to the next session tab |
+| `Ctrl/Cmd + Shift + Tab` | Switch to the previous session tab |
+| Double-click a host | Connect instantly |
+| Right-click a host | Connect / Duplicate / Edit / Delete menu |
+| Drag a session tab | Reorder open tabs |
 
-If you've forked this project and want your own separate OAuth identity (your own API quota, your own name on the consent screen), swap in your own:
+## Security
 
-1. In [Google Cloud Console](https://console.cloud.google.com/), create a project, enable the **Google Drive API**, and configure the OAuth consent screen.
-2. Create an OAuth **Desktop app** client ID.
-3. Replace `CLIENT_ID` / `CLIENT_SECRET` in `src-tauri/src/google/oauth.rs` with the ones Google issued you.
-4. If you want more than a handful of testers to be able to sign in, move the OAuth consent screen from "Testing" to "In production" in Cloud Console - while in Testing, only accounts you've explicitly added as test users (max 100) can sign in, and refresh tokens expire after 7 days regardless of who's using it.
+- Field-level encryption (Argon2id + AES-256-GCM) for secrets only; everything else stays plaintext for fast querying.
+- Trust-on-first-use (TOFU) host-key pinning — a later fingerprint mismatch is rejected, not silently accepted.
+- No master password: the vault auto-unlocks using a random per-installation secret. This trades at-rest secrecy for convenience on a personal machine — it is **not** a substitute for OS-level disk encryption if that matters for your threat model.
+- CSV export/import never includes passwords or private keys.
+- VPN helper scripts run with the minimum privilege needed (see [ARCHITECTURE.md](ARCHITECTURE.md#vpn-profiles)) and force `--script-security 0` so an uploaded `.ovpn` can never execute code as root.
 
-## VPN setup
+Full details in [ARCHITECTURE.md](ARCHITECTURE.md). To report a vulnerability, see [SECURITY.md](SECURITY.md) — please do not open a public issue.
 
-VPN profiles (Settings → VPN, or the VPN tab) need the `openvpn` package installed (Linux only for now). Bringing up a tunnel means creating a network interface and changing routes, which requires root — rather than prompting for your password on every single connect/disconnect, ConnectHub does a **one-time privilege setup** the first time you use the feature:
+## Roadmap
 
-1. Open the **VPN** tab and click **Run one-time setup**. You'll get one native authentication prompt (via `pkexec`).
-2. This installs two polkit rules, each scoped to exactly one helper script: one that only ever launches `openvpn` on an uploaded profile living under your own `~/.local/share/sshtool/vpn-profiles/` (forcing `--script-security 0`, so an `.ovpn` file can never use `up`/`down`/`route-up` hooks to run arbitrary code as root), and one that only ever adds a single `/32` route through a `tun*` interface (see "Running multiple VPN profiles at once" below). Neither is a blanket "run anything as root" grant.
-3. After that, connecting/disconnecting is fully automatic and no longer prompts for a password.
+See [ROADMAP.md](ROADMAP.md) for what's planned after v1.0.0 (code signing/notarization, Windows/macOS hardening, terminal search/clipboard addons, and more).
 
-If setup was run before the route helper existed, you'll see the setup prompt again once - that's expected, it's adding the one missing piece without disturbing anything already working. Until setup is (re-)run, connecting a VPN-backed host fails with an explanation; every other feature works normally without it.
+## FAQ
 
-Lifecycle is hands-off by design: a VPN comes up automatically the moment you Connect/SFTP/Tunnel into (or open a tunnel to) a host that has one assigned, and goes back down automatically once nothing - no open session, no active tunnel - still needs it, even if that profile is shared across several hosts. If a VPN ever gets stuck (e.g. after a crash), the **VPN** tab has a **Disconnect all** button, and closing the app itself always signals every connected profile to shut down as a last-resort safety net.
+**Is ConnectHub affiliated with Termius, Tabby, or Warp?**
+No. It's an independent, from-scratch project inspired by them.
 
-### Running multiple VPN profiles at once (e.g. one per project)
+**Do I need a master password?**
+No. The vault unlocks automatically per-installation. See [Security](#security) for the tradeoff this makes.
 
-Every host connected through a VPN profile gets an explicit route for its own IP through that profile's own tunnel interface, added automatically the moment the tunnel comes up. A `/32` route like this always wins over a broader one (like `0.0.0.0/0` from a `redirect-gateway` push) in the kernel's routing decision, so each host stays reachable through its own VPN no matter what either VPN server pushes for routing, and no matter which one (if either) currently holds the machine's default route. This is what actually makes several profiles - one per project, say - usable at the same time; earlier attempts at this problem tried to prevent VPNs from claiming the default route at all, but plenty of real VPN setups only work *because* of that (e.g. one whose whole purpose is changing your exit IP so a server's firewall lets you through), so avoiding the conflict at the reachability level, per host, is the more robust fix.
+**Where is my data stored?**
+Locally, in a SQLite database under your OS data directory. See [ARCHITECTURE.md](ARCHITECTURE.md) for the exact path and why it doesn't move if you rename/rebrand a fork.
 
-The separate **"Don't let this VPN take over my default internet route"** checkbox (on by default for new profiles) is unrelated to whether an assigned host is reachable - that's always handled by the per-host route above. It only controls what happens to your *other*, unrelated traffic while this profile is connected. Turn it off only for a profile that's specifically meant to route your whole connection (e.g. a privacy VPN).
+**Is Google sign-in required?**
+No — it's entirely optional and only used for backing up/restoring your vault to your own Google Drive.
 
-## Security notes
+**Can I use my own Google OAuth client if I fork this?**
+Yes — see the [Google backup section of ARCHITECTURE.md](ARCHITECTURE.md#google-drive-backup) for how and why.
 
-- The vault never stores plaintext secrets on disk — only Argon2id-derived-key-encrypted ciphertext for passwords, private keys, and passphrases.
-- Host key verification follows trust-on-first-use (TOFU): the first connection to a host pins its fingerprint, and any later mismatch is rejected rather than silently accepted.
-- There is no master-password prompt — the app unlocks its local vault automatically on launch using a random secret generated once per installation (stored at `~/.local/share/sshtool/.local_secret` with `0600` permissions, never committed to source or synced anywhere). This trades at-rest secrecy for convenience on a personal/single-user machine: anyone with access to your OS user account (and its files) can decrypt the vault. It is **not** a substitute for OS-level disk encryption or account security if that's a concern for your setup.
-- CSV export/import never includes passwords or private keys — only enough identity metadata (label + username) to match against credentials that already exist on the importing machine.
-- Google Drive backup uploads the **full encrypted vault** (still ciphertext-at-rest, same Argon2id/AES-256-GCM encryption) plus the per-installation local secret needed to decrypt it, to a Drive `appDataFolder` only this app can see. Anyone with access to your Google account can therefore restore and decrypt your vault — treat your Google account's own security (strong password, 2FA) as part of your vault's security once backup is enabled.
-- VPN profile passwords (for profiles that need a separate username/password, not just an embedded client certificate) are encrypted at rest the same way as identity passwords. The uploaded `.ovpn` config itself is stored as plaintext (it's a connection config, not a secret) but only ever written to disk at connect time under your own user-owned, `0700` `~/.local/share/sshtool/vpn-profiles/` directory.
+**Can I connect to hosts behind different, unrelated VPNs at the same time?**
+Yes — that's what per-host VPN profiles and automatic route injection are for. See [Features](#features) and [ARCHITECTURE.md](ARCHITECTURE.md#vpn-profiles).
+
+**Does it support SSH agent authentication?**
+Yes, alongside password and private-key auth.
+
+## Known Issues
+
+- Windows and macOS builds are produced by Tauri's bundler but have not been through the same level of manual testing as Linux in this repo's history — please file an issue if you hit a platform-specific bug.
+- macOS builds are not yet code-signed or notarized; Gatekeeper will block the first launch (see [Installation](#macos)).
+- Windows builds are not yet code-signed; SmartScreen will warn on first run (see [Installation](#windows)).
+- VPN profile support (`openvpn` + polkit helper) is Linux-only for now.
+
+## Contributing
+
+Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for the dev workflow, coding conventions, and PR process, and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community expectations.
+
+## Support
+
+Need help or have a question? See [SUPPORT.md](SUPPORT.md).
+
+## Security Policy
+
+See [SECURITY.md](SECURITY.md) for how to responsibly report a vulnerability.
+
+## License
+
+ConnectHub is licensed under the [MIT License](LICENSE).
+
+## Acknowledgements
+
+ConnectHub is built on the shoulders of great open-source projects, including [Tauri](https://tauri.app), [russh](https://github.com/Eugeny/russh), [russh-sftp](https://github.com/Eugeny/russh-sftp), [fast-socks5](https://github.com/dizda/fast-socks5), [xterm.js](https://xtermjs.org), [rusqlite](https://github.com/rusqlite/rusqlite), [React](https://react.dev), and [zustand](https://github.com/pmndrs/zustand) — and by the tools it draws inspiration from: [Termius](https://termius.com), [Tabby](https://tabby.sh), and [Warp](https://www.warp.dev).
