@@ -23,6 +23,7 @@ import { Group, Host, Identity, ImportSummary, localReadTextFile, localWriteText
 import { useHostsStore } from "../state/hostsStore";
 import { useSessionsStore } from "../state/sessionsStore";
 import { useVpnStore } from "../state/vpnStore";
+import { friendlyError } from "../lib/friendlyError";
 
 type ManageTab = "hosts" | "identities" | "keys" | "tunnels" | "snippets" | "vpn" | "settings";
 type MainView = { type: "manage"; tab: ManageTab } | { type: "session"; tabId: string };
@@ -142,7 +143,7 @@ export default function AppShell() {
       }
       return true;
     } catch (e) {
-      setVpnGateError({ hostId: host.id, message: String(e) });
+      setVpnGateError({ hostId: host.id, message: friendlyError(e) });
       return false;
     } finally {
       setVpnGateHostId(null);

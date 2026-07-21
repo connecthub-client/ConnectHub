@@ -6,6 +6,7 @@ import { sessionConnect, sessionDisconnect, sessionResize, sessionWrite } from "
 import { Host } from "../../lib/tauri-bridge";
 import { TERMINAL_THEME_PRESETS, useSettingsStore } from "../../state/settingsStore";
 import { useHostsStore } from "../../state/hostsStore";
+import { friendlyError } from "../../lib/friendlyError";
 
 interface TerminalViewProps {
   host: Host;
@@ -75,7 +76,7 @@ export default function TerminalView({ host, onClose }: TerminalViewProps) {
       })
       .catch((e) => {
         setStatus("error");
-        setError(String(e));
+        setError(friendlyError(e));
       });
 
     const onData = term.onData((data) => {

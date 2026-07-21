@@ -20,6 +20,7 @@ import {
 import { useHostsStore } from "../../state/hostsStore";
 import { useConfirm } from "../common/useConfirm";
 import { usePrompt } from "../common/usePrompt";
+import { friendlyError } from "../../lib/friendlyError";
 
 interface SftpBrowserProps {
   host: Host;
@@ -279,7 +280,7 @@ export default function SftpBrowser({ host, onClose }: SftpBrowserProps) {
       } catch (e) {
         if (!disposed) {
           setStatus("error");
-          setError(String(e));
+          setError(friendlyError(e));
         }
       }
     })();
