@@ -37,8 +37,24 @@ pub fn init_schema(conn: &Connection) -> AppResult<()> {
 }
 
 pub fn open() -> AppResult<Connection> {
-    let conn = Connection::open(db_path()?)?;
+    open_at(&db_path()?)
+}
+
+fn open_at(path: &std::path::Path) -> AppResult<Connection> {
+    let conn = Connection::open(path)?;
     init_schema(&conn)?;
+    // vault.db holds every encrypted secret (identity passwords, private
+    // keys, passphrases, VPN passwords, the Google refresh token) - harden
+    // it the same way its sibling secret files already are (.local_secret,
+    // VPN profile files), rather than leaving it at the OS/umask default
+    // (often world-readable). Applied unconditionally on every open, not
+    // just creation, so an existing vault.db from before this check existed
+    // gets hardened retroactively too.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+    }
     Ok(conn)
 }
 
@@ -356,6 +372,25 @@ mod tests {
         let a = get_or_create_local_secret_at(&temp_secret_path()).unwrap();
         let b = get_or_create_local_secret_at(&temp_secret_path()).unwrap();
         assert_ne!(a, b, "each fresh install must get its own random secret");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn open_hardens_vault_db_to_0600_even_if_it_already_existed_with_looser_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let path = std::env::temp_dir().join(format!("sshtool-test-vault-{}.db", uuid::Uuid::new_v4()));
+        // Simulate a vault.db that predates this permission check, created
+        // under a permissive umask.
+        std::fs::write(&path, b"").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        let _conn = open_at(&path).unwrap();
+
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600, "vault.db must be hardened to 0600 on open, retroactively too");
+
+        std::fs::remove_file(&path).ok();
     }
 
     #[test]

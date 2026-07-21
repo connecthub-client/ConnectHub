@@ -96,6 +96,7 @@ pub fn export_csv(conn: &Connection) -> AppResult<String> {
 #[derive(Debug, Serialize)]
 pub struct ImportSummary {
     pub imported: usize,
+    pub updated: usize,
     pub warnings: Vec<String>,
 }
 
@@ -160,11 +161,20 @@ pub fn import_csv(conn: &Connection, content: &str) -> AppResult<ImportSummary> 
         .map_err(|e| AppError::Csv(e.to_string()))?;
 
     let all_identities = identities::list(conn)?;
+    // label -> existing Host, for matching a row against a host that already
+    // exists (re-importing a previously-exported/updated inventory should
+    // update that host in place rather than create a duplicate every time)
+    // and for preserving fields the CSV doesn't carry (vpn_profile_id,
+    // color, sort_order) instead of blanking them out on update.
+    let existing_by_label: HashMap<String, crate::models::host::Host> =
+        hosts::list(conn)?.into_iter().map(|h| (h.label.clone(), h)).collect();
     let mut warnings = Vec::new();
     let mut group_cache = HashMap::new();
     // label -> id, for resolving jump-host references in the second pass
     // below (including references between two hosts in this same import).
     let mut created_by_label: HashMap<String, Uuid> = HashMap::new();
+    let mut imported = 0usize;
+    let mut updated = 0usize;
     // Row order preserved alongside each row's raw jump_host_label so the
     // second pass can look it up without re-parsing the CSV.
     let mut pending_jump_links: Vec<(Uuid, String)> = Vec::new();
@@ -174,45 +184,89 @@ pub fn import_csv(conn: &Connection, content: &str) -> AppResult<ImportSummary> 
 
         let group_id = resolve_group_path(conn, &record.group_path, &mut group_cache)?;
 
-        let identity_id = if record.identity_username.trim().is_empty() {
+        // Both label AND username must match an existing identity exactly -
+        // matching on username alone (as an earlier version of this did)
+        // lets a CSV that only sets identity_username to a common guessed
+        // value (root/ubuntu/admin/...) silently attach whichever saved
+        // identity happens to have that username, sending its real
+        // password/key to whatever hostname the row specifies. A label is
+        // a user-chosen string an attacker preparing a malicious "host
+        // list" CSV can't predict, so requiring it closes that off; a
+        // legitimate self-exported CSV (see export_csv above) always sets
+        // both fields together anyway.
+        let identity_id = if record.identity_username.trim().is_empty()
+            || record.identity_label.trim().is_empty()
+        {
             None
         } else {
-            let found = all_identities.iter().find(|ident| {
-                ident.username == record.identity_username
-                    && (record.identity_label.trim().is_empty() || ident.label == record.identity_label)
-            });
-            match found {
-                Some(ident) => Some(ident.id),
-                None => {
-                    warnings.push(format!(
-                        "Row {row_num} ({}): no saved identity matches \"{}\" ({}) - \
-                         imported without credentials, re-link it manually.",
-                        record.label, record.identity_label, record.identity_username
-                    ));
-                    None
-                }
+            all_identities
+                .iter()
+                .find(|ident| {
+                    ident.username == record.identity_username && ident.label == record.identity_label
+                })
+                .map(|ident| ident.id)
+        };
+        if identity_id.is_none() && !record.identity_username.trim().is_empty() {
+            warnings.push(format!(
+                "Row {row_num} ({}): no saved identity matches \"{}\" ({}) - \
+                 imported without credentials, re-link it manually.",
+                record.label, record.identity_label, record.identity_username
+            ));
+        }
+
+        let notes = if record.notes.trim().is_empty() { None } else { Some(record.notes.clone()) };
+
+        let host = match existing_by_label.get(&record.label) {
+            // Update in place: preserves the host's id (and anything
+            // referencing it, e.g. an open session or another host's
+            // jump_host_id), and its vpn_profile_id/color - none of which
+            // the CSV format carries - rather than creating a second host
+            // with the same label, or blanking those fields, every time the
+            // same export is re-imported.
+            Some(existing) => {
+                updated += 1;
+                hosts::update(
+                    conn,
+                    existing.id,
+                    HostInput {
+                        group_id,
+                        label: record.label.clone(),
+                        hostname: record.hostname.clone(),
+                        port: record.port,
+                        identity_id,
+                        // Left unset here and resolved in the second pass
+                        // below (same as for a newly-created host), so a
+                        // row whose jump_host_label changed - or was
+                        // cleared - between exports is reflected exactly,
+                        // rather than only ever able to add a jump host on
+                        // re-import and never remove one.
+                        jump_host_id: None,
+                        vpn_profile_id: existing.vpn_profile_id,
+                        color: existing.color.clone(),
+                        notes,
+                        sort_order: existing.sort_order,
+                    },
+                )?
+            }
+            None => {
+                imported += 1;
+                hosts::create(
+                    conn,
+                    HostInput {
+                        group_id,
+                        label: record.label.clone(),
+                        hostname: record.hostname.clone(),
+                        port: record.port,
+                        identity_id,
+                        jump_host_id: None,
+                        vpn_profile_id: None,
+                        color: None,
+                        notes,
+                        sort_order: 0,
+                    },
+                )?
             }
         };
-
-        let host = hosts::create(
-            conn,
-            HostInput {
-                group_id,
-                label: record.label.clone(),
-                hostname: record.hostname.clone(),
-                port: record.port,
-                identity_id,
-                jump_host_id: None,
-                vpn_profile_id: None,
-                color: None,
-                notes: if record.notes.trim().is_empty() {
-                    None
-                } else {
-                    Some(record.notes.clone())
-                },
-                sort_order: 0,
-            },
-        )?;
 
         created_by_label.insert(record.label.clone(), host.id);
         if !record.jump_host_label.trim().is_empty() {
@@ -242,7 +296,7 @@ pub fn import_csv(conn: &Connection, content: &str) -> AppResult<ImportSummary> 
                         port: host.port,
                         identity_id: host.identity_id,
                         jump_host_id: Some(jump_id),
-                        vpn_profile_id: None,
+                        vpn_profile_id: host.vpn_profile_id,
                         color: host.color,
                         notes: host.notes,
                         sort_order: host.sort_order,
@@ -258,7 +312,8 @@ pub fn import_csv(conn: &Connection, content: &str) -> AppResult<ImportSummary> 
     }
 
     Ok(ImportSummary {
-        imported: created_by_label.len(),
+        imported,
+        updated,
         warnings,
     })
 }
@@ -411,15 +466,117 @@ mod tests {
     }
 
     #[test]
-    fn reimporting_the_same_csv_creates_separate_hosts() {
+    fn import_does_not_auto_link_an_identity_by_username_alone_when_label_is_blank() {
+        let conn = test_conn();
+        let key = test_key();
+
+        // A saved identity with a common, guessable username.
+        identities::create(
+            &conn,
+            &key,
+            IdentityInput {
+                label: "my real prod key".into(),
+                username: "root".into(),
+                auth_method: AuthMethod::Password,
+                ssh_key_id: None,
+                password: Some("hunter2".into()),
+            },
+        )
+        .unwrap();
+
+        // A crafted CSV that only sets identity_username (guessing "root"),
+        // leaving identity_label blank, pointed at an arbitrary hostname.
+        let csv = "label,hostname,port,group_path,identity_label,identity_username,jump_host_label,notes\n\
+                   totally-legit-host,attacker.example.com,22,,,root,,\n";
+
+        let summary = import_csv(&conn, csv).unwrap();
+        assert_eq!(summary.imported, 1);
+        assert_eq!(
+            summary.warnings.len(),
+            1,
+            "must warn instead of silently attaching credentials by username alone"
+        );
+
+        let all_hosts = hosts::list(&conn).unwrap();
+        assert_eq!(
+            all_hosts[0].identity_id, None,
+            "must not link a saved identity's real credentials by username match alone"
+        );
+    }
+
+    #[test]
+    fn reimporting_the_same_csv_updates_the_existing_host_in_place() {
         let conn = test_conn();
         let csv = "label,hostname,port,group_path,identity_label,identity_username,jump_host_label,notes\n\
                    web-1,10.0.0.5,22,,,,,\n";
 
-        import_csv(&conn, csv).unwrap();
-        import_csv(&conn, csv).unwrap();
+        let first = import_csv(&conn, csv).unwrap();
+        assert_eq!((first.imported, first.updated), (1, 0));
+
+        let second = import_csv(&conn, csv).unwrap();
+        assert_eq!(
+            (second.imported, second.updated),
+            (0, 1),
+            "re-importing the same label must update, not duplicate"
+        );
 
         let all_hosts = hosts::list(&conn).unwrap();
-        assert_eq!(all_hosts.len(), 2);
+        assert_eq!(all_hosts.len(), 1, "must not create a second host for the same label");
+    }
+
+    #[test]
+    fn reimporting_preserves_vpn_profile_id_and_updates_changed_fields() {
+        use crate::models::vpn_profile::VpnProfileInput;
+
+        let conn = test_conn();
+        let key = test_key();
+        let profile = crate::data::vpn_profiles::create(
+            &conn,
+            &key,
+            VpnProfileInput {
+                label: "office".into(),
+                config: "client\nremote vpn.example.com 1194\n".into(),
+                auth_username: None,
+                auth_password: None,
+                avoid_default_route: true,
+            },
+        )
+        .unwrap();
+
+        let csv = "label,hostname,port,group_path,identity_label,identity_username,jump_host_label,notes\n\
+                   web-1,10.0.0.5,22,,,,,\n";
+        let created = import_csv(&conn, csv).unwrap();
+        assert_eq!(created.imported, 1);
+
+        let host = hosts::list(&conn).unwrap().into_iter().find(|h| h.label == "web-1").unwrap();
+        hosts::update(
+            &conn,
+            host.id,
+            HostInput {
+                group_id: host.group_id,
+                label: host.label.clone(),
+                hostname: host.hostname.clone(),
+                port: host.port,
+                identity_id: host.identity_id,
+                jump_host_id: host.jump_host_id,
+                vpn_profile_id: Some(profile.id),
+                color: host.color.clone(),
+                notes: host.notes.clone(),
+                sort_order: host.sort_order,
+            },
+        )
+        .unwrap();
+
+        // Re-import with a changed hostname - a real "sync my inventory"
+        // scenario - must update the hostname but must NOT wipe the VPN
+        // profile assignment the CSV format doesn't even carry.
+        let updated_csv = "label,hostname,port,group_path,identity_label,identity_username,jump_host_label,notes\n\
+                           web-1,10.0.0.99,22,,,,,\n";
+        let result = import_csv(&conn, updated_csv).unwrap();
+        assert_eq!((result.imported, result.updated), (0, 1));
+
+        let refreshed = hosts::list(&conn).unwrap().into_iter().find(|h| h.label == "web-1").unwrap();
+        assert_eq!(refreshed.hostname, "10.0.0.99");
+        assert_eq!(refreshed.vpn_profile_id, Some(profile.id));
     }
 }

@@ -483,7 +483,12 @@ export default function AppShell() {
       {importResult && (
         <Modal title="Import complete" onClose={() => setImportResult(null)}>
           <p className="mb-3 text-sm text-neutral-700 dark:text-neutral-300">
-            Imported {importResult.imported} host{importResult.imported === 1 ? "" : "s"}.
+            {importResult.imported > 0 &&
+              `Imported ${importResult.imported} new host${importResult.imported === 1 ? "" : "s"}.`}
+            {importResult.imported > 0 && importResult.updated > 0 && " "}
+            {importResult.updated > 0 &&
+              `Updated ${importResult.updated} existing host${importResult.updated === 1 ? "" : "s"}.`}
+            {importResult.imported === 0 && importResult.updated === 0 && "No hosts to import."}
           </p>
           {importResult.warnings.length > 0 && (
             <div className="mb-4 max-h-56 space-y-1.5 overflow-y-auto rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">

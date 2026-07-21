@@ -81,6 +81,7 @@ export interface HostInput {
 
 export interface ImportSummary {
   imported: number;
+  updated: number;
   warnings: string[];
 }
 

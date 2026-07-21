@@ -69,7 +69,37 @@ pub fn get_with_decrypted_auth(
     Ok((profile, auth))
 }
 
+// OpenVPN's `--script-security 0` (unconditionally forced at connect time,
+// see vpn::mod's helper invocation) blocks every scripting hook a config can
+// define - `up`/`down`/`route-up`/`tls-verify`/`client-connect`/etc. - except
+// one: `plugin <module> [init-string]` loads a shared object into the
+// running (root-owned) process and is explicitly documented by OpenVPN as
+// not subject to script-security. Since that's the one directive the
+// script-security boundary doesn't cover, reject it outright here rather
+// than let an uploaded/pasted .ovpn achieve root code execution the moment
+// someone clicks Connect.
+fn validate_config(config: &str) -> AppResult<()> {
+    for line in config.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with(';') {
+            continue;
+        }
+        let directive = trimmed.split_whitespace().next().unwrap_or("");
+        if directive.eq_ignore_ascii_case("plugin") {
+            return Err(AppError::Vpn(
+                "this OpenVPN config uses a 'plugin' directive, which loads native code into \
+                 the connection process and isn't restricted by script-security - refusing to \
+                 save it for safety. Remove the 'plugin' line if you trust this config, or use \
+                 a config without it."
+                    .into(),
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub fn create(conn: &Connection, key: &VaultKey, input: VpnProfileInput) -> AppResult<VpnProfile> {
+    validate_config(&input.config)?;
     let id = Uuid::new_v4();
     let created_at = chrono::Utc::now().to_rfc3339();
     let password = input.auth_password.filter(|p| !p.is_empty());
@@ -115,6 +145,7 @@ pub fn update(
     id: Uuid,
     input: VpnProfileInput,
 ) -> AppResult<VpnProfile> {
+    validate_config(&input.config)?;
     let created_at: String = conn
         .query_row(
             "SELECT created_at FROM vpn_profiles WHERE id = ?1",
@@ -360,5 +391,45 @@ mod tests {
         let conn = test_conn();
         let result = delete(&conn, Uuid::new_v4());
         assert!(matches!(result, Err(AppError::NotFound)));
+    }
+
+    #[test]
+    fn create_rejects_a_plugin_directive() {
+        let conn = test_conn();
+        let key = test_key();
+        let mut bad = input(None);
+        bad.config = "client\nplugin /usr/lib/openvpn/evil.so\nremote vpn.example.com 1194\n".into();
+        let result = create(&conn, &key, bad);
+        assert!(matches!(result, Err(AppError::Vpn(_))));
+    }
+
+    #[test]
+    fn create_rejects_a_plugin_directive_regardless_of_case_or_leading_whitespace() {
+        let conn = test_conn();
+        let key = test_key();
+        let mut bad = input(None);
+        bad.config = "client\n   Plugin /usr/lib/openvpn/evil.so\n".into();
+        let result = create(&conn, &key, bad);
+        assert!(matches!(result, Err(AppError::Vpn(_))));
+    }
+
+    #[test]
+    fn create_allows_a_commented_out_plugin_line() {
+        let conn = test_conn();
+        let key = test_key();
+        let mut ok = input(None);
+        ok.config = "client\n# plugin /usr/lib/openvpn/evil.so\nremote vpn.example.com 1194\n".into();
+        assert!(create(&conn, &key, ok).is_ok());
+    }
+
+    #[test]
+    fn update_rejects_a_plugin_directive() {
+        let conn = test_conn();
+        let key = test_key();
+        let created = create(&conn, &key, input(None)).unwrap();
+        let mut bad = input(None);
+        bad.config = "plugin /tmp/evil.so\n".into();
+        let result = update(&conn, &key, created.id, bad);
+        assert!(matches!(result, Err(AppError::Vpn(_))));
     }
 }
