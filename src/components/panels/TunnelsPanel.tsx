@@ -32,8 +32,13 @@ export default function TunnelsPanel({ onNew }: TunnelsPanelProps) {
   }, [loadTunnels]);
 
   async function handleStop(tunnel: TunnelInfo) {
-    await stopTunnel(tunnel.id);
-    await releaseVpnIfUnused(tunnel.host_id);
+    setError(null);
+    try {
+      await stopTunnel(tunnel.id);
+      await releaseVpnIfUnused(tunnel.host_id);
+    } catch (e) {
+      setError(String(e));
+    }
   }
 
   return (
