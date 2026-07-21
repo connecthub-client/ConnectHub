@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { SearchAddon } from "@xterm/addon-search";
+import { WebLinksAddon } from "@xterm/addon-web-links";
+import { ClipboardAddon } from "@xterm/addon-clipboard";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import "@xterm/xterm/css/xterm.css";
 import { sessionConnect, sessionDisconnect, sessionResize, sessionWrite } from "../../lib/tauri-bridge";
 import { Host } from "../../lib/tauri-bridge";
@@ -26,11 +30,15 @@ export default function TerminalView({ host, onClose }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const searchAddonRef = useRef<SearchAddon | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const sessionIdRef = useRef<string | null>(null);
   const [status, setStatus] = useState<"connecting" | "connected" | "closed" | "error">(
     "connecting",
   );
   const [error, setError] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -47,10 +55,42 @@ export default function TerminalView({ host, onClose }: TerminalViewProps) {
     });
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
+    const searchAddon = new SearchAddon();
+    term.loadAddon(searchAddon);
+    // Default handler uses window.open(), which doesn't behave usefully in
+    // a Tauri webview - route through the OS's actual default browser
+    // instead.
+    term.loadAddon(new WebLinksAddon((_event, uri) => { void openUrl(uri); }));
+    // Lets a remote program request clipboard read/write via OSC 52 escape
+    // sequences (e.g. tmux/vim "copy to system clipboard") - previously
+    // copy/paste only worked via the browser's native text-selection
+    // behavior, with no way for a remote program to push to the clipboard
+    // itself.
+    term.loadAddon(new ClipboardAddon());
+    // Ctrl/Cmd+F opens the search bar below instead of falling through to
+    // whatever the shell/remote program would otherwise do with it -
+    // xterm's own key handler is used (rather than a window-level
+    // listener) so this only fires while this specific terminal actually
+    // has focus, which matters since multiple session tabs stay mounted
+    // at once.
+    term.attachCustomKeyEventHandler((e) => {
+      if (e.type !== "keydown") return true;
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        setSearchOpen(true);
+        // Deferred: the search bar only renders after this state update
+        // commits, so the input doesn't exist yet on this tick.
+        setTimeout(() => searchInputRef.current?.focus(), 0);
+        return false;
+      }
+      return true;
+    });
     term.open(containerRef.current);
     fitAddon.fit();
     termRef.current = term;
     fitAddonRef.current = fitAddon;
+    searchAddonRef.current = searchAddon;
 
     let disposed = false;
 
@@ -131,6 +171,12 @@ export default function TerminalView({ host, onClose }: TerminalViewProps) {
     }
   }, [terminalFontFamily, terminalFontSize, terminalCursorStyle, themePreset]);
 
+  function closeSearch() {
+    setSearchOpen(false);
+    searchAddonRef.current?.clearDecorations();
+    termRef.current?.focus();
+  }
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-neutral-200 bg-neutral-100 px-4 py-2 dark:border-neutral-800 dark:bg-neutral-900">
@@ -162,6 +208,57 @@ export default function TerminalView({ host, onClose }: TerminalViewProps) {
         <p className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-400">
           {error}
         </p>
+      )}
+
+      {searchOpen && (
+        <div className="flex items-center gap-2 border-b border-neutral-200 bg-neutral-50 px-3 py-1.5 dark:border-neutral-800 dark:bg-neutral-950">
+          <input
+            ref={searchInputRef}
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.currentTarget.value);
+              searchAddonRef.current?.findNext(e.currentTarget.value, { incremental: true });
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                closeSearch();
+              } else if (e.key === "Enter") {
+                e.preventDefault();
+                if (e.shiftKey) {
+                  searchAddonRef.current?.findPrevious(searchQuery);
+                } else {
+                  searchAddonRef.current?.findNext(searchQuery);
+                }
+              }
+            }}
+            placeholder="Search scrollback…"
+            className="flex-1 rounded border border-neutral-300 bg-white px-2 py-1 text-sm text-neutral-900 outline-none focus:border-teal-500 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+          />
+          <button
+            type="button"
+            onClick={() => searchAddonRef.current?.findPrevious(searchQuery)}
+            title="Previous match (Shift+Enter)"
+            className="rounded px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800"
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            onClick={() => searchAddonRef.current?.findNext(searchQuery)}
+            title="Next match (Enter)"
+            className="rounded px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800"
+          >
+            ↓
+          </button>
+          <button
+            type="button"
+            onClick={closeSearch}
+            aria-label="Close search"
+            className="rounded px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800"
+          >
+            ✕
+          </button>
+        </div>
       )}
 
       <div className="min-h-0 flex-1 p-2" style={{ backgroundColor: themePreset.background }}>
