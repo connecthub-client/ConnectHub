@@ -4,6 +4,7 @@ import { AuthMethod, Host, localReadTextFile } from "../../lib/tauri-bridge";
 import { useHostsStore } from "../../state/hostsStore";
 import { useVpnStore } from "../../state/vpnStore";
 import { errorClass, inputClass, labelClass, primaryButtonClass, selectClass } from "./formStyles";
+import RequiredMark from "./RequiredMark";
 
 interface HostFormProps {
   host?: Host;
@@ -197,7 +198,10 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
 
   return (
     <form onSubmit={handleSubmit}>
-      <label className={labelClass}>Label</label>
+      <label className={labelClass}>
+        Label
+        <RequiredMark />
+      </label>
       <input
         autoFocus
         value={label}
@@ -209,7 +213,10 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
 
       <div className="flex gap-3">
         <div className="flex-1">
-          <label className={labelClass}>Hostname / IP</label>
+          <label className={labelClass}>
+            Hostname / IP
+            <RequiredMark />
+          </label>
           <input
             value={hostname}
             onChange={(e) => setHostname(e.currentTarget.value)}
@@ -218,7 +225,10 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
           />
         </div>
         <div className="w-24">
-          <label className={labelClass}>Port</label>
+          <label className={labelClass}>
+            Port
+            <RequiredMark />
+          </label>
           <input
             type="number"
             min={1}

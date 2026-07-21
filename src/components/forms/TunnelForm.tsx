@@ -4,6 +4,7 @@ import { useHostsStore } from "../../state/hostsStore";
 import { useTunnelsStore } from "../../state/tunnelsStore";
 import { useVpnStore } from "../../state/vpnStore";
 import { errorClass, inputClass, labelClass, primaryButtonClass, selectClass } from "./formStyles";
+import RequiredMark from "./RequiredMark";
 
 interface TunnelFormProps {
   defaultHostId?: string;
@@ -61,7 +62,10 @@ export default function TunnelForm({ defaultHostId, onDone }: TunnelFormProps) {
 
   return (
     <form onSubmit={handleSubmit}>
-      <label className={labelClass}>Host</label>
+      <label className={labelClass}>
+        Host
+        <RequiredMark />
+      </label>
       <select
         value={hostId}
         onChange={(e) => setHostId(e.currentTarget.value)}
@@ -91,7 +95,10 @@ export default function TunnelForm({ defaultHostId, onDone }: TunnelFormProps) {
 
       <div className="flex gap-3">
         <div className="flex-1">
-          <label className={labelClass}>Bind address</label>
+          <label className={labelClass}>
+            Bind address
+            <RequiredMark />
+          </label>
           <input
             value={bindAddress}
             onChange={(e) => setBindAddress(e.currentTarget.value)}
@@ -100,7 +107,10 @@ export default function TunnelForm({ defaultHostId, onDone }: TunnelFormProps) {
           />
         </div>
         <div className="w-28">
-          <label className={labelClass}>Bind port</label>
+          <label className={labelClass}>
+            Bind port
+            <RequiredMark />
+          </label>
           <input
             type="number"
             min={1}
@@ -118,6 +128,7 @@ export default function TunnelForm({ defaultHostId, onDone }: TunnelFormProps) {
           <div className="flex-1">
             <label className={labelClass}>
               {kind === "local" ? "Target host (from the server)" : "Target host (from this machine)"}
+              <RequiredMark />
             </label>
             <input
               value={targetHost}
@@ -128,7 +139,10 @@ export default function TunnelForm({ defaultHostId, onDone }: TunnelFormProps) {
             />
           </div>
           <div className="w-28">
-            <label className={labelClass}>Target port</label>
+            <label className={labelClass}>
+              Target port
+              <RequiredMark />
+            </label>
             <input
               type="number"
               min={1}

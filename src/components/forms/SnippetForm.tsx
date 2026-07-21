@@ -2,6 +2,7 @@ import { FormEvent, useState } from "react";
 import { Snippet } from "../../lib/tauri-bridge";
 import { useSnippetsStore } from "../../state/snippetsStore";
 import { errorClass, inputClass, labelClass, primaryButtonClass } from "./formStyles";
+import RequiredMark from "./RequiredMark";
 
 interface SnippetFormProps {
   snippet?: Snippet;
@@ -38,7 +39,10 @@ export default function SnippetForm({ snippet, onDone }: SnippetFormProps) {
 
   return (
     <form onSubmit={handleSubmit}>
-      <label className={labelClass}>Label</label>
+      <label className={labelClass}>
+        Label
+        <RequiredMark />
+      </label>
       <input
         autoFocus
         value={label}
@@ -48,7 +52,10 @@ export default function SnippetForm({ snippet, onDone }: SnippetFormProps) {
         required
       />
 
-      <label className={labelClass}>Command</label>
+      <label className={labelClass}>
+        Command
+        <RequiredMark />
+      </label>
       <textarea
         value={body}
         onChange={(e) => setBody(e.currentTarget.value)}

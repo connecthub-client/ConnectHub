@@ -2,6 +2,7 @@ import { FormEvent, useState } from "react";
 import { AuthMethod, Identity } from "../../lib/tauri-bridge";
 import { useHostsStore } from "../../state/hostsStore";
 import { errorClass, inputClass, labelClass, primaryButtonClass, selectClass } from "./formStyles";
+import RequiredMark from "./RequiredMark";
 
 interface IdentityFormProps {
   identity?: Identity;
@@ -50,7 +51,10 @@ export default function IdentityForm({ identity, onDone }: IdentityFormProps) {
 
   return (
     <form onSubmit={handleSubmit}>
-      <label className={labelClass}>Label</label>
+      <label className={labelClass}>
+        Label
+        <RequiredMark />
+      </label>
       <input
         autoFocus
         value={label}
@@ -60,7 +64,10 @@ export default function IdentityForm({ identity, onDone }: IdentityFormProps) {
         required
       />
 
-      <label className={labelClass}>Username</label>
+      <label className={labelClass}>
+        Username
+        <RequiredMark />
+      </label>
       <input
         value={username}
         onChange={(e) => setUsername(e.currentTarget.value)}
@@ -104,7 +111,10 @@ export default function IdentityForm({ identity, onDone }: IdentityFormProps) {
 
       {authMethod === "private_key" && (
         <>
-          <label className={labelClass}>SSH key</label>
+          <label className={labelClass}>
+            SSH key
+            <RequiredMark />
+          </label>
           <select
             value={sshKeyId}
             onChange={(e) => setSshKeyId(e.currentTarget.value)}

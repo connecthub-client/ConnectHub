@@ -2,6 +2,7 @@ import { FormEvent, useState } from "react";
 import { Group } from "../../lib/tauri-bridge";
 import { useHostsStore } from "../../state/hostsStore";
 import { errorClass, inputClass, labelClass, primaryButtonClass, selectClass } from "./formStyles";
+import RequiredMark from "./RequiredMark";
 
 interface GroupFormProps {
   group?: Group;
@@ -40,7 +41,10 @@ export default function GroupForm({ group, defaultParentId, onDone }: GroupFormP
 
   return (
     <form onSubmit={handleSubmit}>
-      <label className={labelClass}>Name</label>
+      <label className={labelClass}>
+        Name
+        <RequiredMark />
+      </label>
       <input
         autoFocus
         value={name}

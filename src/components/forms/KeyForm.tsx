@@ -3,6 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { localReadTextFile } from "../../lib/tauri-bridge";
 import { useHostsStore } from "../../state/hostsStore";
 import { errorClass, inputClass, labelClass, primaryButtonClass } from "./formStyles";
+import RequiredMark from "./RequiredMark";
 
 interface KeyFormProps {
   onDone: () => void;
@@ -79,7 +80,10 @@ export default function KeyForm({ onDone }: KeyFormProps) {
         </button>
       </div>
 
-      <label className={labelClass}>Label</label>
+      <label className={labelClass}>
+        Label
+        <RequiredMark />
+      </label>
       <input
         autoFocus
         value={label}
@@ -96,7 +100,10 @@ export default function KeyForm({ onDone }: KeyFormProps) {
       ) : (
         <>
           <div className="mb-1 flex items-center justify-between">
-            <label className={labelClass}>Private key (OpenSSH or PEM format)</label>
+            <label className={labelClass}>
+              Private key (OpenSSH or PEM format)
+              <RequiredMark />
+            </label>
             <button
               type="button"
               onClick={handleBrowse}

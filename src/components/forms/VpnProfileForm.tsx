@@ -3,6 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { VpnProfile, localReadTextFile } from "../../lib/tauri-bridge";
 import { useVpnStore } from "../../state/vpnStore";
 import { errorClass, inputClass, labelClass, primaryButtonClass } from "./formStyles";
+import RequiredMark from "./RequiredMark";
 
 interface VpnProfileFormProps {
   profile?: VpnProfile;
@@ -70,7 +71,10 @@ export default function VpnProfileForm({ profile, onDone }: VpnProfileFormProps)
 
   return (
     <form onSubmit={handleSubmit}>
-      <label className={labelClass}>Label</label>
+      <label className={labelClass}>
+        Label
+        <RequiredMark />
+      </label>
       <input
         autoFocus
         value={label}
@@ -83,6 +87,7 @@ export default function VpnProfileForm({ profile, onDone }: VpnProfileFormProps)
       <div className="mb-1 flex items-center justify-between">
         <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300">
           OpenVPN config (.ovpn)
+          <RequiredMark />
         </label>
         <button
           type="button"
