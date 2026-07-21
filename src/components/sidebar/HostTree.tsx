@@ -29,6 +29,8 @@ export default function HostTree(props: HostTreeProps) {
   const openSessions = useSessionsStore((s) => s.openSessions);
   const openHostIds = new Set(openSessions.map((s) => s.host.id));
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState("");
+  const query = search.trim().toLowerCase();
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const { confirm, confirmDialog } = useConfirm();
@@ -84,12 +86,27 @@ export default function HostTree(props: HostTreeProps) {
     });
   }
 
+  function hostMatches(host: Host): boolean {
+    if (!query) return true;
+    return host.label.toLowerCase().includes(query) || host.hostname.toLowerCase().includes(query);
+  }
+
+  // A group is worth showing while searching if any host anywhere inside
+  // it (directly, or inside a nested subgroup) matches - otherwise a
+  // matching host several levels deep would have every ancestor group
+  // filtered out along with it.
+  function groupHasMatch(groupId: string): boolean {
+    if (!query) return true;
+    if (hosts.some((h) => h.group_id === groupId && hostMatches(h))) return true;
+    return groups.some((g) => g.parent_id === groupId && groupHasMatch(g.id));
+  }
+
   function renderLevel(parentId: string | null, depth: number) {
     const childGroups = groups
-      .filter((g) => g.parent_id === parentId)
+      .filter((g) => g.parent_id === parentId && groupHasMatch(g.id))
       .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
     const childHosts = hosts
-      .filter((h) => h.group_id === parentId)
+      .filter((h) => h.group_id === parentId && hostMatches(h))
       .sort((a, b) => a.sort_order - b.sort_order || a.label.localeCompare(b.label));
 
     return (
@@ -106,7 +123,7 @@ export default function HostTree(props: HostTreeProps) {
                 className="flex flex-1 items-center gap-1.5 text-left text-neutral-700 dark:text-neutral-300"
               >
                 <span className="w-3 text-xs text-neutral-400">
-                  {collapsed.has(group.id) ? "▸" : "▾"}
+                  {!query && collapsed.has(group.id) ? "▸" : "▾"}
                 </span>
                 <span className="font-medium">{group.name}</span>
               </button>
@@ -154,7 +171,7 @@ export default function HostTree(props: HostTreeProps) {
                 </button>
               </div>
             </div>
-            {!collapsed.has(group.id) && renderLevel(group.id, depth + 1)}
+            {(query || !collapsed.has(group.id)) && renderLevel(group.id, depth + 1)}
           </div>
         ))}
 
@@ -290,14 +307,26 @@ export default function HostTree(props: HostTreeProps) {
     );
   }
 
+  const noSearchResults = query !== "" && !hosts.some(hostMatches);
+
   return (
     <div>
+      <input
+        value={search}
+        onChange={(e) => setSearch(e.currentTarget.value)}
+        placeholder="Search hosts…"
+        className="mx-2 mb-2 w-[calc(100%-1rem)] rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-sm text-neutral-900 outline-none focus:border-teal-500 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+      />
       {deleteError && (
         <p className="mx-2 mb-2 rounded-md bg-red-50 px-2 py-1.5 text-xs text-red-700 dark:bg-red-950 dark:text-red-400">
           {deleteError}
         </p>
       )}
-      {renderLevel(null, 0)}
+      {noSearchResults ? (
+        <p className="px-2 py-4 text-sm text-neutral-400">No hosts match "{search.trim()}".</p>
+      ) : (
+        renderLevel(null, 0)
+      )}
       {menu}
       {confirmDialog}
     </div>
