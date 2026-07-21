@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Group, Host } from "../../lib/tauri-bridge";
 import { useHostsStore } from "../../state/hostsStore";
 import { useSessionsStore } from "../../state/sessionsStore";
+import { useConfirm } from "../common/useConfirm";
 
 interface HostTreeProps {
   selectedHostId: string | null;
@@ -29,17 +30,32 @@ export default function HostTree(props: HostTreeProps) {
   const openHostIds = new Set(openSessions.map((s) => s.host.id));
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const { confirm, confirmDialog } = useConfirm();
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!contextMenu) return;
+    // Move focus into the menu so Tab/Shift+Tab and Enter work immediately
+    // for keyboard users, without requiring a Tab press first to reach it
+    // from wherever focus happened to be.
+    menuRef.current?.querySelector<HTMLButtonElement>("button:not([disabled])")?.focus();
     const close = () => setContextMenu(null);
+    const onKeyDown = (e: KeyboardEvent) => {
+      // Previously closed on ANY keydown, which meant ArrowDown/Enter -
+      // the natural way to navigate a menu from the keyboard - dismissed
+      // it instead of navigating. Only Escape should close it here; Tab
+      // and Enter are left to behave normally on whichever menu button
+      // currently has focus.
+      if (e.key === "Escape") close();
+    };
     window.addEventListener("click", close);
     window.addEventListener("contextmenu", close);
-    window.addEventListener("keydown", close);
+    window.addEventListener("keydown", onKeyDown);
     return () => {
       window.removeEventListener("click", close);
       window.removeEventListener("contextmenu", close);
-      window.removeEventListener("keydown", close);
+      window.removeEventListener("keydown", onKeyDown);
     };
   }, [contextMenu]);
 
@@ -122,9 +138,14 @@ export default function HostTree(props: HostTreeProps) {
                 <button
                   type="button"
                   title="Delete group"
-                  onClick={() => {
-                    if (confirm(`Delete group "${group.name}"? Hosts inside become ungrouped.`)) {
-                      deleteGroup(group.id);
+                  onClick={async () => {
+                    setDeleteError(null);
+                    if (await confirm(`Delete group "${group.name}"? Hosts inside become ungrouped.`, { danger: true })) {
+                      try {
+                        await deleteGroup(group.id);
+                      } catch (err) {
+                        setDeleteError(String(err));
+                      }
                     }
                   }}
                   className="rounded px-1 text-xs text-neutral-500 hover:text-red-600"
@@ -180,9 +201,14 @@ export default function HostTree(props: HostTreeProps) {
               <button
                 type="button"
                 title="Delete host"
-                onClick={() => {
-                  if (confirm(`Delete host "${host.label}"?`)) {
-                    deleteHost(host.id);
+                onClick={async () => {
+                  setDeleteError(null);
+                  if (await confirm(`Delete host "${host.label}"?`, { danger: true })) {
+                    try {
+                      await deleteHost(host.id);
+                    } catch (err) {
+                      setDeleteError(String(err));
+                    }
                   }
                 }}
                 className="rounded px-1 text-xs text-neutral-500 hover:text-red-600"
@@ -198,6 +224,8 @@ export default function HostTree(props: HostTreeProps) {
 
   const menu = contextMenu && (
     <div
+      ref={menuRef}
+      role="menu"
       className="fixed z-50 w-40 rounded-md border border-neutral-200 bg-white py-1 text-sm shadow-lg dark:border-neutral-700 dark:bg-neutral-800"
       style={{ top: contextMenu.y, left: contextMenu.x }}
       onClick={(e) => e.stopPropagation()}
@@ -232,11 +260,16 @@ export default function HostTree(props: HostTreeProps) {
       </button>
       <button
         type="button"
-        onClick={() => {
+        onClick={async () => {
           const host = contextMenu.host;
           setContextMenu(null);
-          if (confirm(`Delete host "${host.label}"?`)) {
-            deleteHost(host.id);
+          setDeleteError(null);
+          if (await confirm(`Delete host "${host.label}"?`, { danger: true })) {
+            try {
+              await deleteHost(host.id);
+            } catch (err) {
+              setDeleteError(String(err));
+            }
           }
         }}
         className="block w-full px-3 py-1.5 text-left text-red-600 hover:bg-neutral-100 dark:hover:bg-neutral-700"
@@ -248,16 +281,25 @@ export default function HostTree(props: HostTreeProps) {
 
   if (groups.length === 0 && hosts.length === 0) {
     return (
-      <p className="px-2 py-4 text-sm text-neutral-400">
-        No hosts yet. Use "New host" above to add one.
-      </p>
+      <>
+        <p className="px-2 py-4 text-sm text-neutral-400">
+          No hosts yet. Use "New host" above to add one.
+        </p>
+        {confirmDialog}
+      </>
     );
   }
 
   return (
     <div>
+      {deleteError && (
+        <p className="mx-2 mb-2 rounded-md bg-red-50 px-2 py-1.5 text-xs text-red-700 dark:bg-red-950 dark:text-red-400">
+          {deleteError}
+        </p>
+      )}
       {renderLevel(null, 0)}
       {menu}
+      {confirmDialog}
     </div>
   );
 }

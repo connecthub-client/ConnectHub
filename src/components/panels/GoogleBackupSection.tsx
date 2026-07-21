@@ -9,6 +9,7 @@ import {
   googleStatus,
 } from "../../lib/tauri-bridge";
 import { primaryButtonClass } from "../forms/formStyles";
+import { useConfirm } from "../common/useConfirm";
 
 type ActionState = "idle" | "signing-in" | "backing-up" | "restoring" | "signing-out";
 
@@ -17,6 +18,7 @@ export default function GoogleBackupSection() {
   const [action, setAction] = useState<ActionState>("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { confirm, confirmDialog } = useConfirm();
 
   useEffect(() => {
     googleStatus()
@@ -80,11 +82,11 @@ export default function GoogleBackupSection() {
   }
 
   async function handleRestore() {
-    if (
-      !confirm(
-        "Restore from Google Drive? This replaces every host, identity, key, and snippet on this device with the backed-up copy. This cannot be undone.",
-      )
-    ) {
+    const confirmed = await confirm(
+      "Restore from Google Drive? This replaces every host, identity, key, and snippet on this device with the backed-up copy. This cannot be undone.",
+      { danger: true, confirmLabel: "Restore" },
+    );
+    if (!confirmed) {
       return;
     }
     setError(null);
@@ -178,6 +180,7 @@ export default function GoogleBackupSection() {
         <p className="mt-3 text-sm text-emerald-600 dark:text-emerald-400">{message}</p>
       )}
       {error && <p className="mt-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {confirmDialog}
     </div>
   );
 }

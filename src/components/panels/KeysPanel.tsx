@@ -1,4 +1,7 @@
+import { useState } from "react";
+import { SshKey } from "../../lib/tauri-bridge";
 import { useHostsStore } from "../../state/hostsStore";
+import { useConfirm } from "../common/useConfirm";
 
 interface KeysPanelProps {
   onNew: () => void;
@@ -7,6 +10,19 @@ interface KeysPanelProps {
 export default function KeysPanel({ onNew }: KeysPanelProps) {
   const keys = useHostsStore((s) => s.keys);
   const deleteKey = useHostsStore((s) => s.deleteKey);
+  const { confirm, confirmDialog } = useConfirm();
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function handleDelete(key: SshKey) {
+    setDeleteError(null);
+    if (await confirm(`Delete key "${key.label}"? Identities using it will need a replacement.`, { danger: true })) {
+      try {
+        await deleteKey(key.id);
+      } catch (err) {
+        setDeleteError(String(err));
+      }
+    }
+  }
 
   return (
     <div>
@@ -20,6 +36,12 @@ export default function KeysPanel({ onNew }: KeysPanelProps) {
           New key
         </button>
       </div>
+
+      {deleteError && (
+        <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
+          {deleteError}
+        </p>
+      )}
 
       {keys.length === 0 ? (
         <p className="text-sm text-neutral-400">
@@ -40,15 +62,7 @@ export default function KeysPanel({ onNew }: KeysPanelProps) {
               <div className="flex shrink-0 gap-3 text-sm">
                 <button
                   type="button"
-                  onClick={() => {
-                    if (
-                      confirm(
-                        `Delete key "${key.label}"? Identities using it will need a replacement.`,
-                      )
-                    ) {
-                      deleteKey(key.id);
-                    }
-                  }}
+                  onClick={() => handleDelete(key)}
                   className="text-neutral-500 hover:text-red-600"
                 >
                   Delete
@@ -58,6 +72,7 @@ export default function KeysPanel({ onNew }: KeysPanelProps) {
           ))}
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }

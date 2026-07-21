@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { Identity } from "../../lib/tauri-bridge";
 import { useHostsStore } from "../../state/hostsStore";
+import { useConfirm } from "../common/useConfirm";
 
 interface IdentitiesPanelProps {
   onNew: () => void;
@@ -10,6 +12,19 @@ export default function IdentitiesPanel({ onNew, onEdit }: IdentitiesPanelProps)
   const identities = useHostsStore((s) => s.identities);
   const deleteIdentity = useHostsStore((s) => s.deleteIdentity);
   const keys = useHostsStore((s) => s.keys);
+  const { confirm, confirmDialog } = useConfirm();
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function handleDelete(identity: Identity) {
+    setDeleteError(null);
+    if (await confirm(`Delete identity "${identity.label}"?`, { danger: true })) {
+      try {
+        await deleteIdentity(identity.id);
+      } catch (err) {
+        setDeleteError(String(err));
+      }
+    }
+  }
 
   return (
     <div>
@@ -23,6 +38,12 @@ export default function IdentitiesPanel({ onNew, onEdit }: IdentitiesPanelProps)
           New identity
         </button>
       </div>
+
+      {deleteError && (
+        <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
+          {deleteError}
+        </p>
+      )}
 
       {identities.length === 0 ? (
         <p className="text-sm text-neutral-400">
@@ -54,11 +75,7 @@ export default function IdentitiesPanel({ onNew, onEdit }: IdentitiesPanelProps)
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    if (confirm(`Delete identity "${identity.label}"?`)) {
-                      deleteIdentity(identity.id);
-                    }
-                  }}
+                  onClick={() => handleDelete(identity)}
                   className="text-neutral-500 hover:text-red-600"
                 >
                   Delete
@@ -68,6 +85,7 @@ export default function IdentitiesPanel({ onNew, onEdit }: IdentitiesPanelProps)
           ))}
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }

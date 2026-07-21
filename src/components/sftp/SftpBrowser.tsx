@@ -18,6 +18,8 @@ import {
   sftpUpload,
 } from "../../lib/tauri-bridge";
 import { useHostsStore } from "../../state/hostsStore";
+import { useConfirm } from "../common/useConfirm";
+import { usePrompt } from "../common/usePrompt";
 
 interface SftpBrowserProps {
   host: Host;
@@ -207,6 +209,17 @@ export default function SftpBrowser({ host, onClose }: SftpBrowserProps) {
 
   const [transferring, setTransferring] = useState(false);
   const [transferError, setTransferError] = useState<string | null>(null);
+  // Name of the file currently mid-transfer, and which direction - the
+  // backend doesn't report byte-level progress (sftpUpload/sftpDownload
+  // resolve only once the whole file has moved), so this is an
+  // indeterminate "something is happening, to this file" indicator rather
+  // than a real percentage.
+  const [transferringEntry, setTransferringEntry] = useState<{ name: string; direction: "upload" | "download" } | null>(
+    null,
+  );
+
+  const { confirm, confirmDialog } = useConfirm();
+  const { prompt, promptDialog } = usePrompt();
 
   const refreshLocal = useCallback((path: string) => {
     setLocalLoading(true);
@@ -290,6 +303,7 @@ export default function SftpBrowser({ host, onClose }: SftpBrowserProps) {
     const entry = localEntries.find((e) => e.path === selectedLocal);
     if (!entry || entry.isDir) return;
     setTransferring(true);
+    setTransferringEntry({ name: entry.name, direction: "upload" });
     setTransferError(null);
     try {
       await sftpUpload(sftpIdRef.current, entry.path, joinPath(remotePath, entry.name));
@@ -298,6 +312,7 @@ export default function SftpBrowser({ host, onClose }: SftpBrowserProps) {
       setTransferError(String(e));
     } finally {
       setTransferring(false);
+      setTransferringEntry(null);
     }
   }
 
@@ -306,6 +321,7 @@ export default function SftpBrowser({ host, onClose }: SftpBrowserProps) {
     const entry = remoteEntries.find((e) => e.path === selectedRemote);
     if (!entry || entry.isDir) return;
     setTransferring(true);
+    setTransferringEntry({ name: entry.name, direction: "download" });
     setTransferError(null);
     try {
       await sftpDownload(sftpIdRef.current, entry.path, joinPath(localPath, entry.name));
@@ -314,53 +330,56 @@ export default function SftpBrowser({ host, onClose }: SftpBrowserProps) {
       setTransferError(String(e));
     } finally {
       setTransferring(false);
+      setTransferringEntry(null);
     }
   }
 
-  function handleLocalNewFolder() {
-    const name = prompt("New folder name:");
+  async function handleLocalNewFolder() {
+    const name = await prompt("New folder name:");
     if (!name) return;
     localMkdir(joinPath(localPath, name))
       .then(() => refreshLocal(localPath))
       .catch((e) => setLocalError(String(e)));
   }
 
-  function handleRemoteNewFolder() {
+  async function handleRemoteNewFolder() {
     if (!sftpIdRef.current) return;
-    const name = prompt("New folder name:");
+    const name = await prompt("New folder name:");
     if (!name) return;
     sftpMkdir(sftpIdRef.current, joinPath(remotePath, name))
       .then(() => refreshRemote(remotePath))
       .catch((e) => setRemoteError(String(e)));
   }
 
-  function handleLocalRename(entry: BrowserEntry) {
-    const name = prompt("Rename to:", entry.name);
+  async function handleLocalRename(entry: BrowserEntry) {
+    const name = await prompt("Rename to:", entry.name);
     if (!name || name === entry.name) return;
     localRename(entry.path, joinPath(localPath, name))
       .then(() => refreshLocal(localPath))
       .catch((e) => setLocalError(String(e)));
   }
 
-  function handleRemoteRename(entry: BrowserEntry) {
+  async function handleRemoteRename(entry: BrowserEntry) {
     if (!sftpIdRef.current) return;
-    const name = prompt("Rename to:", entry.name);
+    const name = await prompt("Rename to:", entry.name);
     if (!name || name === entry.name) return;
     sftpRename(sftpIdRef.current, entry.path, joinPath(remotePath, name))
       .then(() => refreshRemote(remotePath))
       .catch((e) => setRemoteError(String(e)));
   }
 
-  function handleLocalDelete(entry: BrowserEntry) {
-    if (!confirm(`Delete ${entry.isDir ? "folder" : "file"} "${entry.name}"?`)) return;
+  async function handleLocalDelete(entry: BrowserEntry) {
+    const ok = await confirm(`Delete ${entry.isDir ? "folder" : "file"} "${entry.name}"?`, { danger: true });
+    if (!ok) return;
     localDelete(entry.path, entry.isDir)
       .then(() => refreshLocal(localPath))
       .catch((e) => setLocalError(String(e)));
   }
 
-  function handleRemoteDelete(entry: BrowserEntry) {
+  async function handleRemoteDelete(entry: BrowserEntry) {
     if (!sftpIdRef.current) return;
-    if (!confirm(`Delete ${entry.isDir ? "folder" : "file"} "${entry.name}"?`)) return;
+    const ok = await confirm(`Delete ${entry.isDir ? "folder" : "file"} "${entry.name}"?`, { danger: true });
+    if (!ok) return;
     const op = entry.isDir ? sftpRemoveDir : sftpRemoveFile;
     op(sftpIdRef.current, entry.path)
       .then(() => refreshRemote(remotePath))
@@ -374,9 +393,9 @@ export default function SftpBrowser({ host, onClose }: SftpBrowserProps) {
           <span
             className={`h-2 w-2 rounded-full ${
               status === "connected"
-                ? "bg-green-500"
+                ? "bg-emerald-500"
                 : status === "connecting"
-                  ? "bg-yellow-500"
+                  ? "bg-amber-500"
                   : "bg-red-500"
             }`}
           />
@@ -439,6 +458,14 @@ export default function SftpBrowser({ host, onClose }: SftpBrowserProps) {
           >
             ← Download
           </button>
+          {transferringEntry && (
+            <div className="mt-1 w-full px-1 text-center" title={transferringEntry.name}>
+              <div className="h-1 w-full animate-pulse rounded-full bg-teal-500" />
+              <p className="mt-1 truncate text-[10px] text-neutral-500 dark:text-neutral-400">
+                {transferringEntry.direction === "upload" ? "↑" : "↓"} {transferringEntry.name}
+              </p>
+            </div>
+          )}
         </div>
 
         <FilePane
@@ -456,6 +483,8 @@ export default function SftpBrowser({ host, onClose }: SftpBrowserProps) {
           onRefresh={() => refreshRemote(remotePath)}
         />
       </div>
+      {confirmDialog}
+      {promptDialog}
     </div>
   );
 }

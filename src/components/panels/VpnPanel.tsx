@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { VpnProfile, VpnState } from "../../lib/tauri-bridge";
 import { useVpnStore } from "../../state/vpnStore";
+import { useConfirm } from "../common/useConfirm";
 
 interface VpnPanelProps {
   onNew: () => void;
@@ -52,6 +53,7 @@ export default function VpnPanel({ onNew, onEdit }: VpnPanelProps) {
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [disconnectingAll, setDisconnectingAll] = useState(false);
+  const { confirm, confirmDialog } = useConfirm();
 
   const anyBusy = Object.values(statuses).some(
     (s) => s.state === "connecting" || s.state === "disconnecting",
@@ -192,9 +194,14 @@ export default function VpnPanel({ onNew, onEdit }: VpnPanelProps) {
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      if (confirm(`Delete VPN profile "${profile.label}"?`)) {
-                        deleteProfile(profile.id);
+                    onClick={async () => {
+                      setActionError(null);
+                      if (await confirm(`Delete VPN profile "${profile.label}"?`, { danger: true })) {
+                        try {
+                          await deleteProfile(profile.id);
+                        } catch (err) {
+                          setActionError(String(err));
+                        }
                       }
                     }}
                     className="text-neutral-500 hover:text-red-600"
@@ -207,6 +214,7 @@ export default function VpnPanel({ onNew, onEdit }: VpnPanelProps) {
           })}
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }

@@ -1,6 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Snippet } from "../../lib/tauri-bridge";
 import { useSnippetsStore } from "../../state/snippetsStore";
+import { useConfirm } from "../common/useConfirm";
 
 interface SnippetsPanelProps {
   onNew: () => void;
@@ -12,10 +13,23 @@ export default function SnippetsPanel({ onNew, onEdit, onRun }: SnippetsPanelPro
   const snippets = useSnippetsStore((s) => s.snippets);
   const loadSnippets = useSnippetsStore((s) => s.loadSnippets);
   const deleteSnippet = useSnippetsStore((s) => s.deleteSnippet);
+  const { confirm, confirmDialog } = useConfirm();
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     loadSnippets();
   }, [loadSnippets]);
+
+  async function handleDelete(snippet: Snippet) {
+    setDeleteError(null);
+    if (await confirm(`Delete snippet "${snippet.label}"?`, { danger: true })) {
+      try {
+        await deleteSnippet(snippet.id);
+      } catch (err) {
+        setDeleteError(String(err));
+      }
+    }
+  }
 
   return (
     <div>
@@ -29,6 +43,12 @@ export default function SnippetsPanel({ onNew, onEdit, onRun }: SnippetsPanelPro
           New snippet
         </button>
       </div>
+
+      {deleteError && (
+        <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
+          {deleteError}
+        </p>
+      )}
 
       {snippets.length === 0 ? (
         <p className="text-sm text-neutral-400">
@@ -63,11 +83,7 @@ export default function SnippetsPanel({ onNew, onEdit, onRun }: SnippetsPanelPro
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    if (confirm(`Delete snippet "${snippet.label}"?`)) {
-                      deleteSnippet(snippet.id);
-                    }
-                  }}
+                  onClick={() => handleDelete(snippet)}
                   className="text-neutral-500 hover:text-red-600"
                 >
                   Delete
@@ -77,6 +93,7 @@ export default function SnippetsPanel({ onNew, onEdit, onRun }: SnippetsPanelPro
           ))}
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }
