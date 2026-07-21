@@ -32,6 +32,21 @@ pub enum AppError {
     },
     #[error("SSH error: {0}")]
     Ssh(String),
+    // More specific SSH connect-phase failures, classified from the
+    // underlying io::Error/russh::Error at the one place (connect_and_authenticate)
+    // that has enough context to do so - see ssh::session::classify_connect_error.
+    // Kept distinct from the Ssh(String) catch-all above so a caller (or a
+    // future frontend translation layer) can tell "the network refused the
+    // connection" apart from "we connected fine but auth was rejected"
+    // without string-matching an arbitrary message.
+    #[error("connection refused by {0}")]
+    ConnectionRefused(String),
+    #[error("connection to {0} timed out")]
+    ConnectionTimedOut(String),
+    #[error("could not resolve hostname {0}")]
+    DnsResolutionFailed(String),
+    #[error("authentication failed: {0}")]
+    AuthenticationFailed(String),
     #[error("session not found")]
     SessionNotFound,
     #[error("CSV error: {0}")]

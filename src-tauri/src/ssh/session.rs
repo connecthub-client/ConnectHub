@@ -75,6 +75,41 @@ impl From<HandlerError> for AppError {
     }
 }
 
+// Classifies a connect-phase failure into a more specific AppError variant
+// where the underlying io::Error/russh::Error makes that possible, with the
+// target host baked into the message - this is the one call site with that
+// context. Anything not specifically recognized falls back to the generic
+// Ssh(String) catch-all with the original error text, same as before.
+fn classify_connect_error(e: HandlerError, hostname: &str, port: u16) -> AppError {
+    let target = format!("{hostname}:{port}");
+    let HandlerError::Russh(russh_err) = e else {
+        return AppError::from(e);
+    };
+    match &russh_err {
+        russh::Error::IO(io_err) => match io_err.kind() {
+            std::io::ErrorKind::ConnectionRefused => {
+                AppError::ConnectionRefused(format!("{target} ({io_err})"))
+            }
+            std::io::ErrorKind::TimedOut => {
+                AppError::ConnectionTimedOut(format!("{target} ({io_err})"))
+            }
+            // Rust doesn't expose a stable ErrorKind for DNS/getaddrinfo
+            // failures - this is a best-effort heuristic over the OS error
+            // text rather than a guaranteed classification.
+            _ if io_err.to_string().contains("lookup address")
+                || io_err.to_string().contains("Name or service not known") =>
+            {
+                AppError::DnsResolutionFailed(format!("{hostname} ({io_err})"))
+            }
+            _ => AppError::Ssh(format!("network error connecting to {target}: {io_err}")),
+        },
+        russh::Error::ConnectionTimeout => {
+            AppError::ConnectionTimedOut(format!("{target} (no response during handshake)"))
+        }
+        _ => AppError::Ssh(russh_err.to_string()),
+    }
+}
+
 pub(super) struct ClientHandler {
     db_path: PathBuf,
     hostname: String,
@@ -141,6 +176,24 @@ enum ResolvedAuth {
     Agent,
 }
 
+// `Config::default()` leaves keepalives off, so a connection that goes dead
+// silently (laptop sleep, a NAT/firewall dropping an idle mapping, an
+// unplugged network) is never detected at the SSH layer - the terminal just
+// hangs until an OS-level TCP error eventually surfaces, if it ever does.
+// Sending a keepalive every 30s and giving up after 3 unanswered ones (~90s)
+// turns that into a definite, timely SessionEvent::Error instead. This is
+// deliberately just a keepalive, not an inactivity_timeout: a genuinely
+// idle-but-healthy session (e.g. sitting at a shell prompt) must not be
+// killed just because no data has been sent - only a connection that stops
+// *responding* should be.
+fn client_config() -> Config {
+    Config {
+        keepalive_interval: Some(std::time::Duration::from_secs(30)),
+        keepalive_max: 3,
+        ..Config::default()
+    }
+}
+
 struct ConnectParams {
     hostname: String,
     port: u16,
@@ -193,7 +246,7 @@ pub(super) async fn connect_and_authenticate(
 ) -> AppResult<client::Handle<ClientHandler>> {
     let params = gather_connect_params(app, host_id)?;
 
-    let config = Arc::new(Config::default());
+    let config = Arc::new(client_config());
     let handler = ClientHandler {
         db_path: params.known_hosts_db_path,
         hostname: params.hostname.clone(),
@@ -203,20 +256,20 @@ pub(super) async fn connect_and_authenticate(
 
     let mut handle = client::connect(config, (params.hostname.as_str(), params.port), handler)
         .await
-        .map_err(AppError::from)?;
+        .map_err(|e| classify_connect_error(e, &params.hostname, params.port))?;
 
     let authenticated = match params.auth {
         ResolvedAuth::Password(password) => handle
             .authenticate_password(&params.username, password)
             .await
-            .map_err(|e| AppError::Ssh(e.to_string()))?,
+            .map_err(|e| AppError::AuthenticationFailed(e.to_string()))?,
         ResolvedAuth::PrivateKey { pem, passphrase } => {
             let key_pair = russh::keys::decode_secret_key(&pem, passphrase.as_deref())
                 .map_err(|e| AppError::Ssh(format!("failed to load private key: {e}")))?;
             handle
                 .authenticate_publickey(&params.username, Arc::new(key_pair))
                 .await
-                .map_err(|e| AppError::Ssh(e.to_string()))?
+                .map_err(|e| AppError::AuthenticationFailed(e.to_string()))?
         }
         ResolvedAuth::Agent => {
             return Err(AppError::Ssh(
@@ -226,7 +279,10 @@ pub(super) async fn connect_and_authenticate(
     };
 
     if !authenticated {
-        return Err(AppError::Ssh("authentication failed".into()));
+        return Err(AppError::AuthenticationFailed(format!(
+            "server rejected the credentials for user \"{}\"",
+            params.username
+        )));
     }
 
     {
@@ -316,6 +372,66 @@ pub async fn connect(
     });
 
     Ok(session_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn client_config_enables_keepalive_without_an_inactivity_timeout() {
+        let config = client_config();
+        assert_eq!(config.keepalive_interval, Some(std::time::Duration::from_secs(30)));
+        assert_eq!(config.keepalive_max, 3);
+        assert_eq!(
+            config.inactivity_timeout, None,
+            "must not time out a healthy but idle session"
+        );
+    }
+
+    #[test]
+    fn classify_connect_error_recognizes_connection_refused() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::ConnectionRefused, "connection refused");
+        let err = classify_connect_error(HandlerError::Russh(russh::Error::IO(io_err)), "10.0.0.5", 22);
+        assert!(matches!(err, AppError::ConnectionRefused(msg) if msg.contains("10.0.0.5:22")));
+    }
+
+    #[test]
+    fn classify_connect_error_recognizes_timeout() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::TimedOut, "timed out");
+        let err = classify_connect_error(HandlerError::Russh(russh::Error::IO(io_err)), "10.0.0.5", 22);
+        assert!(matches!(err, AppError::ConnectionTimedOut(msg) if msg.contains("10.0.0.5:22")));
+    }
+
+    #[test]
+    fn classify_connect_error_recognizes_russh_connection_timeout_variant() {
+        let err = classify_connect_error(HandlerError::Russh(russh::Error::ConnectionTimeout), "10.0.0.5", 22);
+        assert!(matches!(err, AppError::ConnectionTimedOut(msg) if msg.contains("10.0.0.5:22")));
+    }
+
+    #[test]
+    fn classify_connect_error_recognizes_dns_failure_heuristically() {
+        let io_err = std::io::Error::other("failed to lookup address information: Name or service not known");
+        let err = classify_connect_error(HandlerError::Russh(russh::Error::IO(io_err)), "no-such-host.invalid", 22);
+        assert!(matches!(err, AppError::DnsResolutionFailed(msg) if msg.contains("no-such-host.invalid")));
+    }
+
+    #[test]
+    fn classify_connect_error_falls_back_to_generic_ssh_error() {
+        let err = classify_connect_error(HandlerError::Russh(russh::Error::Disconnect), "10.0.0.5", 22);
+        assert!(matches!(err, AppError::Ssh(_)));
+    }
+
+    #[test]
+    fn classify_connect_error_passes_through_host_key_rejection_unchanged() {
+        let app_err = AppError::HostKeyMismatch {
+            hostname: "10.0.0.5".into(),
+            expected: "AAA".into(),
+            got: "BBB".into(),
+        };
+        let err = classify_connect_error(HandlerError::HostKeyRejected(app_err), "10.0.0.5", 22);
+        assert!(matches!(err, AppError::HostKeyMismatch { .. }));
+    }
 }
 
 #[cfg(test)]
