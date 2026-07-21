@@ -44,6 +44,16 @@ interface HostsState {
 // Mutations refetch the full collection set afterward rather than patching
 // state in place - the dataset is small (a personal host list) and this
 // avoids subtle bugs from the backend's ON DELETE SET NULL cascades.
+//
+// Every mutation below calls loadAll() independently, so two overlapping
+// ones (e.g. duplicating a host twice in quick succession, or editing one
+// while a delete is still in flight) fire overlapping loadAll() calls with
+// no guarantee they resolve in the order they started. loadRequestId
+// tracks which call is the most recent; a call whose response comes back
+// after a newer one has already started is discarded instead of
+// overwriting fresher state with a stale snapshot.
+let loadRequestId = 0;
+
 export const useHostsStore = create<HostsState>((set, get) => ({
   groups: [],
   hosts: [],
@@ -52,12 +62,14 @@ export const useHostsStore = create<HostsState>((set, get) => ({
   loaded: false,
 
   loadAll: async () => {
+    const requestId = ++loadRequestId;
     const [groups, hosts, identities, keys] = await Promise.all([
       bridge.groupList(),
       bridge.hostList(),
       bridge.identityList(),
       bridge.keyList(),
     ]);
+    if (requestId !== loadRequestId) return;
     set({ groups, hosts, identities, keys, loaded: true });
   },
 

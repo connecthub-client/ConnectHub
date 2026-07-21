@@ -19,11 +19,18 @@ interface SnippetsState {
   runOnHosts: (hostIds: string[], command: string) => Promise<HostExecResult[]>;
 }
 
+// Guards against overlapping loadSnippets() calls (e.g. two mutations in
+// quick succession) resolving out of order and overwriting fresher state
+// with a stale snapshot - same reasoning as hostsStore's loadRequestId.
+let loadRequestId = 0;
+
 export const useSnippetsStore = create<SnippetsState>((set, get) => ({
   snippets: [],
 
   loadSnippets: async () => {
+    const requestId = ++loadRequestId;
     const snippets = await snippetList();
+    if (requestId !== loadRequestId) return;
     set({ snippets });
   },
 

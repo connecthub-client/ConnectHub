@@ -38,6 +38,14 @@ function statusMap(list: VpnConnectionStatus[]): Record<string, VpnStatus> {
   return map;
 }
 
+// Shared by loadAll and refreshActive below (both write `statuses`, among
+// other fields) - guards against either resolving out of order relative to
+// the other, e.g. a poll-driven refreshActive() overlapping a mutation's
+// loadAll(). Whichever call started most recently wins; a call whose
+// response arrives after a newer one has already started is discarded
+// instead of overwriting fresher state with a stale snapshot.
+let requestId = 0;
+
 // Mutations refetch the full profile set afterward, matching hostsStore's
 // pattern - connection status is refreshed separately (see refreshActive)
 // since it changes independently of the profile records themselves.
@@ -48,16 +56,20 @@ export const useVpnStore = create<VpnStoreState>((set, get) => ({
   loaded: false,
 
   loadAll: async () => {
+    const thisRequest = ++requestId;
     const [profiles, active, setupInstalled] = await Promise.all([
       bridge.vpnProfileList(),
       bridge.vpnActiveStatuses(),
       bridge.vpnSetupStatus(),
     ]);
+    if (thisRequest !== requestId) return;
     set({ profiles, statuses: statusMap(active), setupInstalled, loaded: true });
   },
 
   refreshActive: async () => {
+    const thisRequest = ++requestId;
     const active = await bridge.vpnActiveStatuses();
+    if (thisRequest !== requestId) return;
     set({ statuses: statusMap(active) });
   },
 

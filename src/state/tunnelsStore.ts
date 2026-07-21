@@ -8,11 +8,18 @@ interface TunnelsState {
   stopTunnel: (tunnelId: string) => Promise<void>;
 }
 
+// Guards against overlapping loadTunnels() calls resolving out of order and
+// overwriting fresher state with a stale snapshot - same reasoning as
+// hostsStore's loadRequestId.
+let loadRequestId = 0;
+
 export const useTunnelsStore = create<TunnelsState>((set, get) => ({
   tunnels: [],
 
   loadTunnels: async () => {
+    const requestId = ++loadRequestId;
     const tunnels = await tunnelList();
+    if (requestId !== loadRequestId) return;
     set({ tunnels });
   },
 
