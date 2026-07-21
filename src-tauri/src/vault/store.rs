@@ -81,19 +81,6 @@ fn get_or_create_local_secret() -> AppResult<String> {
     get_or_create_local_secret_at(&local_secret_path()?)
 }
 
-// Overwrites the local secret with one restored from a backup, so the
-// vault it travelled with can be unlocked again on this machine.
-pub fn write_local_secret(secret: &str) -> AppResult<()> {
-    let path = local_secret_path()?;
-    std::fs::write(&path, secret)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
-    }
-    Ok(())
-}
-
 fn get_or_create_local_secret_at(path: &std::path::Path) -> AppResult<String> {
     if let Ok(existing) = std::fs::read_to_string(path) {
         let trimmed = existing.trim();

@@ -122,9 +122,51 @@ pub async fn backup_now(state: &AppState) -> AppResult<()> {
     Ok(())
 }
 
+// Writes `vault_bytes`/`secret` to disk and opens+unlocks the result -
+// shared by both the actual restore below and its rollback path, since both
+// need exactly the same "write, open, init schema, auto-unlock" sequence,
+// just with different bytes.
+fn write_and_open_vault(
+    db_path: &std::path::Path,
+    secret_path: &std::path::Path,
+    vault_bytes: &[u8],
+    secret: &str,
+) -> AppResult<(rusqlite::Connection, crate::vault::VaultKey)> {
+    std::fs::write(db_path, vault_bytes)?;
+    std::fs::write(secret_path, secret)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(secret_path, std::fs::Permissions::from_mode(0o600))?;
+    }
+
+    let conn = rusqlite::Connection::open(db_path)?;
+    data::init_schema(&conn)?;
+    crate::ssh::known_hosts::init_schema(&conn)?;
+    // `unlock`, not `auto_unlock`: the latter reads the secret from
+    // whatever `local_secret_path()` resolves to on this machine right
+    // now, ignoring `secret_path` above entirely - fine in production
+    // today since restore_from_drive always passes the real path for
+    // both, but fragile, and wrong for rollback (which needs to unlock
+    // with the pre-restore secret we already have in hand, not re-read
+    // whatever is currently on disk). A vault reaching this function was
+    // already auto_unlock'd (and therefore already past the legacy-
+    // password migration) on whichever device backed it up, so the
+    // legacy-password fallback auto_unlock also handles isn't needed here.
+    let key = store::unlock(&conn, secret)?;
+    Ok((conn, key))
+}
+
 // Downloads the vault + local secret from Drive and swaps them in for the
 // ones this device currently has, then re-derives the vault key so the
 // restored data is immediately usable without restarting the app.
+//
+// The pre-restore vault.db/local secret are snapshotted before any
+// destructive write, and restored if anything below fails - without this,
+// a failure partway through (disk full, a truncated/corrupt download,
+// auto_unlock rejecting the downloaded pair) would leave real files on
+// disk half-written or mismatched, with the running app stuck on the
+// throwaway in-memory connection needed to release the file handle first.
 pub async fn restore_from_drive(state: &AppState) -> AppResult<()> {
     let access_token = get_access_token(state).await?;
 
@@ -144,6 +186,10 @@ pub async fn restore_from_drive(state: &AppState) -> AppResult<()> {
     let secret = String::from_utf8(secret_bytes)
         .map_err(|_| AppError::Google("restored secret file is not valid UTF-8".into()))?;
 
+    let secret_path = store::local_secret_path()?;
+    let original_vault_bytes = std::fs::read(&state.db_path)?;
+    let original_secret = std::fs::read_to_string(&secret_path)?;
+
     // Release the live connection's handle on vault.db before overwriting
     // the file out from under it.
     {
@@ -151,16 +197,95 @@ pub async fn restore_from_drive(state: &AppState) -> AppResult<()> {
         *guard = rusqlite::Connection::open_in_memory()?;
     }
 
-    std::fs::write(&state.db_path, &vault_bytes)?;
-    store::write_local_secret(&secret)?;
+    match write_and_open_vault(&state.db_path, &secret_path, &vault_bytes, &secret) {
+        Ok((conn, key)) => {
+            *state.db.lock().unwrap() = conn;
+            *state.vault_key.lock().unwrap() = Some(key);
+            Ok(())
+        }
+        Err(e) => {
+            // Best-effort: if the rollback write itself also fails, the
+            // original error `e` is still what gets reported, but we've at
+            // least tried to leave the user's real vault in place rather
+            // than the half-restored one.
+            if let Ok((conn, key)) =
+                write_and_open_vault(&state.db_path, &secret_path, &original_vault_bytes, &original_secret)
+            {
+                *state.db.lock().unwrap() = conn;
+                *state.vault_key.lock().unwrap() = Some(key);
+            }
+            Err(e)
+        }
+    }
+}
 
-    let new_conn = rusqlite::Connection::open(&state.db_path)?;
-    data::init_schema(&new_conn)?;
-    crate::ssh::known_hosts::init_schema(&new_conn)?;
-    let key = store::auto_unlock(&new_conn)?;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    *state.db.lock().unwrap() = new_conn;
-    *state.vault_key.lock().unwrap() = Some(key);
+    #[test]
+    fn write_and_open_vault_opens_and_unlocks_a_valid_vault() {
+        let dir = std::env::temp_dir().join(format!("connecthub-test-restore-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db_path = dir.join("vault.db");
+        let secret_path = dir.join(".local_secret");
 
-    Ok(())
+        let secret = "original-secret-value";
+        let vault_bytes = {
+            let conn = rusqlite::Connection::open(&db_path).unwrap();
+            store::init_schema(&conn).unwrap();
+            store::create(&conn, secret).unwrap();
+            drop(conn);
+            std::fs::read(&db_path).unwrap()
+        };
+        std::fs::remove_file(&db_path).unwrap();
+
+        let (_, _key) = write_and_open_vault(&db_path, &secret_path, &vault_bytes, secret)
+            .expect("a valid vault + matching secret must open and unlock");
+
+        assert_eq!(std::fs::read_to_string(&secret_path).unwrap(), secret);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn rollback_after_a_failed_restore_recovers_the_original_vault() {
+        let dir = std::env::temp_dir().join(format!("connecthub-test-restore-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db_path = dir.join("vault.db");
+        let secret_path = dir.join(".local_secret");
+
+        // Set up a genuinely-working "original" vault, as if this were the
+        // state right before a restore was attempted.
+        let original_secret = "original-secret-value";
+        {
+            let conn = rusqlite::Connection::open(&db_path).unwrap();
+            store::init_schema(&conn).unwrap();
+            store::create(&conn, original_secret).unwrap();
+        }
+        std::fs::write(&secret_path, original_secret).unwrap();
+        let original_vault_bytes = std::fs::read(&db_path).unwrap();
+
+        // A "restored" vault paired with the wrong secret must fail to
+        // unlock (simulates a corrupt download or a mismatched pair)
+        // without touching the caller's snapshot of the original bytes.
+        let bad_vault_bytes = {
+            let bad_dir = dir.join("bad");
+            std::fs::create_dir_all(&bad_dir).unwrap();
+            let bad_db = bad_dir.join("vault.db");
+            let conn = rusqlite::Connection::open(&bad_db).unwrap();
+            store::init_schema(&conn).unwrap();
+            store::create(&conn, "a-completely-different-secret").unwrap();
+            drop(conn);
+            std::fs::read(&bad_db).unwrap()
+        };
+        let result = write_and_open_vault(&db_path, &secret_path, &bad_vault_bytes, original_secret);
+        assert!(result.is_err(), "wrong secret for the downloaded vault must fail to unlock");
+
+        // Rollback: writing the ORIGINAL snapshot back must succeed and
+        // unlock exactly as it did before the failed restore.
+        let (_, _key) = write_and_open_vault(&db_path, &secret_path, &original_vault_bytes, original_secret)
+            .expect("rolling back to the original vault bytes must succeed");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }
