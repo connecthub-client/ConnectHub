@@ -225,6 +225,137 @@ async fn run_dynamic(handle: Handle<ClientHandler>, listener: TcpListener, mut c
 }
 
 #[cfg(test)]
+mod tests {
+    // Hermetic equivalent of live_sshd_tests::local_forward_reaches_real_sshd
+    // below, against the in-process TestServer instead of a real system
+    // sshd - runs in every normal `cargo test`. The tunnel's target is
+    // TestServer's own port (see test_support.rs's channel_open_direct_tcpip):
+    // connecting to it - even from the server's own process - is just a
+    // plain TCP connection that receives the SSH version banner as its
+    // first bytes, the same trick the real-sshd test uses by targeting
+    // port 22 on the same host it's tunneling through. Remote and dynamic
+    // forwarding aren't covered hermetically yet - see ROADMAP.md.
+    use super::*;
+    use crate::data::{hosts, identities, ssh_keys};
+    use crate::models::host::HostInput;
+    use crate::models::identity::{AuthMethod, IdentityInput};
+    use crate::models::ssh_key::ImportKeyInput;
+    use crate::ssh::test_support::TestServer;
+    use crate::state::AppState;
+    use crate::vault::kdf::test_key;
+    use tokio::io::AsyncReadExt;
+    use tokio::net::TcpStream;
+
+    async fn build_app_state(test_server: &TestServer) -> AppState {
+        let db_path = std::env::temp_dir().join(format!("connecthub-test-tunnel-{}.db", Uuid::new_v4()));
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        crate::data::init_schema(&conn).unwrap();
+        crate::ssh::known_hosts::init_schema(&conn).unwrap();
+
+        let vault_key = test_key();
+
+        let ssh_key = ssh_keys::import(
+            &conn,
+            &vault_key,
+            ImportKeyInput {
+                label: "hermetic tunnel test key".into(),
+                private_key_pem: test_server.client_key_pem.clone(),
+                passphrase: None,
+            },
+        )
+        .unwrap();
+
+        let identity = identities::create(
+            &conn,
+            &vault_key,
+            IdentityInput {
+                label: "hermetic tunnel test identity".into(),
+                username: "test".into(),
+                auth_method: AuthMethod::PrivateKey,
+                ssh_key_id: Some(ssh_key.id),
+                password: None,
+            },
+        )
+        .unwrap();
+
+        hosts::create(
+            &conn,
+            HostInput {
+                group_id: None,
+                label: "loopback".into(),
+                hostname: "127.0.0.1".into(),
+                port: test_server.port,
+                identity_id: Some(identity.id),
+                jump_host_id: None,
+                vpn_profile_id: None,
+                color: None,
+                notes: None,
+                sort_order: 0,
+            },
+        )
+        .unwrap();
+
+        AppState {
+            db: std::sync::Mutex::new(conn),
+            db_path: db_path.clone(),
+            vault_key: std::sync::Mutex::new(Some(vault_key)),
+            sessions: Arc::new(DashMap::new()),
+            sftp_sessions: Arc::new(DashMap::new()),
+            tunnels: Arc::new(DashMap::new()),
+            vpn_connections: Arc::new(DashMap::new()),
+            google_login_cancel: std::sync::Mutex::new(None),
+        }
+    }
+
+    fn host_id_of(app: &AppState) -> Uuid {
+        let conn = app.db.lock().unwrap();
+        hosts::list(&conn).unwrap()[0].id
+    }
+
+    async fn read_ssh_banner(stream: &mut TcpStream) -> String {
+        let mut buf = [0u8; 32];
+        let n = tokio::time::timeout(std::time::Duration::from_secs(5), stream.read(&mut buf))
+            .await
+            .expect("timed out waiting for banner")
+            .expect("read failed");
+        String::from_utf8_lossy(&buf[..n]).to_string()
+    }
+
+    #[tokio::test]
+    async fn local_forward_reaches_test_server() {
+        let test_server = TestServer::start().await;
+        let app = build_app_state(&test_server).await;
+        let host_id = host_id_of(&app);
+        let tunnels: TunnelMap = app.tunnels.clone();
+
+        let tunnel_id = start(
+            &app,
+            tunnels.clone(),
+            TunnelInput {
+                host_id,
+                kind: TunnelKind::Local,
+                bind_address: "127.0.0.1".into(),
+                bind_port: 18122,
+                target_host: Some("127.0.0.1".into()),
+                target_port: Some(test_server.port),
+            },
+        )
+        .await
+        .expect("failed to start local tunnel");
+
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+        let mut stream = TcpStream::connect(("127.0.0.1", 18122))
+            .await
+            .expect("failed to connect through local tunnel");
+        let banner = read_ssh_banner(&mut stream).await;
+        assert!(banner.starts_with("SSH-"), "unexpected banner: {banner}");
+
+        stop(&tunnels, tunnel_id);
+    }
+}
+
+#[cfg(test)]
 mod live_sshd_tests {
     // Manual, environment-dependent check against the real local sshd - see
     // ssh::session::live_sshd_tests for the rationale (run with --ignored).

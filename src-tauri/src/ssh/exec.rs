@@ -84,6 +84,135 @@ pub async fn run_on_hosts(app: &AppState, host_ids: Vec<Uuid>, command: String) 
 }
 
 #[cfg(test)]
+mod tests {
+    // Hermetic equivalents of live_sshd_tests below, against the in-process
+    // TestServer instead of a real system sshd - runs in every normal
+    // `cargo test`. TestServer's fake "exec" handler doesn't interpret
+    // shell syntax (see test_support.rs): a plain command is echoed to
+    // stdout verbatim and exits 0, and `exit <n>` writes a fixed stderr
+    // message and exits with code n - so these use different command
+    // strings/assertions than the shell-interpreting live tests, not the
+    // same ones run against a fake server.
+    use super::*;
+    use crate::data::{hosts, identities, ssh_keys};
+    use crate::models::host::HostInput;
+    use crate::models::identity::{AuthMethod, IdentityInput};
+    use crate::models::ssh_key::ImportKeyInput;
+    use crate::ssh::test_support::TestServer;
+    use dashmap::DashMap;
+    use std::sync::Arc;
+
+    async fn build_app_state(test_server: &TestServer) -> AppState {
+        let db_path = std::env::temp_dir().join(format!("connecthub-test-exec-{}.db", Uuid::new_v4()));
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        crate::data::init_schema(&conn).unwrap();
+        crate::ssh::known_hosts::init_schema(&conn).unwrap();
+
+        let vault_key = crate::vault::kdf::test_key();
+
+        let ssh_key = ssh_keys::import(
+            &conn,
+            &vault_key,
+            ImportKeyInput {
+                label: "hermetic exec test key".into(),
+                private_key_pem: test_server.client_key_pem.clone(),
+                passphrase: None,
+            },
+        )
+        .unwrap();
+
+        let identity = identities::create(
+            &conn,
+            &vault_key,
+            IdentityInput {
+                label: "hermetic exec test identity".into(),
+                username: "test".into(),
+                auth_method: AuthMethod::PrivateKey,
+                ssh_key_id: Some(ssh_key.id),
+                password: None,
+            },
+        )
+        .unwrap();
+
+        hosts::create(
+            &conn,
+            HostInput {
+                group_id: None,
+                label: "loopback".into(),
+                hostname: "127.0.0.1".into(),
+                port: test_server.port,
+                identity_id: Some(identity.id),
+                jump_host_id: None,
+                vpn_profile_id: None,
+                color: None,
+                notes: None,
+                sort_order: 0,
+            },
+        )
+        .unwrap();
+
+        AppState {
+            db: std::sync::Mutex::new(conn),
+            db_path: db_path.clone(),
+            vault_key: std::sync::Mutex::new(Some(vault_key)),
+            sessions: Arc::new(DashMap::new()),
+            sftp_sessions: Arc::new(DashMap::new()),
+            tunnels: Arc::new(DashMap::new()),
+            vpn_connections: Arc::new(DashMap::new()),
+            google_login_cancel: std::sync::Mutex::new(None),
+        }
+    }
+
+    fn host_id_of(app: &AppState) -> Uuid {
+        let conn = app.db.lock().unwrap();
+        hosts::list(&conn).unwrap()[0].id
+    }
+
+    #[tokio::test]
+    async fn run_captures_stdout_and_exit_status() {
+        let test_server = TestServer::start().await;
+        let app = build_app_state(&test_server).await;
+        let host_id = host_id_of(&app);
+
+        let output = run(&app, host_id, "hello_from_exec".into()).await.expect("exec failed");
+
+        assert_eq!(output.stdout.trim(), "hello_from_exec");
+        assert_eq!(output.exit_status, Some(0));
+    }
+
+    #[tokio::test]
+    async fn run_captures_nonzero_exit_status_and_stderr() {
+        let test_server = TestServer::start().await;
+        let app = build_app_state(&test_server).await;
+        let host_id = host_id_of(&app);
+
+        let output = run(&app, host_id, "exit 7".into()).await.expect("exec failed");
+
+        assert!(output.stderr.contains("simulated failure"));
+        assert_eq!(output.exit_status, Some(7));
+    }
+
+    #[tokio::test]
+    async fn run_on_hosts_isolates_per_host_failures() {
+        let test_server = TestServer::start().await;
+        let app = build_app_state(&test_server).await;
+        let host_id = host_id_of(&app);
+        let bogus_host_id = Uuid::new_v4(); // not in the db at all
+
+        let results = run_on_hosts(&app, vec![host_id, bogus_host_id], "batch_test_ok".into()).await;
+
+        assert_eq!(results.len(), 2);
+        let ok_result = results.iter().find(|r| r.host_id == host_id).unwrap();
+        assert!(ok_result.error.is_none());
+        assert_eq!(ok_result.output.as_ref().unwrap().stdout.trim(), "batch_test_ok");
+
+        let bad_result = results.iter().find(|r| r.host_id == bogus_host_id).unwrap();
+        assert!(bad_result.output.is_none());
+        assert!(bad_result.error.is_some());
+    }
+}
+
+#[cfg(test)]
 mod live_sshd_tests {
     // Manual, environment-dependent check against the real local sshd - see
     // ssh::session::live_sshd_tests for the rationale (run with --ignored).

@@ -432,6 +432,131 @@ mod tests {
         let err = classify_connect_error(HandlerError::HostKeyRejected(app_err), "10.0.0.5", 22);
         assert!(matches!(err, AppError::HostKeyMismatch { .. }));
     }
+
+    // Exercises the exact production connect() function end to end - real
+    // AppState, real data-layer encryption, real request_pty+request_shell
+    // path, and a real (non-webview-backed) tauri::ipc::Channel - against
+    // the in-process TestServer instead of a real system sshd, so this runs
+    // in every normal `cargo test` rather than needing --ignored and manual
+    // setup like live_sshd_tests below. Mirrors that module's
+    // production_connect_flow_over_pty_and_shell as closely as possible so
+    // the two stay easy to compare.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn hermetic_production_connect_flow_over_pty_and_shell() {
+        use crate::data::{hosts, identities, ssh_keys};
+        use crate::models::host::HostInput;
+        use crate::models::identity::{AuthMethod, IdentityInput};
+        use crate::models::ssh_key::ImportKeyInput;
+        use crate::ssh::test_support::TestServer;
+        use crate::state::AppState;
+        use crate::vault::kdf::test_key;
+        use std::sync::mpsc as std_mpsc;
+
+        let test_server = TestServer::start().await;
+
+        let db_path = std::env::temp_dir().join(format!("connecthub-test-session-{}.db", Uuid::new_v4()));
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        crate::data::init_schema(&conn).unwrap();
+        crate::ssh::known_hosts::init_schema(&conn).unwrap();
+
+        let vault_key = test_key();
+
+        let ssh_key = ssh_keys::import(
+            &conn,
+            &vault_key,
+            ImportKeyInput {
+                label: "hermetic test key".into(),
+                private_key_pem: test_server.client_key_pem.clone(),
+                passphrase: None,
+            },
+        )
+        .unwrap();
+
+        let identity = identities::create(
+            &conn,
+            &vault_key,
+            IdentityInput {
+                label: "hermetic test identity".into(),
+                username: "test".into(),
+                auth_method: AuthMethod::PrivateKey,
+                ssh_key_id: Some(ssh_key.id),
+                password: None,
+            },
+        )
+        .unwrap();
+
+        let host = hosts::create(
+            &conn,
+            HostInput {
+                group_id: None,
+                label: "loopback".into(),
+                hostname: "127.0.0.1".into(),
+                port: test_server.port,
+                identity_id: Some(identity.id),
+                jump_host_id: None,
+                vpn_profile_id: None,
+                color: None,
+                notes: None,
+                sort_order: 0,
+            },
+        )
+        .unwrap();
+
+        let app_state = AppState {
+            db: std::sync::Mutex::new(conn),
+            db_path: db_path.clone(),
+            vault_key: std::sync::Mutex::new(Some(vault_key)),
+            sessions: Arc::new(DashMap::new()),
+            sftp_sessions: Arc::new(DashMap::new()),
+            tunnels: Arc::new(DashMap::new()),
+            vpn_connections: Arc::new(DashMap::new()),
+            google_login_cancel: std::sync::Mutex::new(None),
+        };
+
+        let (event_tx, event_rx) = std_mpsc::channel::<SessionEvent>();
+        let channel = tauri::ipc::Channel::new(move |body| {
+            if let tauri::ipc::InvokeResponseBody::Json(json) = body {
+                if let Ok(event) = serde_json::from_str::<SessionEvent>(&json) {
+                    let _ = event_tx.send(event);
+                }
+            }
+            Ok(())
+        });
+
+        let sessions = app_state.sessions.clone();
+        let session_id = connect(&app_state, sessions, host.id, channel)
+            .await
+            .expect("hermetic connect() failed");
+
+        let sender = app_state.sessions.get(&session_id).unwrap().clone();
+        sender
+            .send(SessionCommand::Write(b"CONNECTHUB_PTY_TEST_OK\n".to_vec()))
+            .unwrap();
+
+        // TestSession's shell echoes back whatever it receives - looking
+        // for our own input mirrored back exercises the exact same
+        // PTY/data-relay path the real-sshd test does, just without a real
+        // shell interpreting the line.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        let mut saw_marker = false;
+        while std::time::Instant::now() < deadline {
+            if let Ok(event) = event_rx.recv_timeout(std::time::Duration::from_millis(200)) {
+                if let SessionEvent::Data { data } = event {
+                    let decoded = base64::engine::general_purpose::STANDARD
+                        .decode(&data)
+                        .unwrap_or_default();
+                    if String::from_utf8_lossy(&decoded).contains("CONNECTHUB_PTY_TEST_OK") {
+                        saw_marker = true;
+                        break;
+                    }
+                }
+            }
+        }
+        assert!(saw_marker, "never saw echoed marker in PTY output");
+
+        sender.send(SessionCommand::Close).unwrap();
+        let _ = std::fs::remove_file(&db_path);
+    }
 }
 
 #[cfg(test)]
