@@ -31,6 +31,7 @@ impl AppState {
         let db = crate::vault::store::open()?;
         crate::data::init_schema(&db)?;
         crate::ssh::known_hosts::init_schema(&db)?;
+        crate::vpn::cleanup_stale_profile_files();
         Ok(Self {
             db: Mutex::new(db),
             db_path,

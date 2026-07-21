@@ -72,6 +72,41 @@ pub fn profiles_dir() -> AppResult<PathBuf> {
     Ok(dir)
 }
 
+// A .ovpn/.auth file only ever exists here for the duration of one
+// connection attempt - written just before spawning openvpn, removed again
+// by cleanup() when that connection ends (successfully, on error, or on
+// disconnect). Anything still here at startup is therefore leftover from a
+// run that didn't get to finish that cleanup, almost always because the
+// process was killed rather than exited - a graceful shutdown already
+// disconnects every profile (see disconnect_all in lib.rs's ExitRequested
+// handler) before the process actually exits.
+//
+// This only removes the files, not a possibly-still-running root-owned
+// openvpn process from that same crashed run: killing one safely would
+// need its own privilege-escalation plumbing (an unprivileged process
+// can't signal a root-owned one, same reason run_vpn talks to it over its
+// management interface instead of via signals) and this app has no record
+// of which management port a previous, now-gone process instance was
+// using to be able to ask it to shut down cleanly. A leftover openvpn
+// process from a crash is otherwise harmless (still routes traffic
+// correctly) until the machine is rebooted or it's stopped by hand -
+// tracked as a follow-up rather than solved here.
+//
+// Best-effort like the rest of this module, and assumes only one instance
+// of the app runs at a time against this directory - same assumption the
+// rest of the app already makes about its SQLite database.
+pub fn cleanup_stale_profile_files() {
+    let Ok(dir) = profiles_dir() else { return };
+    cleanup_stale_profile_files_in(&dir);
+}
+
+fn cleanup_stale_profile_files_in(dir: &Path) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        let _ = std::fs::remove_file(entry.path());
+    }
+}
+
 fn write_private_file(path: &Path, contents: &str) -> AppResult<()> {
     std::fs::write(path, contents)?;
     #[cfg(unix)]
@@ -682,6 +717,26 @@ mod tests {
         let added: Arc<Mutex<Vec<(String, String)>>> = Arc::new(Mutex::new(Vec::new()));
         remove_host_routes(&added).await;
         assert!(added.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn cleanup_stale_profile_files_in_removes_every_leftover_file() {
+        let dir = std::env::temp_dir().join(format!("connecthub-test-vpn-profiles-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("some-profile.ovpn"), b"client\n").unwrap();
+        std::fs::write(dir.join("some-profile.auth"), b"user\npass\n").unwrap();
+
+        cleanup_stale_profile_files_in(&dir);
+
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn cleanup_stale_profile_files_in_is_a_noop_for_a_missing_directory() {
+        let dir = std::env::temp_dir().join(format!("connecthub-test-vpn-profiles-missing-{}", Uuid::new_v4()));
+        // Must not panic even though the directory doesn't exist.
+        cleanup_stale_profile_files_in(&dir);
     }
 
     #[tokio::test]
