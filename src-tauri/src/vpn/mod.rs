@@ -458,7 +458,7 @@ async fn add_host_routes(
         return;
     };
     for hostname in hostnames {
-        if let Some(ip) = resolve_ipv4(&hostname).await {
+        for ip in resolve_all_ipv4(&hostname).await {
             let status = tokio::process::Command::new("pkexec")
                 .arg(setup::ROUTE_HELPER_PATH)
                 .arg("add")
@@ -508,17 +508,29 @@ async fn find_tun_interface(local_ip: &str) -> Option<String> {
 // A bare IP resolves instantly with no network round-trip; a real hostname
 // goes through the OS resolver. IPv6-only results are skipped rather than
 // failed outright - the route helper only ever adds an IPv4 /32.
-async fn resolve_ipv4(host: &str) -> Option<String> {
-    if host.parse::<std::net::Ipv4Addr>().is_ok() {
-        return Some(host.to_string());
+// A hostname behind DNS round-robin or a load-balanced service can resolve
+// to more than one IPv4 address - routing only the first (as an earlier
+// version of this did) leaves the others silently unrouted, so this
+// resolves and returns all of them. IPv6-only results are skipped rather
+// than failed outright: the route helper only supports IPv4 /32 routes
+// today, and most hosts here are reached by IPv4 anyway.
+async fn resolve_all_ipv4(host: &str) -> Vec<String> {
+    if let Ok(v4) = host.parse::<std::net::Ipv4Addr>() {
+        return vec![v4.to_string()];
     }
-    let addrs = tokio::net::lookup_host((host, 0)).await.ok()?;
-    for addr in addrs {
-        if let std::net::SocketAddr::V4(v4) = addr {
-            return Some(v4.ip().to_string());
-        }
-    }
-    None
+    // Bounded so one hostname with an unreachable/hung resolver can't stall
+    // every other host in the same VPN profile's list - add_host_routes
+    // resolves them one at a time, sequentially.
+    let Ok(Ok(addrs)) = tokio::time::timeout(Duration::from_secs(5), tokio::net::lookup_host((host, 0))).await
+    else {
+        return Vec::new();
+    };
+    addrs
+        .filter_map(|addr| match addr {
+            std::net::SocketAddr::V4(v4) => Some(v4.ip().to_string()),
+            std::net::SocketAddr::V6(_) => None,
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -644,8 +656,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn resolve_ipv4_returns_a_literal_ip_without_any_dns_lookup() {
-        assert_eq!(resolve_ipv4("203.0.113.5").await.as_deref(), Some("203.0.113.5"));
+    async fn resolve_all_ipv4_returns_a_literal_ip_without_any_dns_lookup() {
+        assert_eq!(resolve_all_ipv4("203.0.113.5").await, vec!["203.0.113.5".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn resolve_all_ipv4_returns_empty_for_an_unresolvable_hostname() {
+        assert!(resolve_all_ipv4("this-host-does-not-exist.invalid").await.is_empty());
     }
 
     // The route helper is never actually installed in a test environment,
