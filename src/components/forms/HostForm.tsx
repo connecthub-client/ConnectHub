@@ -112,6 +112,21 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
         return;
       }
     }
+    // Credential data (a password, or a selected/imported key) only ever
+    // gets saved as part of creating a new identity below, which itself
+    // only happens `if (username)` - without this check, filling in a
+    // password or picking a key while leaving Username blank silently
+    // discarded that data with the host still saving successfully and no
+    // indication anything was dropped.
+    if (identityMode === "new" && !username) {
+      const hasCredentialData =
+        (authMethod === "password" && password) ||
+        (authMethod === "private_key" && ((keyMode === "existing" && sshKeyId) || (keyMode === "import" && importKeyPem)));
+      if (hasCredentialData) {
+        setError("Enter a username, or clear the password/key to skip creating credentials for this host.");
+        return;
+      }
+    }
     if (vpnMode === "new" && !vpnConfig) {
       setError("Upload or paste a .ovpn profile, or switch VPN back to \"None\".");
       return;
