@@ -76,8 +76,16 @@ export default function IdentityForm({ identity, onDone }: IdentityFormProps) {
       >
         <option value="password">Password</option>
         <option value="private_key">Private key</option>
-        <option value="agent">SSH agent</option>
+        <option value="agent" disabled={authMethod !== "agent"}>
+          SSH agent (coming soon)
+        </option>
       </select>
+      {authMethod === "agent" && (
+        <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+          SSH agent authentication isn't implemented yet - connecting with this identity will fail.
+          Switch to Password or Private key for now.
+        </p>
+      )}
 
       {authMethod === "password" && (
         <>

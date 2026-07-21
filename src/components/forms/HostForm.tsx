@@ -395,6 +395,9 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
             </option>
           ))}
       </select>
+      <p className="mb-2 -mt-1 text-xs text-amber-600 dark:text-amber-400">
+        Coming soon - saved here, but connecting doesn't chain through the jump host yet.
+      </p>
 
       <label className={labelClass}>VPN (optional)</label>
       <p className="mb-2 -mt-1 text-xs text-neutral-400">
