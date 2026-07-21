@@ -216,6 +216,10 @@ pub async fn connect(state: &AppState, vpn_map: VpnMap, profile_id: Uuid) -> App
     let (control_tx, control_rx) = mpsc::unbounded_channel();
     let status = Arc::new(Mutex::new(VpnStatus { state: VpnState::Connecting, message: None }));
     let (ready_tx, ready_rx) = oneshot::channel();
+    // Populated by add_host_routes as each route is actually added, so
+    // cleanup can remove exactly those routes on disconnect - see
+    // remove_host_routes below for why routes otherwise leak.
+    let added_routes: Arc<Mutex<Vec<(String, String)>>> = Arc::new(Mutex::new(Vec::new()));
 
     vpn_map.insert(profile_id, ActiveVpn { commands: control_tx, status: status.clone() });
 
@@ -230,6 +234,7 @@ pub async fn connect(state: &AppState, vpn_map: VpnMap, profile_id: Uuid) -> App
         auth_path,
         ready_tx,
         target_hostnames,
+        added_routes,
     ));
 
     // Wait (bounded) for the first Connected/Error transition so the
@@ -254,6 +259,7 @@ async fn run_vpn(
     auth_path: Option<PathBuf>,
     ready_tx: oneshot::Sender<VpnStatus>,
     target_hostnames: Vec<String>,
+    added_routes: Arc<Mutex<Vec<(String, String)>>>,
 ) {
     let mut ready_tx = Some(ready_tx);
 
@@ -279,7 +285,7 @@ async fn run_vpn(
         if let Some(tx) = ready_tx.take() {
             let _ = tx.send(final_status);
         }
-        cleanup(&vpn_map, profile_id, &config_path, &auth_path).await;
+        cleanup(&vpn_map, profile_id, &config_path, &auth_path, &added_routes).await;
         return;
     };
 
@@ -305,7 +311,8 @@ async fn run_vpn(
                             if update_state == VpnState::Connected {
                                 if let Some(local_ip) = extract_local_tunnel_ip(&text) {
                                     let hostnames = target_hostnames.clone();
-                                    tokio::spawn(add_host_routes(local_ip, hostnames));
+                                    let added_routes = added_routes.clone();
+                                    tokio::spawn(add_host_routes(local_ip, hostnames, added_routes));
                                 }
                             }
                         }
@@ -338,14 +345,48 @@ async fn run_vpn(
     }
 
     let _ = child.wait().await;
-    cleanup(&vpn_map, profile_id, &config_path, &auth_path).await;
+    cleanup(&vpn_map, profile_id, &config_path, &auth_path, &added_routes).await;
 }
 
-async fn cleanup(vpn_map: &VpnMap, profile_id: Uuid, config_path: &Path, auth_path: &Option<PathBuf>) {
+async fn cleanup(
+    vpn_map: &VpnMap,
+    profile_id: Uuid,
+    config_path: &Path,
+    auth_path: &Option<PathBuf>,
+    added_routes: &Arc<Mutex<Vec<(String, String)>>>,
+) {
     vpn_map.remove(&profile_id);
+    remove_host_routes(added_routes).await;
     let _ = tokio::fs::remove_file(config_path).await;
     if let Some(p) = auth_path {
         let _ = tokio::fs::remove_file(p).await;
+    }
+}
+
+// Retracts every route add_host_routes actually added for this connection.
+// Without this, a host's /32 route (see add_host_routes) outlives the VPN
+// that installed it: it keeps pointing at a now-torn-down tun interface
+// until either a reboot or the next connection happens to reuse the same
+// interface name and IP, at which point traffic could silently follow the
+// wrong tunnel. Best-effort like the rest of this module - a failure here
+// doesn't block disconnecting, worst case a stale route lingers exactly as
+// it would have before this existed.
+async fn remove_host_routes(added_routes: &Arc<Mutex<Vec<(String, String)>>>) {
+    let routes = std::mem::take(&mut *added_routes.lock().unwrap());
+    if routes.is_empty() || !std::path::Path::new(setup::ROUTE_HELPER_PATH).exists() {
+        return;
+    }
+    for (iface, ip) in routes {
+        let _ = tokio::process::Command::new("pkexec")
+            .arg(setup::ROUTE_HELPER_PATH)
+            .arg("del")
+            .arg(&iface)
+            .arg(&ip)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .await;
     }
 }
 
@@ -402,7 +443,11 @@ fn extract_local_tunnel_ip(line: &str) -> Option<String> {
 // helper) doesn't affect the VPN's own connected status - worst case,
 // reachability falls back to whatever the server/OS would have done
 // anyway, no worse than before this existed.
-async fn add_host_routes(local_tunnel_ip: String, hostnames: Vec<String>) {
+async fn add_host_routes(
+    local_tunnel_ip: String,
+    hostnames: Vec<String>,
+    added_routes: Arc<Mutex<Vec<(String, String)>>>,
+) {
     if hostnames.is_empty() {
         return;
     }
@@ -414,7 +459,7 @@ async fn add_host_routes(local_tunnel_ip: String, hostnames: Vec<String>) {
     };
     for hostname in hostnames {
         if let Some(ip) = resolve_ipv4(&hostname).await {
-            let _ = tokio::process::Command::new("pkexec")
+            let status = tokio::process::Command::new("pkexec")
                 .arg(setup::ROUTE_HELPER_PATH)
                 .arg("add")
                 .arg(&iface)
@@ -424,6 +469,12 @@ async fn add_host_routes(local_tunnel_ip: String, hostnames: Vec<String>) {
                 .stderr(std::process::Stdio::null())
                 .status()
                 .await;
+            // Only remembered for later removal if it actually succeeded -
+            // otherwise cleanup would try to delete a route that was never
+            // added.
+            if matches!(status, Ok(s) if s.success()) {
+                added_routes.lock().unwrap().push((iface.clone(), ip));
+            }
         }
     }
 }
@@ -595,5 +646,34 @@ mod tests {
     #[tokio::test]
     async fn resolve_ipv4_returns_a_literal_ip_without_any_dns_lookup() {
         assert_eq!(resolve_ipv4("203.0.113.5").await.as_deref(), Some("203.0.113.5"));
+    }
+
+    // The route helper is never actually installed in a test environment,
+    // so remove_host_routes' own "helper missing" guard is what's exercised
+    // here (no real pkexec/ip invocation happens) - this asserts the list is
+    // still drained regardless, so a later call doesn't try to remove the
+    // same routes twice.
+    #[tokio::test]
+    async fn remove_host_routes_drains_the_list_even_when_the_helper_is_not_installed() {
+        let added = Arc::new(Mutex::new(vec![("tun0".to_string(), "10.0.0.5".to_string())]));
+        remove_host_routes(&added).await;
+        assert!(added.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn remove_host_routes_is_a_noop_on_an_empty_list() {
+        let added: Arc<Mutex<Vec<(String, String)>>> = Arc::new(Mutex::new(Vec::new()));
+        remove_host_routes(&added).await;
+        assert!(added.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn add_host_routes_records_nothing_when_the_route_helper_is_not_installed() {
+        let added = Arc::new(Mutex::new(Vec::new()));
+        add_host_routes("10.8.0.6".into(), vec!["example.com".into()], added.clone()).await;
+        assert!(
+            added.lock().unwrap().is_empty(),
+            "must not record a route it never actually added"
+        );
     }
 }

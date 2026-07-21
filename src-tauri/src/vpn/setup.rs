@@ -104,6 +104,10 @@ esac
 
 case "$ACTION" in
     add) exec ip route replace "$TARGET/32" dev "$IFACE" ;;
+    # "del" is best-effort by design (see vpn::remove_host_routes) - the
+    # caller doesn't treat a failure here (e.g. the route is already gone,
+    # or the tun interface is already torn down) as an error.
+    del) exec ip route del "$TARGET/32" dev "$IFACE" ;;
     *)
         echo "connecthub-route-helper: unknown action $ACTION" >&2
         exit 1
@@ -160,8 +164,63 @@ fn route_policy_xml() -> String {
 pub fn is_installed() -> bool {
     std::path::Path::new(HELPER_PATH).exists()
         && std::path::Path::new(POLICY_PATH).exists()
-        && std::path::Path::new(ROUTE_HELPER_PATH).exists()
+        && route_helper_supports_removal()
         && std::path::Path::new(ROUTE_POLICY_PATH).exists()
+}
+
+// Checking existence alone (like the other three files) isn't enough for
+// this one: the route helper already existed before it supported a "del"
+// action, so a machine that ran setup before route *removal* was added
+// would otherwise never be prompted to pick up the new script - same
+// reasoning as this function already checking for the route helper's
+// existence at all, one level down.
+fn route_helper_supports_removal() -> bool {
+    supports_removal_at(std::path::Path::new(ROUTE_HELPER_PATH))
+}
+
+fn supports_removal_at(path: &std::path::Path) -> bool {
+    std::fs::read_to_string(path).map(|content| content.contains("del)")).unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn supports_removal_at_recognizes_the_current_route_helper_script() {
+        let path = std::env::temp_dir().join(format!("connecthub-test-route-helper-{}", Uuid::new_v4()));
+        std::fs::write(&path, ROUTE_HELPER_SCRIPT).unwrap();
+        assert!(supports_removal_at(&path), "the real script must contain a del) case");
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn supports_removal_at_is_false_for_a_pre_removal_script() {
+        let path = std::env::temp_dir().join(format!("connecthub-test-route-helper-{}", Uuid::new_v4()));
+        // Simulates a machine that ran setup before route removal existed.
+        std::fs::write(&path, "#!/bin/sh\ncase \"$1\" in\n  add) exec ip route replace \"$3/32\" dev \"$2\" ;;\nesac\n").unwrap();
+        assert!(!supports_removal_at(&path));
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn supports_removal_at_is_false_when_the_file_does_not_exist() {
+        let path = std::env::temp_dir().join(format!("connecthub-test-route-helper-missing-{}", Uuid::new_v4()));
+        assert!(!supports_removal_at(&path));
+    }
+
+    #[test]
+    fn route_helper_script_rejects_a_non_tun_interface_and_a_non_ipv4_target() {
+        // Documents the two argument-validation guards a future edit to
+        // ROUTE_HELPER_SCRIPT must preserve - not a full shell-execution
+        // test (that needs root), just a change-detector over the literal
+        // script text.
+        assert!(ROUTE_HELPER_SCRIPT.contains(r#"case "$IFACE" in"#));
+        assert!(ROUTE_HELPER_SCRIPT.contains("tun[0-9]*"));
+        assert!(ROUTE_HELPER_SCRIPT.contains(r#"case "$TARGET" in"#));
+        assert!(ROUTE_HELPER_SCRIPT.contains("add)"));
+        assert!(ROUTE_HELPER_SCRIPT.contains("del)"));
+    }
 }
 
 // Writes both helper scripts + both policy files to a temp location
