@@ -6,7 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **VSCode-style layout**: an icon Activity Bar (Hosts/Identities/Keys/VPN, plus Google Backup/Settings pinned to the bottom) replacing the old top tab bar, a Primary Side Bar, and a Snippets panel accessible from a dedicated icon on the right edge. Both side panels have independent collapse toggles (pinned chevrons, top of the Activity Bar and above the Snippets icon) that stay reachable in either state.
+- The center "Hosts" view now shows every host as a grid - click to select, double-click to connect - so hosts stay reachable even with the sidebar collapsed.
+- Host favorites, a "Recent" list, and a preset icon picker (generic icons, major cloud-provider marks, and A-Z colored monograms behind a "More" toggle) in the host tree.
+- Per-host live Performance panel (CPU/RAM/swap/disk/network), shown while connected, with its own show/hide toggle. Host Details (address/port/user/VPN profile/session status/key/last connected) is its own card with an independent show/hide toggle and now stays visible regardless of connection state; the Connect button disables itself once a session is already open.
+- Quick Commands "Most used": ranks the last 100 executed commands by frequency. Prefers the server's own `~/.zsh_history`/`~/.bash_history` (re-fetched on every connect), falling back to commands recorded locally - either clicked here or typed directly in the terminal.
+- Quick Commands "Auto-Run" toggle: ON sends a clicked command straight into the live terminal session followed by Enter; OFF inserts it for manual review/edit/submit instead. Falls back to the previous one-off exec-and-show-result behavior when no terminal session is open for that host.
+- Visual refresh: self-hosted Inter font, a richer dark background (renamed the base gray scale from neutral to slate), larger corner radius and subtle shadows on buttons/cards, and a consistent teal accent color on every checkbox/radio/range input (previously left at the OS default).
+
+### Removed
+
+- **Jump-host / ProxyJump chaining** — was modeled but never actually consulted when connecting; removed the `jump_host_id` field, its CSV column, and its UI entirely rather than keep unused, half-built plumbing around.
+- **Port forwarding / Tunnels** (local, remote, and dynamic/SOCKS5) — removed the whole feature (`ssh/tunnel.rs`, the Tunnels tab, tunnel forms/store).
+- The host panel's "Edit host" shortcut and its per-host "Recent" run-history list - editing remains available via the host tree's right-click menu; "Recent" is superseded by the new frequency-ranked "Most used".
+
+### Changed
+
+- Hosts CSV export/import no longer has a `jump_host_label` column — re-importing a CSV exported before this change may fail; re-export first.
+
+### Fixed
+
+- The Auto-Run toggle's thumb rendered off-center in both positions (a missing base offset, not a functional bug - the setting itself always worked) - now sits flush against either edge like a normal switch.
 
 ## [1.0.0] — 2026-07-18
 

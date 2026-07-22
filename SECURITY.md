@@ -31,7 +31,7 @@ If you're unable to use GitHub's private reporting for any reason, open a regula
 
 ## Scope
 
-This policy covers the ConnectHub application itself (`src-tauri/` and `src/` in this repository) — the vault encryption scheme, VPN privilege-escalation helpers, Google OAuth flow, SSH/SFTP/tunnel handling, and the build/release process.
+This policy covers the ConnectHub application itself (`src-tauri/` and `src/` in this repository) — the vault encryption scheme, VPN privilege-escalation helpers, Google OAuth flow, SSH/SFTP handling, and the build/release process.
 
 It does **not** cover vulnerabilities in third-party dependencies themselves (please report those upstream — e.g. to the [russh](https://github.com/Eugeny/russh) or [Tauri](https://github.com/tauri-apps/tauri) projects directly), though we're glad to hear about ones that affect ConnectHub so we can update pinned versions.
 

@@ -12,7 +12,7 @@ flowchart LR
     subgraph Backend["Rust (src-tauri/)"]
         Cmd[Tauri commands]
         Data[data/ + models/]
-        SSH["ssh/ (russh, russh-sftp, fast-socks5)"]
+        SSH["ssh/ (russh, russh-sftp)"]
         Vault["vault/ (Argon2id + AES-256-GCM)"]
         VPN["vpn/ (openvpn via polkit helper)"]
         Google["google/ (OAuth2 PKCE + Drive)"]
@@ -35,21 +35,21 @@ flowchart LR
 - **`commands/*_commands.rs`** — thin `#[tauri::command]` wrappers. They lock `state.db`/`state.vault_key` and delegate to `data/`; no business logic lives here. New commands must be registered in **two** places in `lib.rs`: the `use commands::...` import list and the `tauri::generate_handler![...]` macro call.
 - **`data/*.rs`** — CRUD and domain logic against SQLite (`rusqlite`), one module per entity (`hosts`, `groups`, `identities`, `ssh_keys`, `snippets`, `vpn_profiles`, `host_csv`). Each has its own `#[cfg(test)] mod tests` using an in-memory `Connection`.
 - **`models/*.rs`** — plain `Host`/`Identity`/`SshKey`/etc. structs plus their `*Input` create/update counterparts (serde `Deserialize`, snake_case fields — Tauri does **not** camelCase these).
-- **`ssh/*.rs`** — the actual SSH functionality via `russh`/`russh-sftp`/`fast-socks5`:
-  - `session.rs` — interactive PTY sessions plus the shared `connect_and_authenticate` helper reused by SFTP/tunnels/exec
+- **`ssh/*.rs`** — the actual SSH functionality via `russh`/`russh-sftp`:
+  - `session.rs` — interactive PTY sessions plus the shared `connect_and_authenticate` helper reused by SFTP/exec/stats
   - `sftp.rs` — SFTP file browser backend
-  - `tunnel.rs` — local/remote/dynamic (SOCKS5) port forwarding
-  - `exec.rs` — one-off command execution, used by snippets' run-on-hosts
+  - `exec.rs` — one-off command execution, used by snippets' run-on-hosts and by Quick Commands' remote shell-history fetch
+  - `stats.rs` — per-host CPU/RAM/swap/disk/network sampling, backing the Performance panel
   - `known_hosts.rs` — trust-on-first-use (TOFU) host-key pinning
 - **`vault/`** — `kdf.rs` (Argon2id), `crypto.rs` (AES-256-GCM field-level encrypt/decrypt), `store.rs` (vault create/unlock/auto-unlock, the per-install local secret, and a one-time legacy-password migration path).
 - **`google/`** — `oauth.rs` (PKCE authorization-code flow via a loopback listener, token exchange/refresh, cancellable mid-flow), `drive.rs` (`appDataFolder` upload/download/find via Drive API v3), `mod.rs` (ties both into `login`/`backup_now`/`restore_from_drive`).
 - **`vpn/`** — `setup.rs` (installs narrowly-scoped polkit rules + helper scripts so `openvpn` and route changes can run as root without a per-connect password prompt), `mod.rs` (spawns/tracks live `openvpn` processes per profile, controlled over openvpn's local TCP management interface rather than OS signals).
-- **`state.rs`** — `AppState`: holds the `Mutex<Connection>`, the in-memory `Mutex<Option<VaultKey>>`, and `DashMap`s of live SSH/SFTP/tunnel sessions keyed by UUID.
+- **`state.rs`** — `AppState`: holds the `Mutex<Connection>`, the in-memory `Mutex<Option<VaultKey>>`, and `DashMap`s of live SSH/SFTP sessions keyed by UUID.
 - **`error.rs`** — a single `AppError` enum (`thiserror`) shared by every command; serializes to a plain string for the frontend.
 
 ## Data model
 
-`Group` (nested via `parent_id`) → `Host` (references `Identity`, optional `jump_host_id` pointing at another `Host` for ProxyJump chaining, optional `vpn_profile_id` pointing at a `VpnProfile`) → `Identity` (username + auth method, references `SshKey`) → `SshKey`. Plus standalone `Snippet` and `VpnProfile`, and a single-row `google_auth` table.
+`Group` (nested via `parent_id`) → `Host` (references `Identity`, optional `vpn_profile_id` pointing at a `VpnProfile`) → `Identity` (username + auth method, references `SshKey`) → `SshKey`. Plus standalone `Snippet` and `VpnProfile`, and a single-row `google_auth` table.
 
 Only secrets are encrypted at the field level (identity passwords, private keys, key passphrases) via AES-256-GCM; everything else (labels, hostnames, ports, notes) is plaintext in SQLite for fast querying. CSV export/import (`host_csv.rs`) deliberately excludes all secret material, matching identities on the importing side by username/label rather than re-creating credentials.
 
@@ -71,7 +71,7 @@ Once running, the app controls the (root-owned) `openvpn` process over its local
 
 **Running multiple VPN profiles at once.** The moment a profile's tunnel reports connected, the backend looks up every host referencing that profile, resolves each hostname to an IPv4 address, finds which `tun*` interface was just assigned, and adds an explicit `/32` route for each resolved host through that interface. A `/32` route always outranks a broader one (like a `0.0.0.0/0` pushed via `redirect-gateway`) in the kernel's routing decision, so each host stays reachable through its own VPN regardless of what either server pushes for routing, and regardless of which profile (if either) currently holds the machine's default route. This is what actually makes several unrelated VPN profiles usable at the same time — a separate "don't take over my default route" checkbox exists per-profile, but it only affects that profile's *other*, unrelated traffic, not whether an assigned host is reachable.
 
-Lifecycle is hands-off by design: a VPN comes up automatically the moment you connect/open SFTP/open a tunnel to a host that has one assigned, and goes back down automatically once nothing (no open session, no active tunnel) still needs it — even across several hosts sharing one profile. A "Disconnect all" action and an app-exit safety net exist for anything left connected unexpectedly.
+Lifecycle is hands-off by design: a VPN comes up automatically the moment you connect/open SFTP to a host that has one assigned, and goes back down automatically once nothing (no open session) still needs it — even across several hosts sharing one profile. A "Disconnect all" action and an app-exit safety net exist for anything left connected unexpectedly.
 
 VPN profile support requires the `openvpn` package and is Linux-only for now (see [Known Issues](README.md#known-issues)).
 
@@ -89,8 +89,8 @@ Sign-in is cancellable: closing the browser tab mid-flow and clicking **Cancel**
 
 - **`lib/tauri-bridge/`** — one file per domain, each wrapping `invoke("command_name", { args })`; `types.ts` holds the shared TS interfaces mirroring the Rust models.
 - **`state/*Store.ts`** — [zustand](https://github.com/pmndrs/zustand) stores. Mutations generally `await` the backend call then re-fetch the full collection rather than patching state in place, since collections are small and this sidesteps subtle bugs from cascading deletes.
-- **`pages/AppShell.tsx`** — the main layout: owns which manage-tab or session tab is active, and which create/edit modal is open, as local state; every panel/form is a controlled child.
-- **`components/panels/HostContextPanel.tsx`** — persistent side panel for the selected/active host: Connect/SFTP/Tunnel actions, details, live session status, and Quick Commands.
+- **`pages/AppShell.tsx`** — the main layout: a VSCode-style icon Activity Bar + collapsible Primary Side Bar, owning which manage-destination or session tab is active, and which create/edit modal is open, as local state; every panel/form is a controlled child. Its center "Hosts" view is a grid of every host (click to select, double-click to connect) so hosts stay reachable with the sidebar collapsed.
+- **`components/panels/HostContextPanel.tsx`** — persistent side panel for the selected/active host: Connect/SFTP actions, Host Details, live Performance (CPU/RAM/swap/disk/network), and Quick Commands (saved snippets plus a frequency-ranked "Most used" list seeded from the server's own shell history, with an Auto-Run toggle to execute immediately or just insert into the terminal for review).
 - **`components/terminal/TerminalView.tsx`** / **`components/sftp/SftpBrowser.tsx`** — one instance per open session tab, kept mounted (via CSS visibility, not unmounting) while switching tabs so the SSH connection and terminal scrollback survive.
 - Native file dialogs use `@tauri-apps/plugin-dialog`; reading/writing the chosen path goes through dedicated local-filesystem Tauri commands rather than a generic `fs` plugin.
 

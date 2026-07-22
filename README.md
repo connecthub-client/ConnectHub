@@ -5,7 +5,7 @@
 <h1 align="center">ConnectHub</h1>
 
 <p align="center">
-  <strong>Modern cross-platform SSH client with SSH, SFTP, SCP, port forwarding, tunneling, VPN, and workspace management.</strong>
+  <strong>Modern cross-platform SSH client with SSH, SFTP, SCP, per-host VPN, and workspace management.</strong>
 </p>
 
 <p align="center">
@@ -31,7 +31,7 @@
 
 ## What is ConnectHub?
 
-ConnectHub is a desktop SSH client for people who manage a lot of remote hosts across a lot of different networks. It bundles an SSH terminal, an SFTP file browser, port forwarding/tunneling, and per-host VPN handling into one app, backed by a local, field-level-encrypted vault — no cloud account required to use it, with optional Google Drive backup if you want one.
+ConnectHub is a desktop SSH client for people who manage a lot of remote hosts across a lot of different networks. It bundles an SSH terminal, an SFTP file browser, and per-host VPN handling into one app, backed by a local, field-level-encrypted vault — no cloud account required to use it, with optional Google Drive backup if you want one.
 
 It's built with [Tauri 2](https://tauri.app) (Rust backend, React/TypeScript frontend), so the same codebase targets Linux, Windows, and macOS from a single native binary — no Electron, no bundled Chromium.
 
@@ -39,14 +39,14 @@ Inspired by tools like [Termius](https://termius.com), [Tabby](https://tabby.sh)
 
 ## Features
 
-- **Host manager** — nested groups, hosts, reusable identities (password, private key, or SSH agent auth), jump-host (ProxyJump) chaining
-  - Double-click a host to connect instantly; right-click for a Connect/Duplicate/Edit/Delete menu
-  - A persistent side panel shows the selected/active host's details, live session status, and one-click **Quick Commands** (run any saved snippet against it instantly)
+- **VSCode-style layout** — an icon Activity Bar (Hosts/Identities/Keys/VPN, plus Google Backup/Settings pinned to the bottom) with a collapsible Primary Side Bar, and Snippets as a collapsible right-edge drawer. The center Hosts view shows every host as a grid — click to select, double-click to connect — so hosts stay reachable even with the sidebar collapsed.
+- **Host manager** — nested groups, hosts, reusable identities (password, private key, or SSH agent auth), favorites, a "Recent" list, and a preset icon picker (generic icons, major cloud-provider marks, A-Z monograms)
+  - Double-click a host to connect instantly; right-click for a Connect/Duplicate/Edit/Delete menu; a search box filters by label/hostname
+  - A persistent side panel shows the selected/active host's details, live Performance (CPU/RAM/swap/disk/network), and **Quick Commands** — one-click saved snippets plus a frequency-ranked "Most used" list seeded from the server's own shell history, with an Auto-Run toggle to either execute immediately or just insert the command into the terminal for review
   - Import/export your host list as CSV (host/group/identity-reference metadata only — never secrets) for backup or bulk editing
-- **SSH terminal** — multi-tab, multi-session, xterm.js-powered, drag-and-drop tab reordering, TOFU host-key verification and pinning
+- **SSH terminal** — multi-tab, multi-session, xterm.js-powered, drag-and-drop tab reordering, scrollback search, clickable links, OSC 52 clipboard support, TOFU host-key verification and pinning
 - **SFTP browser** — dual-pane local/remote file transfer with upload/download, mkdir, rename, delete
-- **Port forwarding** — local, remote, and dynamic (SOCKS5) tunnels, managed from one panel
-- **VPN profiles** — every host can have its own VPN, or none. Upload an OpenVPN (`.ovpn`) profile right from a host's own edit form (or reuse one already saved, or pick "use saved key" style key selection for SSH auth) and it's fully automatic from there: click **Connect**, **SFTP**, or **Tunnel** and the assigned VPN comes up first by itself, then the host connects — no separate VPN button to manage. Multiple different profiles (one per project, say) can be connected at the same time; see [ARCHITECTURE.md](ARCHITECTURE.md#vpn-profiles) for how per-host routing makes that reliable.
+- **VPN profiles** — every host can have its own VPN, or none. Upload an OpenVPN (`.ovpn`) profile right from a host's own edit form (or reuse one already saved, or pick "use saved key" style key selection for SSH auth) and it's fully automatic from there: click **Connect** or **SFTP** and the assigned VPN comes up first by itself, then the host connects — no separate VPN button to manage. Multiple different profiles (one per project, say) can be connected at the same time; see [ARCHITECTURE.md](ARCHITECTURE.md#vpn-profiles) for how per-host routing makes that reliable.
 - **Snippets** — save commands once, run them across one or many hosts, with per-host aggregated output
 - **SSH key management** — generate new keys (Ed25519/RSA), or import existing ones (OpenSSH or legacy PEM/PKCS#1) by pasting or browsing to a file, inline while creating a host
 - **Google Drive backup** *(optional)* — sign in with your own Google account to back up the full encrypted vault to your Drive's private app folder, and restore it on a new device or after a reinstall — cancellable mid-flow, never required to use the app
@@ -61,13 +61,13 @@ Inspired by tools like [Termius](https://termius.com), [Tabby](https://tabby.sh)
 | --- | --- |
 | ![Host manager](docs/screenshots/host-manager.svg) | ![SSH terminal](docs/screenshots/terminal.svg) |
 
-| SFTP browser | Port forwarding |
+| SFTP browser | VPN profiles |
 | --- | --- |
-| ![SFTP browser](docs/screenshots/sftp.svg) | ![Port forwarding](docs/screenshots/tunnels.svg) |
+| ![SFTP browser](docs/screenshots/sftp.svg) | ![VPN profiles](docs/screenshots/vpn.svg) |
 
-| VPN profiles | Settings |
-| --- | --- |
-| ![VPN profiles](docs/screenshots/vpn.svg) | ![Settings](docs/screenshots/settings.svg) |
+| Settings |
+| --- |
+| ![Settings](docs/screenshots/settings.svg) |
 
 ## Supported platforms
 
@@ -128,7 +128,7 @@ flowchart LR
     subgraph Backend["Rust (src-tauri/)"]
         Cmd[Tauri commands]
         Data[data/ + models/]
-        SSH["ssh/ (russh, russh-sftp, fast-socks5)"]
+        SSH["ssh/ (russh, russh-sftp)"]
         Vault["vault/ (Argon2id + AES-256-GCM)"]
         VPN["vpn/ (openvpn via polkit helper)"]
         Google["google/ (OAuth2 PKCE + Drive)"]
@@ -259,4 +259,4 @@ ConnectHub is licensed under the [MIT License](LICENSE).
 
 ## Acknowledgements
 
-ConnectHub is built on the shoulders of great open-source projects, including [Tauri](https://tauri.app), [russh](https://github.com/Eugeny/russh), [russh-sftp](https://github.com/Eugeny/russh-sftp), [fast-socks5](https://github.com/dizda/fast-socks5), [xterm.js](https://xtermjs.org), [rusqlite](https://github.com/rusqlite/rusqlite), [React](https://react.dev), and [zustand](https://github.com/pmndrs/zustand) — and by the tools it draws inspiration from: [Termius](https://termius.com), [Tabby](https://tabby.sh), and [Warp](https://www.warp.dev).
+ConnectHub is built on the shoulders of great open-source projects, including [Tauri](https://tauri.app), [russh](https://github.com/Eugeny/russh), [russh-sftp](https://github.com/Eugeny/russh-sftp), [xterm.js](https://xtermjs.org), [rusqlite](https://github.com/rusqlite/rusqlite), [React](https://react.dev), and [zustand](https://github.com/pmndrs/zustand) — and by the tools it draws inspiration from: [Termius](https://termius.com), [Tabby](https://tabby.sh), and [Warp](https://www.warp.dev).

@@ -24,7 +24,7 @@ src-tauri/src/
   commands/   #[tauri::command] wrappers — thin, delegate to data/
   data/       CRUD + domain logic against SQLite, one module per entity
   models/     plain structs (Host, Identity, SshKey, ...) + *Input variants
-  ssh/        session/SFTP/tunnel/exec via russh, russh-sftp, fast-socks5
+  ssh/        session/SFTP/exec/stats via russh, russh-sftp
   vault/      Argon2id KDF + AES-256-GCM field-level encryption
   vpn/        openvpn process management + privileged helper setup
   google/     OAuth2 PKCE + Drive backup
@@ -69,7 +69,7 @@ npx tsc --noEmit    # frontend type-check (no separate test runner yet)
 
 ### Live SSH integration tests
 
-Tests under `*::live_sshd_tests` modules (in `ssh/session.rs`, `ssh/sftp.rs`, `ssh/tunnel.rs`, `ssh/exec.rs`) are marked `#[ignore]` and connect to a **real local `sshd` on port 22** using a dedicated throwaway SSH keypair whose public half must be appended to `~/.ssh/authorized_keys`. Generate a keypair for this purpose, point the test module's hardcoded key path at it, and add it to `authorized_keys` before running:
+Tests under `*::live_sshd_tests` modules (in `ssh/session.rs`, `ssh/sftp.rs`, `ssh/exec.rs`) are marked `#[ignore]` and connect to a **real local `sshd` on port 22** using a dedicated throwaway SSH keypair whose public half must be appended to `~/.ssh/authorized_keys`. Generate a keypair for this purpose, point the test module's hardcoded key path at it, and add it to `authorized_keys` before running:
 
 ```bash
 cargo test --lib -- --ignored
