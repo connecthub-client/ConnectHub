@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-07-22
+
 ### Added
 
 - **VSCode-style layout**: an icon Activity Bar (Hosts/Identities/Keys/VPN, plus Google Backup/Settings pinned to the bottom) replacing the old top tab bar, a Primary Side Bar, and a Snippets panel accessible from a dedicated icon on the right edge. Both side panels have independent collapse toggles (pinned chevrons, top of the Activity Bar and above the Snippets icon) that stay reachable in either state.
@@ -63,5 +65,6 @@ Initial public release.
 - VPN helper scripts run under narrowly-scoped polkit rules and force `--script-security 0`, so an uploaded `.ovpn` config can never execute arbitrary code as root.
 - Vault key derivation and the per-installation auto-unlock secret were hardened during development; see [ARCHITECTURE.md](ARCHITECTURE.md#vault--master-password) for the current design and its tradeoffs.
 
-[Unreleased]: https://github.com/connecthub-client/ConnectHub/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/connecthub-client/ConnectHub/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/connecthub-client/ConnectHub/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/connecthub-client/ConnectHub/releases/tag/v1.0.0
