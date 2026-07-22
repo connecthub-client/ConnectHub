@@ -85,7 +85,7 @@ export default function VpnProfileForm({ profile, onDone }: VpnProfileFormProps)
       />
 
       <div className="mb-1 flex items-center justify-between">
-        <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
           OpenVPN config (.ovpn)
           <RequiredMark />
         </label>
@@ -105,16 +105,16 @@ export default function VpnProfileForm({ profile, onDone }: VpnProfileFormProps)
         required
       />
 
-      <label className="mb-4 flex items-start gap-2 text-sm text-neutral-700 dark:text-neutral-300">
+      <label className="mb-4 flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
         <input
           type="checkbox"
           checked={avoidDefaultRoute}
           onChange={(e) => setAvoidDefaultRoute(e.currentTarget.checked)}
-          className="mt-0.5"
+          className="mt-0.5 accent-teal-600"
         />
         <span>
           Don&apos;t let this VPN take over my default internet route
-          <span className="block text-xs text-neutral-400">
+          <span className="block text-xs text-slate-400">
             Hosts assigned to this profile are always reachable through it either way - it's
             already routed explicitly per host, so this doesn't affect that. This only limits
             everything else: your other, unrelated traffic. Recommended unless this profile is
@@ -123,7 +123,7 @@ export default function VpnProfileForm({ profile, onDone }: VpnProfileFormProps)
         </span>
       </label>
 
-      <p className="mb-4 -mt-2 text-xs text-neutral-400">
+      <p className="mb-4 -mt-2 text-xs text-slate-400">
         Only needed if this profile prompts for a separate username/password at login - most
         profiles with an embedded client certificate don't.
       </p>

@@ -57,15 +57,15 @@ function App() {
 
   if (boot === "loading") {
     return (
-      <div className="flex h-full items-center justify-center bg-neutral-100 dark:bg-neutral-900">
-        <p className="text-neutral-500 dark:text-neutral-400">Loading…</p>
+      <div className="flex h-full items-center justify-center bg-slate-100 dark:bg-slate-900">
+        <p className="text-slate-500 dark:text-slate-400">Loading…</p>
       </div>
     );
   }
 
   if (boot === "error") {
     return (
-      <div className="flex h-full items-center justify-center bg-neutral-100 dark:bg-neutral-900">
+      <div className="flex h-full items-center justify-center bg-slate-100 dark:bg-slate-900">
         <p className="text-red-600 dark:text-red-400">{error}</p>
       </div>
     );

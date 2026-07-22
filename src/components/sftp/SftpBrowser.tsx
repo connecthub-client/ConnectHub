@@ -93,15 +93,15 @@ function FilePane({
   onRefresh,
 }: FilePaneProps) {
   return (
-    <div className="flex h-full min-w-0 flex-1 flex-col border-neutral-200 dark:border-neutral-800">
-      <div className="border-b border-neutral-200 p-2 dark:border-neutral-800">
+    <div className="flex h-full min-w-0 flex-1 flex-col border-slate-200 dark:border-slate-800">
+      <div className="border-b border-slate-200 p-2 dark:border-slate-800">
         <div className="mb-1 flex items-center justify-between">
-          <span className="text-xs font-semibold uppercase text-neutral-500">{title}</span>
+          <span className="text-xs font-semibold uppercase text-slate-500">{title}</span>
           <div className="flex gap-1">
             <button
               type="button"
               onClick={() => onNavigate(parentPath(path))}
-              className="rounded px-1.5 py-0.5 text-xs text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+              className="rounded px-1.5 py-0.5 text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
               title="Up one level"
             >
               ↑
@@ -109,7 +109,7 @@ function FilePane({
             <button
               type="button"
               onClick={onRefresh}
-              className="rounded px-1.5 py-0.5 text-xs text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+              className="rounded px-1.5 py-0.5 text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
               title="Refresh"
             >
               ⟳
@@ -117,7 +117,7 @@ function FilePane({
             <button
               type="button"
               onClick={onNewFolder}
-              className="rounded px-1.5 py-0.5 text-xs text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+              className="rounded px-1.5 py-0.5 text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
               title="New folder"
             >
               +folder
@@ -127,12 +127,12 @@ function FilePane({
         <input
           value={path}
           readOnly
-          className="w-full rounded border border-neutral-200 bg-neutral-50 px-2 py-1 text-xs text-neutral-600 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300"
+          className="w-full rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
         />
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {loading && <p className="p-3 text-sm text-neutral-400">Loading…</p>}
+        {loading && <p className="p-3 text-sm text-slate-400">Loading…</p>}
         {error && <p className="p-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
         {!loading &&
           !error &&
@@ -144,20 +144,20 @@ function FilePane({
               className={`group flex cursor-pointer items-center justify-between px-3 py-1.5 text-sm ${
                 selected === entry.path
                   ? "bg-teal-50 dark:bg-teal-950"
-                  : "hover:bg-neutral-50 dark:hover:bg-neutral-900"
+                  : "hover:bg-slate-50 dark:hover:bg-slate-900"
               }`}
             >
               <div className="flex min-w-0 items-center gap-2">
                 <span>{entry.isDir ? "📁" : "📄"}</span>
-                <span className="truncate text-neutral-800 dark:text-neutral-200">
+                <span className="truncate text-slate-800 dark:text-slate-200">
                   {entry.name}
                 </span>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <span className="text-xs text-neutral-400">
+                <span className="text-xs text-slate-400">
                   {entry.isDir ? "" : formatSize(entry.size)}
                 </span>
-                <span className="hidden text-xs text-neutral-400 group-hover:inline">
+                <span className="hidden text-xs text-slate-400 group-hover:inline">
                   {formatModified(entry.modified)}
                 </span>
                 <button
@@ -166,7 +166,7 @@ function FilePane({
                     e.stopPropagation();
                     onRename(entry);
                   }}
-                  className="hidden text-xs text-neutral-500 hover:text-teal-600 group-hover:inline"
+                  className="hidden text-xs text-slate-500 hover:text-teal-600 group-hover:inline"
                 >
                   rename
                 </button>
@@ -176,7 +176,7 @@ function FilePane({
                     e.stopPropagation();
                     onDelete(entry);
                   }}
-                  className="hidden text-xs text-neutral-500 hover:text-red-600 group-hover:inline"
+                  className="hidden text-xs text-slate-500 hover:text-red-600 group-hover:inline"
                 >
                   delete
                 </button>
@@ -184,7 +184,7 @@ function FilePane({
             </div>
           ))}
         {!loading && !error && entries.length === 0 && (
-          <p className="p-3 text-sm text-neutral-400">Empty directory</p>
+          <p className="p-3 text-sm text-slate-400">Empty directory</p>
         )}
       </div>
     </div>
@@ -389,7 +389,7 @@ export default function SftpBrowser({ host, onClose }: SftpBrowserProps) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-neutral-200 bg-neutral-100 px-4 py-2 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="flex items-center justify-between border-b border-slate-200 bg-slate-100 px-4 py-2 dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-center gap-2 text-sm">
           <span
             className={`h-2 w-2 rounded-full ${
@@ -400,14 +400,14 @@ export default function SftpBrowser({ host, onClose }: SftpBrowserProps) {
                   : "bg-red-500"
             }`}
           />
-          <span className="font-medium text-neutral-900 dark:text-neutral-100">
+          <span className="font-medium text-slate-900 dark:text-slate-100">
             SFTP — {host.label}
           </span>
         </div>
         <button
           type="button"
           onClick={onClose}
-          className="rounded-md px-2 py-1 text-sm text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800"
+          className="rounded-lg px-2 py-1 text-sm text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800"
         >
           Close
         </button>
@@ -440,13 +440,13 @@ export default function SftpBrowser({ host, onClose }: SftpBrowserProps) {
           onRefresh={() => refreshLocal(localPath)}
         />
 
-        <div className="flex w-16 shrink-0 flex-col items-center justify-center gap-2 border-x border-neutral-200 dark:border-neutral-800">
+        <div className="flex w-16 shrink-0 flex-col items-center justify-center gap-2 border-x border-slate-200 dark:border-slate-800">
           <button
             type="button"
             disabled={!selectedLocal || transferring}
             onClick={handleUpload}
             title="Upload to remote"
-            className="rounded-md bg-teal-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-30"
+            className="rounded-lg bg-teal-600 shadow-sm px-2 py-1 text-xs font-medium text-white disabled:opacity-30"
           >
             Upload →
           </button>
@@ -455,14 +455,14 @@ export default function SftpBrowser({ host, onClose }: SftpBrowserProps) {
             disabled={!selectedRemote || transferring}
             onClick={handleDownload}
             title="Download to local"
-            className="rounded-md bg-teal-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-30"
+            className="rounded-lg bg-teal-600 shadow-sm px-2 py-1 text-xs font-medium text-white disabled:opacity-30"
           >
             ← Download
           </button>
           {transferringEntry && (
             <div className="mt-1 w-full px-1 text-center" title={transferringEntry.name}>
               <div className="h-1 w-full animate-pulse rounded-full bg-teal-500" />
-              <p className="mt-1 truncate text-[10px] text-neutral-500 dark:text-neutral-400">
+              <p className="mt-1 truncate text-[10px] text-slate-500 dark:text-slate-400">
                 {transferringEntry.direction === "upload" ? "↑" : "↓"} {transferringEntry.name}
               </p>
             </div>

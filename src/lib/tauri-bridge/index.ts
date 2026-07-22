@@ -7,7 +7,7 @@ export * from "./keys";
 export * from "./session";
 export * from "./sftp";
 export * from "./localFs";
-export * from "./tunnels";
 export * from "./snippets";
+export * from "./stats";
 export * from "./vpn";
 export * from "./types";

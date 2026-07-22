@@ -5,6 +5,7 @@ import { useHostsStore } from "../../state/hostsStore";
 import { useVpnStore } from "../../state/vpnStore";
 import { errorClass, inputClass, labelClass, primaryButtonClass, selectClass } from "./formStyles";
 import RequiredMark from "./RequiredMark";
+import { CLOUD_ICONS, HOST_ICONS, LETTER_ICONS, HostIcon } from "../common/hostIcons";
 
 interface HostFormProps {
   host?: Host;
@@ -14,11 +15,20 @@ interface HostFormProps {
 
 type InlineAuthMethod = Extract<AuthMethod, "password" | "private_key">;
 
+const COLOR_PRESETS = [
+  "#f43f5e", // rose
+  "#f97316", // orange
+  "#eab308", // yellow
+  "#22c55e", // green
+  "#14b8a6", // teal
+  "#3b82f6", // blue
+  "#a855f7", // purple
+];
+
 export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps) {
   const groups = useHostsStore((s) => s.groups);
   const identities = useHostsStore((s) => s.identities);
   const keys = useHostsStore((s) => s.keys);
-  const hosts = useHostsStore((s) => s.hosts);
   const createHost = useHostsStore((s) => s.createHost);
   const updateHost = useHostsStore((s) => s.updateHost);
   const createIdentity = useHostsStore((s) => s.createIdentity);
@@ -30,6 +40,9 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
   const [hostname, setHostname] = useState(host?.hostname ?? "");
   const [port, setPort] = useState(host?.port ?? 22);
   const [groupId, setGroupId] = useState(host?.group_id ?? defaultGroupId ?? "");
+  const [color, setColor] = useState<string | null>(host?.color ?? null);
+  const [icon, setIcon] = useState<string | null>(host?.icon ?? null);
+  const [showLetterIcons, setShowLetterIcons] = useState(false);
 
   const [identityMode, setIdentityMode] = useState<"new" | "existing">(
     host?.identity_id ? "existing" : "new",
@@ -43,8 +56,6 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
   const [importKeyLabel, setImportKeyLabel] = useState("");
   const [importKeyPem, setImportKeyPem] = useState("");
   const [importKeyPassphrase, setImportKeyPassphrase] = useState("");
-
-  const [jumpHostId, setJumpHostId] = useState(host?.jump_host_id ?? "");
 
   const [vpnMode, setVpnMode] = useState<"none" | "existing" | "new">(
     host?.vpn_profile_id ? "existing" : "none",
@@ -177,9 +188,9 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
         hostname,
         port,
         identity_id: resolvedIdentityId,
-        jump_host_id: jumpHostId || null,
         vpn_profile_id: resolvedVpnProfileId,
-        color: host?.color ?? null,
+        color,
+        icon,
         notes: notes || null,
         sort_order: host?.sort_order ?? 0,
       };
@@ -255,20 +266,107 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
         ))}
       </select>
 
+      <label className={labelClass}>Color (optional)</label>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setColor(null)}
+          title="No color"
+          className={`flex h-6 w-6 items-center justify-center rounded-full border text-xs ${
+            color === null
+              ? "border-teal-500 text-teal-600 dark:text-teal-400"
+              : "border-slate-300 text-slate-400 dark:border-slate-700"
+          }`}
+        >
+          ✕
+        </button>
+        {COLOR_PRESETS.map((c) => (
+          <button
+            key={c}
+            type="button"
+            onClick={() => setColor(c)}
+            title={c}
+            className="h-6 w-6 rounded-full"
+            style={{
+              backgroundColor: c,
+              outline: color === c ? `2px solid ${c}` : "none",
+              outlineOffset: "2px",
+            }}
+          />
+        ))}
+      </div>
+
+      <label className={labelClass}>Icon (optional)</label>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setIcon(null)}
+          title="No icon"
+          className={`flex h-7 w-7 items-center justify-center rounded-lg border text-xs ${
+            icon === null
+              ? "border-teal-500 text-teal-600 dark:text-teal-400"
+              : "border-slate-300 text-slate-400 hover:border-slate-400 dark:border-slate-700"
+          }`}
+        >
+          ✕
+        </button>
+        {[...HOST_ICONS, ...CLOUD_ICONS].map((i) => (
+          <button
+            key={i.key}
+            type="button"
+            onClick={() => setIcon(i.key)}
+            title={i.label}
+            className={`flex h-7 w-7 items-center justify-center rounded-lg border ${
+              icon === i.key
+                ? "border-teal-500 text-teal-600 dark:text-teal-400"
+                : "border-slate-300 text-slate-500 hover:border-slate-400 dark:border-slate-700 dark:text-slate-400"
+            }`}
+          >
+            <HostIcon icon={i.key} className="h-4 w-4" />
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => setShowLetterIcons((v) => !v)}
+          className="flex h-7 items-center justify-center rounded-lg border border-dashed border-slate-300 px-2 text-xs text-slate-500 hover:border-slate-400 dark:border-slate-700 dark:text-slate-400"
+        >
+          {showLetterIcons ? "Less" : "More"}
+        </button>
+      </div>
+      {showLetterIcons && (
+        <div className="mb-2 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 p-2 dark:border-slate-800">
+          {LETTER_ICONS.map((i) => (
+            <button
+              key={i.key}
+              type="button"
+              onClick={() => setIcon(i.key)}
+              title={i.label}
+              className={`flex h-7 w-7 items-center justify-center rounded-lg border ${
+                icon === i.key
+                  ? "border-teal-500"
+                  : "border-slate-300 hover:border-slate-400 dark:border-slate-700"
+              }`}
+            >
+              <HostIcon icon={i.key} className="h-4 w-4" />
+            </button>
+          ))}
+        </div>
+      )}
+
       <label className={labelClass}>Credentials</label>
       {identities.length > 0 && (
-        <div className="mb-4 flex rounded-md border border-neutral-300 p-1 text-sm dark:border-neutral-700">
+        <div className="mb-4 flex rounded-lg border border-slate-300 p-1 text-sm dark:border-slate-700">
           <button
             type="button"
             onClick={() => setIdentityMode("new")}
-            className={`flex-1 rounded px-3 py-1.5 ${identityMode === "new" ? "bg-teal-600 text-white" : "text-neutral-600 dark:text-neutral-300"}`}
+            className={`flex-1 rounded px-3 py-1.5 ${identityMode === "new" ? "bg-teal-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
           >
             New credentials
           </button>
           <button
             type="button"
             onClick={() => setIdentityMode("existing")}
-            className={`flex-1 rounded px-3 py-1.5 ${identityMode === "existing" ? "bg-teal-600 text-white" : "text-neutral-600 dark:text-neutral-300"}`}
+            className={`flex-1 rounded px-3 py-1.5 ${identityMode === "existing" ? "bg-teal-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
           >
             Use saved identity
           </button>
@@ -289,7 +387,7 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
           ))}
         </select>
       ) : (
-        <div className="mb-4 rounded-md border border-neutral-200 p-3 dark:border-neutral-700">
+        <div className="mb-4 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
           <label className={labelClass}>Username</label>
           <input
             value={username}
@@ -299,12 +397,13 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
           />
 
           <label className={labelClass}>Authentication</label>
-          <div className="mb-4 flex gap-4 text-sm text-neutral-700 dark:text-neutral-300">
+          <div className="mb-4 flex gap-4 text-sm text-slate-700 dark:text-slate-300">
             <label className="flex items-center gap-1.5">
               <input
                 type="radio"
                 checked={authMethod === "password"}
                 onChange={() => setAuthMethod("password")}
+                className="accent-teal-600"
               />
               Password
             </label>
@@ -313,6 +412,7 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
                 type="radio"
                 checked={authMethod === "private_key"}
                 onChange={() => setAuthMethod("private_key")}
+                className="accent-teal-600"
               />
               Private key
             </label>
@@ -330,18 +430,18 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
           ) : (
             <>
               {keys.length > 0 && (
-                <div className="mb-3 flex rounded-md border border-neutral-300 p-1 text-sm dark:border-neutral-700">
+                <div className="mb-3 flex rounded-lg border border-slate-300 p-1 text-sm dark:border-slate-700">
                   <button
                     type="button"
                     onClick={() => setKeyMode("existing")}
-                    className={`flex-1 rounded px-2 py-1.5 ${keyMode === "existing" ? "bg-teal-600 text-white" : "text-neutral-600 dark:text-neutral-300"}`}
+                    className={`flex-1 rounded px-2 py-1.5 ${keyMode === "existing" ? "bg-teal-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
                   >
                     Use saved key
                   </button>
                   <button
                     type="button"
                     onClick={() => setKeyMode("import")}
-                    className={`flex-1 rounded px-2 py-1.5 ${keyMode === "import" ? "bg-teal-600 text-white" : "text-neutral-600 dark:text-neutral-300"}`}
+                    className={`flex-1 rounded px-2 py-1.5 ${keyMode === "import" ? "bg-teal-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
                   >
                     Import new key
                   </button>
@@ -362,7 +462,7 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
                   ))}
                 </select>
               ) : (
-                <div className="rounded-md border border-neutral-200 p-3 dark:border-neutral-700">
+                <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
                   <label className={labelClass}>Label</label>
                   <input
                     value={importKeyLabel}
@@ -372,7 +472,7 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
                   />
 
                   <div className="mb-1 flex items-center justify-between">
-                    <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                       Private key (OpenSSH or PEM format)
                     </label>
                     <button
@@ -405,42 +505,23 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
         </div>
       )}
 
-      <label className={labelClass}>Jump host (ProxyJump)</label>
-      <select
-        value={jumpHostId}
-        onChange={(e) => setJumpHostId(e.currentTarget.value)}
-        className={selectClass}
-      >
-        <option value="">(none)</option>
-        {hosts
-          .filter((h) => h.id !== host?.id)
-          .map((h) => (
-            <option key={h.id} value={h.id}>
-              {h.label}
-            </option>
-          ))}
-      </select>
-      <p className="mb-2 -mt-1 text-xs text-amber-600 dark:text-amber-400">
-        Coming soon - saved here, but connecting doesn't chain through the jump host yet.
-      </p>
-
       <label className={labelClass}>VPN (optional)</label>
-      <p className="mb-2 -mt-1 text-xs text-neutral-400">
+      <p className="mb-2 -mt-1 text-xs text-slate-400">
         If this host is only reachable over a VPN, assign a profile here - connecting will bring
         the VPN up first automatically.
       </p>
-      <div className="mb-4 flex rounded-md border border-neutral-300 p-1 text-sm dark:border-neutral-700">
+      <div className="mb-4 flex rounded-lg border border-slate-300 p-1 text-sm dark:border-slate-700">
         <button
           type="button"
           onClick={() => setVpnMode("none")}
-          className={`flex-1 rounded px-2 py-1.5 ${vpnMode === "none" ? "bg-teal-600 text-white" : "text-neutral-600 dark:text-neutral-300"}`}
+          className={`flex-1 rounded px-2 py-1.5 ${vpnMode === "none" ? "bg-teal-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
         >
           None
         </button>
         <button
           type="button"
           onClick={() => setVpnMode("new")}
-          className={`flex-1 rounded px-2 py-1.5 ${vpnMode === "new" ? "bg-teal-600 text-white" : "text-neutral-600 dark:text-neutral-300"}`}
+          className={`flex-1 rounded px-2 py-1.5 ${vpnMode === "new" ? "bg-teal-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
         >
           Upload profile
         </button>
@@ -448,7 +529,7 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
           <button
             type="button"
             onClick={() => setVpnMode("existing")}
-            className={`flex-1 rounded px-2 py-1.5 ${vpnMode === "existing" ? "bg-teal-600 text-white" : "text-neutral-600 dark:text-neutral-300"}`}
+            className={`flex-1 rounded px-2 py-1.5 ${vpnMode === "existing" ? "bg-teal-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
           >
             Use saved profile
           </button>
@@ -471,7 +552,7 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
       )}
 
       {vpnMode === "new" && (
-        <div className="mb-4 rounded-md border border-neutral-200 p-3 dark:border-neutral-700">
+        <div className="mb-4 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
           <label className={labelClass}>Label</label>
           <input
             value={vpnLabel}
@@ -481,7 +562,7 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
           />
 
           <div className="mb-1 flex items-center justify-between">
-            <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
               OpenVPN config (.ovpn)
             </label>
             <button
@@ -499,16 +580,16 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
             placeholder="Paste an .ovpn file's contents, or browse to one above"
           />
 
-          <label className="mb-3 flex items-start gap-2 text-sm text-neutral-700 dark:text-neutral-300">
+          <label className="mb-3 flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
             <input
               type="checkbox"
               checked={vpnAvoidDefaultRoute}
               onChange={(e) => setVpnAvoidDefaultRoute(e.currentTarget.checked)}
-              className="mt-0.5"
+              className="mt-0.5 accent-teal-600"
             />
             <span>
               Don&apos;t let this VPN take over my default internet route
-              <span className="block text-xs text-neutral-400">
+              <span className="block text-xs text-slate-400">
                 This host stays reachable through it either way. Only limits this profile's
                 effect on your other, unrelated traffic - recommended unless it's meant to route
                 your whole connection.
@@ -516,7 +597,7 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
             </span>
           </label>
 
-          <p className="mb-3 -mt-2 text-xs text-neutral-400">
+          <p className="mb-3 -mt-2 text-xs text-slate-400">
             Only needed if this profile prompts for a separate username/password at login - most
             profiles with an embedded client certificate don't.
           </p>

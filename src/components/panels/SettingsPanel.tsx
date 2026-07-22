@@ -7,7 +7,6 @@ import {
   useSettingsStore,
 } from "../../state/settingsStore";
 import { inputClass, labelClass, selectClass } from "../forms/formStyles";
-import GoogleBackupSection from "./GoogleBackupSection";
 
 const THEME_MODES: ThemeMode[] = ["system", "light", "dark"];
 const CURSOR_STYLES: CursorStyle[] = ["block", "bar", "underline"];
@@ -26,10 +25,10 @@ export default function SettingsPanel() {
 
   return (
     <div className="max-w-xl">
-      <h2 className="mb-4 text-lg font-semibold text-neutral-900 dark:text-neutral-50">Settings</h2>
+      <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-50">Settings</h2>
 
       <section className="mb-6">
-        <h3 className="mb-2 text-sm font-semibold text-neutral-800 dark:text-neutral-200">Appearance</h3>
+        <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-200">Appearance</h3>
         <label className={labelClass}>Theme</label>
         <select
           value={theme}
@@ -45,7 +44,7 @@ export default function SettingsPanel() {
       </section>
 
       <section className="mb-6">
-        <h3 className="mb-2 text-sm font-semibold text-neutral-800 dark:text-neutral-200">Terminal</h3>
+        <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-200">Terminal</h3>
 
         <label className={labelClass}>Font family</label>
         <input
@@ -61,7 +60,7 @@ export default function SettingsPanel() {
           max={24}
           value={terminalFontSize}
           onChange={(e) => setTerminalFontSize(Number(e.target.value))}
-          className="mb-4 w-full"
+          className="mb-4 w-full accent-teal-600"
         />
 
         <label className={labelClass}>Cursor style</label>
@@ -91,18 +90,13 @@ export default function SettingsPanel() {
         </select>
       </section>
 
-      <section className="mb-6">
-        <h3 className="mb-2 text-sm font-semibold text-neutral-800 dark:text-neutral-200">Backup</h3>
-        <GoogleBackupSection />
-      </section>
-
       <section>
-        <h3 className="mb-2 text-sm font-semibold text-neutral-800 dark:text-neutral-200">Keybindings</h3>
-        <div className="divide-y divide-neutral-200 rounded-md border border-neutral-200 dark:divide-neutral-800 dark:border-neutral-800">
+        <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-200">Keybindings</h3>
+        <div className="divide-y divide-slate-200 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
           {KEYBINDINGS.map((k) => (
             <div key={k.keys} className="flex items-center justify-between px-3 py-2 text-sm">
-              <span className="text-neutral-600 dark:text-neutral-300">{k.action}</span>
-              <kbd className="rounded border border-neutral-300 bg-neutral-100 px-2 py-0.5 font-mono text-xs text-neutral-700 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
+              <span className="text-slate-600 dark:text-slate-300">{k.action}</span>
+              <kbd className="rounded border border-slate-300 bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                 {k.keys}
               </kbd>
             </div>

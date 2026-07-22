@@ -10,10 +10,36 @@ import { sessionConnect, sessionDisconnect, sessionResize, sessionWrite } from "
 import { Host } from "../../lib/tauri-bridge";
 import { TERMINAL_THEME_PRESETS, useSettingsStore } from "../../state/settingsStore";
 import { useHostsStore } from "../../state/hostsStore";
+import { useSessionsStore } from "../../state/sessionsStore";
+import { parseRemoteHistory, rankRemoteHistory, useCommandHistoryStore } from "../../state/commandHistoryStore";
+import { useSnippetsStore } from "../../state/snippetsStore";
 import { friendlyError } from "../../lib/friendlyError";
+
+// Reads whichever shell history file exists, most recent lines last, so
+// HostContextPanel's "Most used" can be seeded from real usage on the
+// server itself rather than only what's been run through ConnectHub - see
+// commandHistoryStore.ts's remoteTopUsed. Run as a one-off exec (not the
+// interactive PTY), same as Quick Commands/stats polling.
+const HISTORY_FETCH_COMMAND =
+  'if [ -f "$HOME/.zsh_history" ]; then tail -n 150 "$HOME/.zsh_history"; else tail -n 150 "$HOME/.bash_history" 2>/dev/null; fi';
+
+// Matches a password/passphrase prompt in remote output, so the line the
+// user types right after it can be skipped from history instead of saved
+// in plaintext - best-effort (there's no real shell integration telling us
+// what's actually a secret prompt vs. just text containing the word), but
+// a meaningful safeguard against the common case of sudo/su/ssh-key
+// passphrase prompts ending up in local command history. Deliberately just
+// the bare words rather than requiring an immediately-following colon -
+// real prompts vary ("Password:", "[sudo] password for alice:", "Enter
+// passphrase for key '...':") and a stricter pattern would miss most of
+// them. The cost of a false positive (skipping a normal line that happens
+// to mention "password") is far lower than the cost of a false negative
+// (a real secret ending up in plaintext local history).
+const SECRET_PROMPT_RE = /password|passphrase/i;
 
 interface TerminalViewProps {
   host: Host;
+  tabId: string;
   onClose: () => void;
 }
 
@@ -26,16 +52,22 @@ function base64ToBytes(base64: string): Uint8Array {
   return bytes;
 }
 
-export default function TerminalView({ host, onClose }: TerminalViewProps) {
+export default function TerminalView({ host, tabId, onClose }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const searchAddonRef = useRef<SearchAddon | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const sessionIdRef = useRef<string | null>(null);
-  const [status, setStatus] = useState<"connecting" | "connected" | "closed" | "error">(
+  const [status, setLocalStatus] = useState<"connecting" | "connected" | "closed" | "error">(
     "connecting",
   );
+  // Mirrors into sessionsStore so the tab bar (which doesn't render this
+  // component's own header) can show live connection status too.
+  function setStatus(next: "connecting" | "connected" | "closed" | "error") {
+    setLocalStatus(next);
+    useSessionsStore.getState().setStatus(tabId, next);
+  }
   const [error, setError] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -94,9 +126,31 @@ export default function TerminalView({ host, onClose }: TerminalViewProps) {
 
     let disposed = false;
 
+    // Best-effort local-echo tracking of what the user types, so
+    // HostContextPanel's "Most used"/"Recent" can reflect real terminal
+    // usage rather than only clicks on saved Snippets - see
+    // commandHistoryStore.ts. Not real shell integration (no OSC 133
+    // semantic prompts), so this is a heuristic: it re-derives "lines" from
+    // raw keystrokes sent to the remote rather than anything the remote
+    // shell itself reports.
+    let lineBuffer = "";
+    let outputTail = "";
+    let suppressNextLine = false;
+
+    setStatus("connecting");
     sessionConnect(host.id, (event) => {
       if (event.type === "data") {
-        term.write(base64ToBytes(event.data));
+        const bytes = base64ToBytes(event.data);
+        term.write(bytes);
+        outputTail = (outputTail + new TextDecoder().decode(bytes)).slice(-256);
+        if (SECRET_PROMPT_RE.test(outputTail)) {
+          suppressNextLine = true;
+          // Otherwise the matched text just sits in the tail (nothing else
+          // has pushed it out of the last 256 characters yet) and keeps
+          // re-matching on every subsequent chunk, effectively suppressing
+          // history forever instead of for one line.
+          outputTail = "";
+        }
       } else if (event.type === "closed") {
         setStatus("closed");
       } else if (event.type === "error") {
@@ -113,6 +167,21 @@ export default function TerminalView({ host, onClose }: TerminalViewProps) {
         setStatus("connected");
         sessionResize(sessionId, term.cols, term.rows);
         useHostsStore.getState().loadAll();
+        useSessionsStore.getState().setSessionId(tabId, sessionId);
+
+        // Best-effort - a restricted account, a shell with no history file,
+        // or a server that doesn't allow this one-off exec just means
+        // HostContextPanel falls back to its own locally-recorded ranking.
+        useSnippetsStore
+          .getState()
+          .runOnHosts([host.id], HISTORY_FETCH_COMMAND)
+          .then(([result]) => {
+            if (disposed || !result?.output?.stdout) return;
+            const commands = parseRemoteHistory(result.output.stdout);
+            if (commands.length === 0) return;
+            useCommandHistoryStore.getState().setRemoteTopUsed(host.id, rankRemoteHistory(commands, 10));
+          })
+          .catch(() => {});
       })
       .catch((e) => {
         setStatus("error");
@@ -122,6 +191,36 @@ export default function TerminalView({ host, onClose }: TerminalViewProps) {
     const onData = term.onData((data) => {
       if (sessionIdRef.current) {
         sessionWrite(sessionIdRef.current, data);
+      }
+
+      // Skip escape sequences whole (arrow keys, function keys, bracketed
+      // paste markers, etc.) rather than feeding their bytes into the line
+      // buffer as if they were typed text.
+      if (data.startsWith("\x1b")) return;
+
+      for (const ch of data) {
+        const code = ch.charCodeAt(0);
+        if (ch === "\r" || ch === "\n") {
+          const line = lineBuffer.trim();
+          lineBuffer = "";
+          if (line && !suppressNextLine) {
+            useCommandHistoryStore.getState().record(host.id, {
+              label: line,
+              body: line,
+              exitStatus: null,
+              error: null,
+            });
+          }
+          suppressNextLine = false;
+        } else if (ch === "\x7f" || ch === "\b") {
+          lineBuffer = lineBuffer.slice(0, -1);
+        } else if (ch === "\x03" || ch === "\x15") {
+          // Ctrl+C / Ctrl+U - the in-progress line was aborted or cleared,
+          // not submitted, so drop it rather than recording a fragment.
+          lineBuffer = "";
+        } else if (code >= 32) {
+          lineBuffer += ch;
+        }
       }
     });
 
@@ -179,7 +278,7 @@ export default function TerminalView({ host, onClose }: TerminalViewProps) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-neutral-200 bg-neutral-100 px-4 py-2 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="flex items-center justify-between border-b border-slate-200 bg-slate-100 px-4 py-2 dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-center gap-2 text-sm">
           <span
             className={`h-2 w-2 rounded-full ${
@@ -190,15 +289,15 @@ export default function TerminalView({ host, onClose }: TerminalViewProps) {
                   : "bg-red-500"
             }`}
           />
-          <span className="font-medium text-neutral-900 dark:text-neutral-100">{host.label}</span>
-          <span className="text-neutral-400">
+          <span className="font-medium text-slate-900 dark:text-slate-100">{host.label}</span>
+          <span className="text-slate-400">
             {host.hostname}:{host.port}
           </span>
         </div>
         <button
           type="button"
           onClick={onClose}
-          className="rounded-md px-2 py-1 text-sm text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800"
+          className="rounded-lg px-2 py-1 text-sm text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800"
         >
           Close
         </button>
@@ -211,7 +310,7 @@ export default function TerminalView({ host, onClose }: TerminalViewProps) {
       )}
 
       {searchOpen && (
-        <div className="flex items-center gap-2 border-b border-neutral-200 bg-neutral-50 px-3 py-1.5 dark:border-neutral-800 dark:bg-neutral-950">
+        <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-1.5 dark:border-slate-800 dark:bg-slate-950">
           <input
             ref={searchInputRef}
             value={searchQuery}
@@ -232,13 +331,13 @@ export default function TerminalView({ host, onClose }: TerminalViewProps) {
               }
             }}
             placeholder="Search scrollback…"
-            className="flex-1 rounded border border-neutral-300 bg-white px-2 py-1 text-sm text-neutral-900 outline-none focus:border-teal-500 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+            className="flex-1 rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 outline-none focus:border-teal-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
           />
           <button
             type="button"
             onClick={() => searchAddonRef.current?.findPrevious(searchQuery)}
             title="Previous match (Shift+Enter)"
-            className="rounded px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800"
+            className="rounded px-2 py-1 text-xs text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800"
           >
             ↑
           </button>
@@ -246,7 +345,7 @@ export default function TerminalView({ host, onClose }: TerminalViewProps) {
             type="button"
             onClick={() => searchAddonRef.current?.findNext(searchQuery)}
             title="Next match (Enter)"
-            className="rounded px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800"
+            className="rounded px-2 py-1 text-xs text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800"
           >
             ↓
           </button>
@@ -254,7 +353,7 @@ export default function TerminalView({ host, onClose }: TerminalViewProps) {
             type="button"
             onClick={closeSearch}
             aria-label="Close search"
-            className="rounded px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800"
+            className="rounded px-2 py-1 text-xs text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800"
           >
             ✕
           </button>
@@ -265,7 +364,7 @@ export default function TerminalView({ host, onClose }: TerminalViewProps) {
         <div ref={containerRef} className="h-full w-full" />
       </div>
 
-      <div className="flex items-center justify-between border-t border-neutral-200 bg-neutral-100 px-4 py-1 text-xs text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400">
+      <div className="flex items-center justify-between border-t border-slate-200 bg-slate-100 px-4 py-1 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
         <span>
           {status === "connected" && `Connected to ${host.label}`}
           {status === "connecting" && "Connecting…"}

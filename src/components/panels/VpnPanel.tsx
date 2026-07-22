@@ -33,7 +33,7 @@ function statusDotClass(state: VpnState | undefined): string {
     case "error":
       return "bg-red-500";
     default:
-      return "bg-neutral-400 dark:bg-neutral-600";
+      return "bg-slate-400 dark:bg-slate-600";
   }
 }
 
@@ -110,7 +110,7 @@ export default function VpnPanel({ onNew, onEdit }: VpnPanelProps) {
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-neutral-900 dark:text-neutral-50">VPN</h2>
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">VPN</h2>
         <div className="flex gap-2">
           {anyActive && (
             <button
@@ -118,7 +118,7 @@ export default function VpnPanel({ onNew, onEdit }: VpnPanelProps) {
               onClick={handleDisconnectAll}
               disabled={disconnectingAll}
               title="Stuck or forgotten VPN connections? Disconnect everything at once."
-              className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
             >
               {disconnectingAll ? "Disconnecting…" : "Disconnect all"}
             </button>
@@ -126,7 +126,7 @@ export default function VpnPanel({ onNew, onEdit }: VpnPanelProps) {
           <button
             type="button"
             onClick={onNew}
-            className="rounded-md bg-teal-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-teal-700"
+            className="rounded-lg bg-teal-600 shadow-sm px-3 py-1.5 text-sm font-medium text-white hover:bg-teal-700"
           >
             New VPN profile
           </button>
@@ -134,7 +134,7 @@ export default function VpnPanel({ onNew, onEdit }: VpnPanelProps) {
       </div>
 
       {!setupInstalled && (
-        <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
           <p className="mb-2">
             Connecting a VPN needs a one-time privilege setup: it installs a polkit rule scoped
             to launching openvpn, so you aren't prompted for a password on every connect. This
@@ -144,7 +144,7 @@ export default function VpnPanel({ onNew, onEdit }: VpnPanelProps) {
             type="button"
             onClick={handleSetup}
             disabled={settingUp}
-            className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+            className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50"
           >
             {settingUp ? "Waiting for authentication…" : "Run one-time setup"}
           </button>
@@ -155,22 +155,22 @@ export default function VpnPanel({ onNew, onEdit }: VpnPanelProps) {
       {actionError && <p className="mb-4 text-sm text-red-600 dark:text-red-400">{actionError}</p>}
 
       {profiles.length === 0 ? (
-        <p className="text-sm text-neutral-400">
+        <p className="text-sm text-slate-400">
           No VPN profiles yet. Add a .ovpn profile to reach hosts on a private network, then
           assign it to any host from that host&apos;s edit form.
         </p>
       ) : (
-        <div className="divide-y divide-neutral-200 rounded-md border border-neutral-200 dark:divide-neutral-800 dark:border-neutral-800">
+        <div className="divide-y divide-slate-200 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
           {profiles.map((profile) => {
             const status = statuses[profile.id];
             return (
               <div key={profile.id} className="flex items-center justify-between px-4 py-2.5">
                 <div>
-                  <p className="flex items-center gap-2 text-sm font-medium text-neutral-900 dark:text-neutral-100">
+                  <p className="flex items-center gap-2 text-sm font-medium text-slate-900 dark:text-slate-100">
                     <span className={`h-1.5 w-1.5 rounded-full ${statusDotClass(status?.state)}`} />
                     {profile.label}
                   </p>
-                  <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     {statusLabel(status?.state)}
                     {status?.state === "error" && status.message ? `: ${status.message}` : ""}
                     {profile.avoid_default_route ? " · Split-tunnel" : " · Full-tunnel"}
@@ -181,14 +181,14 @@ export default function VpnPanel({ onNew, onEdit }: VpnPanelProps) {
                     type="button"
                     onClick={() => handleToggle(profile)}
                     disabled={busyId === profile.id || !setupInstalled}
-                    className="text-neutral-500 hover:text-teal-600 disabled:opacity-50"
+                    className="text-slate-500 hover:text-teal-600 disabled:opacity-50"
                   >
                     {status?.state === "connected" ? "Disconnect" : "Connect"}
                   </button>
                   <button
                     type="button"
                     onClick={() => onEdit(profile)}
-                    className="text-neutral-500 hover:text-teal-600"
+                    className="text-slate-500 hover:text-teal-600"
                   >
                     Edit
                   </button>
@@ -204,7 +204,7 @@ export default function VpnPanel({ onNew, onEdit }: VpnPanelProps) {
                         }
                       }
                     }}
-                    className="text-neutral-500 hover:text-red-600"
+                    className="text-slate-500 hover:text-red-600"
                   >
                     Delete
                   </button>

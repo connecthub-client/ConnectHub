@@ -17,6 +17,10 @@ export function hostDelete(id: string): Promise<void> {
   return invoke("host_delete", { id });
 }
 
+export function hostSetFavorite(id: string, favorite: boolean): Promise<Host> {
+  return invoke("host_set_favorite", { id, favorite });
+}
+
 export function hostExportCsv(): Promise<string> {
   return invoke("host_export_csv");
 }

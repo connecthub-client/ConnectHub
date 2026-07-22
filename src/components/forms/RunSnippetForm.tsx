@@ -42,26 +42,27 @@ export default function RunSnippetForm({ snippet, onDone }: RunSnippetFormProps)
 
   return (
     <div>
-      <pre className="mb-3 whitespace-pre-wrap rounded bg-neutral-100 p-2 font-mono text-xs text-neutral-700 dark:bg-neutral-900 dark:text-neutral-300">
+      <pre className="mb-3 whitespace-pre-wrap rounded bg-slate-100 p-2 font-mono text-xs text-slate-700 dark:bg-slate-900 dark:text-slate-300">
         {snippet.body}
       </pre>
 
       {!results && (
         <>
           <p className={labelClass}>Select hosts</p>
-          <div className="mb-4 max-h-48 overflow-y-auto rounded border border-neutral-200 dark:border-neutral-700">
+          <div className="mb-4 max-h-48 overflow-y-auto rounded border border-slate-200 dark:border-slate-700">
             {hosts.length === 0 && (
-              <p className="p-3 text-sm text-neutral-400">No hosts yet.</p>
+              <p className="p-3 text-sm text-slate-400">No hosts yet.</p>
             )}
             {hosts.map((h) => (
               <label
                 key={h.id}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-neutral-50 dark:hover:bg-neutral-900"
+                className="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-900"
               >
                 <input
                   type="checkbox"
                   checked={selected.has(h.id)}
                   onChange={() => toggle(h.id)}
+                  className="accent-teal-600"
                 />
                 {h.label}
               </label>
@@ -89,9 +90,9 @@ export default function RunSnippetForm({ snippet, onDone }: RunSnippetFormProps)
               return (
                 <div
                   key={r.host_id}
-                  className="rounded border border-neutral-200 p-2 text-xs dark:border-neutral-700"
+                  className="rounded border border-slate-200 p-2 text-xs dark:border-slate-700"
                 >
-                  <p className="mb-1 font-medium text-neutral-900 dark:text-neutral-100">
+                  <p className="mb-1 font-medium text-slate-900 dark:text-slate-100">
                     {host?.label ?? r.host_id}
                     {r.output && ` (exit ${r.output.exit_status ?? "?"})`}
                   </p>
@@ -99,7 +100,7 @@ export default function RunSnippetForm({ snippet, onDone }: RunSnippetFormProps)
                     <p className="text-red-600 dark:text-red-400">{r.error}</p>
                   )}
                   {r.output?.stdout && (
-                    <pre className="whitespace-pre-wrap text-neutral-700 dark:text-neutral-300">
+                    <pre className="whitespace-pre-wrap text-slate-700 dark:text-slate-300">
                       {r.output.stdout}
                     </pre>
                   )}

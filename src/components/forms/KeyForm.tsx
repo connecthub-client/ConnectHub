@@ -63,18 +63,18 @@ export default function KeyForm({ onDone }: KeyFormProps) {
 
   return (
     <form onSubmit={handleSubmit}>
-      <div className="mb-4 flex rounded-md border border-neutral-300 p-1 text-sm dark:border-neutral-700">
+      <div className="mb-4 flex rounded-lg border border-slate-300 p-1 text-sm dark:border-slate-700">
         <button
           type="button"
           onClick={() => setMode("generate")}
-          className={`flex-1 rounded px-3 py-1.5 ${mode === "generate" ? "bg-teal-600 text-white" : "text-neutral-600 dark:text-neutral-300"}`}
+          className={`flex-1 rounded px-3 py-1.5 ${mode === "generate" ? "bg-teal-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
         >
           Generate new
         </button>
         <button
           type="button"
           onClick={() => setMode("import")}
-          className={`flex-1 rounded px-3 py-1.5 ${mode === "import" ? "bg-teal-600 text-white" : "text-neutral-600 dark:text-neutral-300"}`}
+          className={`flex-1 rounded px-3 py-1.5 ${mode === "import" ? "bg-teal-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
         >
           Import existing
         </button>
@@ -94,7 +94,7 @@ export default function KeyForm({ onDone }: KeyFormProps) {
       />
 
       {mode === "generate" ? (
-        <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
+        <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
           Generates a new Ed25519 keypair. The private key is encrypted and stored in your vault.
         </p>
       ) : (

@@ -72,17 +72,17 @@ export default function Modal({ title, onClose, children }: ModalProps) {
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="relative z-10 mx-auto my-8 w-full max-w-md rounded-xl border border-neutral-200 bg-white p-6 shadow-2xl outline-none dark:border-neutral-800 dark:bg-neutral-900"
+        className="relative z-10 mx-auto my-8 w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-2xl outline-none dark:border-slate-800 dark:bg-slate-900"
       >
         <div className="mb-4 flex items-center justify-between">
-          <h2 id={titleId} className="text-lg font-semibold text-neutral-900 dark:text-neutral-50">
+          <h2 id={titleId} className="text-lg font-semibold text-slate-900 dark:text-slate-50">
             {title}
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close dialog"
-            className="rounded-md px-2 py-1 text-sm text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800"
+            className="rounded-lg px-2 py-1 text-sm text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
           >
             ✕
           </button>

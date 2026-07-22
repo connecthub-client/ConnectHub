@@ -103,14 +103,14 @@ export default function GoogleBackupSection() {
   }
 
   if (!status) {
-    return <p className="text-sm text-neutral-400">Loading…</p>;
+    return <p className="text-sm text-slate-400">Loading…</p>;
   }
 
   return (
     <div>
       {!status.connected ? (
         <>
-          <p className="mb-3 text-sm text-neutral-500 dark:text-neutral-400">
+          <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">
             Sign in with your own Google account to back up your hosts, identities, keys, and
             snippets to Google Drive, and restore them on another device.
           </p>
@@ -126,7 +126,7 @@ export default function GoogleBackupSection() {
               <button
                 type="button"
                 onClick={handleCancelSignIn}
-                className="rounded-md border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
               >
                 Cancel
               </button>
@@ -144,7 +144,7 @@ export default function GoogleBackupSection() {
         </>
       ) : (
         <>
-          <p className="mb-3 text-sm text-neutral-700 dark:text-neutral-300">
+          <p className="mb-3 text-sm text-slate-700 dark:text-slate-300">
             Connected as <span className="font-medium">{status.email ?? "your Google account"}</span>
           </p>
           <div className="mb-3 flex gap-2">
@@ -152,7 +152,7 @@ export default function GoogleBackupSection() {
               type="button"
               onClick={handleBackup}
               disabled={action !== "idle"}
-              className="flex-1 rounded-md bg-teal-600 px-3 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-50"
+              className="flex-1 rounded-lg bg-teal-600 shadow-sm px-3 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-50"
             >
               {action === "backing-up" ? "Backing up…" : "Back up now"}
             </button>
@@ -160,7 +160,7 @@ export default function GoogleBackupSection() {
               type="button"
               onClick={handleRestore}
               disabled={action !== "idle"}
-              className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+              className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
             >
               {action === "restoring" ? "Restoring…" : "Restore from Drive"}
             </button>
@@ -169,7 +169,7 @@ export default function GoogleBackupSection() {
             type="button"
             onClick={handleSignOut}
             disabled={action !== "idle"}
-            className="text-xs text-neutral-400 hover:text-red-600 disabled:opacity-50"
+            className="text-xs text-slate-400 hover:text-red-600 disabled:opacity-50"
           >
             {action === "signing-out" ? "Signing out…" : "Sign out"}
           </button>

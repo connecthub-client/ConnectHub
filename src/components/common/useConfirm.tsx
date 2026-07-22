@@ -39,12 +39,12 @@ export function useConfirm() {
 
   const confirmDialog = state && (
     <Modal title={state.title} onClose={() => respond(false)}>
-      <p className="mb-4 text-sm text-neutral-700 dark:text-neutral-300">{state.message}</p>
+      <p className="mb-4 text-sm text-slate-700 dark:text-slate-300">{state.message}</p>
       <div className="flex justify-end gap-2">
         <button
           type="button"
           onClick={() => respond(false)}
-          className="rounded-md border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
         >
           Cancel
         </button>
@@ -54,8 +54,8 @@ export function useConfirm() {
           onClick={() => respond(true)}
           className={
             state.danger
-              ? "rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-red-700"
-              : "rounded-md bg-teal-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-teal-700"
+              ? "rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-red-700"
+              : "rounded-lg bg-teal-600 shadow-sm px-3 py-2 text-sm font-medium text-white transition hover:bg-teal-700"
           }
         >
           {state.confirmLabel}

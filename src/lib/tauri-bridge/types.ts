@@ -58,12 +58,15 @@ export interface Host {
   hostname: string;
   port: number;
   identity_id: string | null;
-  jump_host_id: string | null;
   vpn_profile_id: string | null;
   color: string | null;
+  // Preset icon key (see HOST_ICONS in components/common/hostIcons.tsx) -
+  // not a file path or image data, just a fixed identifier.
+  icon: string | null;
   notes: string | null;
   sort_order: number;
   last_connected_at: string | null;
+  is_favorite: boolean;
 }
 
 export interface HostInput {
@@ -72,11 +75,23 @@ export interface HostInput {
   hostname: string;
   port: number;
   identity_id: string | null;
-  jump_host_id: string | null;
   vpn_profile_id: string | null;
   color: string | null;
+  icon: string | null;
   notes: string | null;
   sort_order: number;
+}
+
+export interface HostStats {
+  cpu_percent: number;
+  mem_used_mb: number;
+  mem_total_mb: number;
+  rx_bytes: number;
+  tx_bytes: number;
+  swap_used_mb: number;
+  swap_total_mb: number;
+  disk_used_mb: number;
+  disk_total_mb: number;
 }
 
 export interface ImportSummary {

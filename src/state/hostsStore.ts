@@ -29,6 +29,7 @@ interface HostsState {
   createHost: (input: HostInput) => Promise<Host>;
   updateHost: (id: string, input: HostInput) => Promise<Host>;
   deleteHost: (id: string) => Promise<void>;
+  toggleHostFavorite: (id: string, favorite: boolean) => Promise<Host>;
   exportHostsCsv: () => Promise<string>;
   importHostsCsv: (content: string) => Promise<ImportSummary>;
 
@@ -101,6 +102,11 @@ export const useHostsStore = create<HostsState>((set, get) => ({
   deleteHost: async (id) => {
     await bridge.hostDelete(id);
     await get().loadAll();
+  },
+  toggleHostFavorite: async (id, favorite) => {
+    const host = await bridge.hostSetFavorite(id, favorite);
+    await get().loadAll();
+    return host;
   },
   exportHostsCsv: () => bridge.hostExportCsv(),
   importHostsCsv: async (content) => {
