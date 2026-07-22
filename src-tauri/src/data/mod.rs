@@ -64,7 +64,6 @@ pub fn init_schema(conn: &Connection) -> AppResult<()> {
             hostname TEXT NOT NULL,
             port INTEGER NOT NULL DEFAULT 22,
             identity_id TEXT REFERENCES identities(id) ON DELETE SET NULL,
-            jump_host_id TEXT REFERENCES hosts(id) ON DELETE SET NULL,
             vpn_profile_id TEXT REFERENCES vpn_profiles(id) ON DELETE SET NULL,
             color TEXT,
             notes TEXT,
@@ -110,6 +109,12 @@ pub fn init_schema(conn: &Connection) -> AppResult<()> {
         "avoid_default_route",
         "INTEGER NOT NULL DEFAULT 1",
     )?;
+
+    // Same backfill pattern for hosts predating the favorites feature.
+    add_column_if_missing(conn, "hosts", "is_favorite", "INTEGER NOT NULL DEFAULT 0")?;
+
+    // Same backfill pattern for hosts predating the icon picker.
+    add_column_if_missing(conn, "hosts", "icon", "TEXT")?;
 
     Ok(())
 }

@@ -7,6 +7,6 @@ pub mod local_fs_commands;
 pub mod session_commands;
 pub mod sftp_commands;
 pub mod snippet_commands;
-pub mod tunnel_commands;
+pub mod stats_commands;
 pub mod vault_commands;
 pub mod vpn_commands;

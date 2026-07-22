@@ -638,7 +638,6 @@ dependencies = [
  "csv",
  "dashmap",
  "dirs 5.0.1",
- "fast-socks5",
  "futures",
  "rand",
  "rand_core",
@@ -1336,20 +1335,6 @@ name = "fallible-streaming-iterator"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7360491ce676a36bf9bb3c56c1aa791658183a54d2744120f27285738d90465a"
-
-[[package]]
-name = "fast-socks5"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d09fe4a491909a716088083eeb5bcc25427330fdbcd4ecd3dfa5469b3da795df"
-dependencies = [
- "anyhow",
- "async-trait",
- "log",
- "thiserror 1.0.69",
- "tokio",
- "tokio-stream",
-]
 
 [[package]]
 name = "fastrand"

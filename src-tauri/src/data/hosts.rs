@@ -12,16 +12,17 @@ fn row_to_host(row: &rusqlite::Row) -> rusqlite::Result<Host> {
         hostname: row.get(3)?,
         port: row.get(4)?,
         identity_id: row.get(5)?,
-        jump_host_id: row.get(6)?,
-        vpn_profile_id: row.get(7)?,
-        color: row.get(8)?,
+        vpn_profile_id: row.get(6)?,
+        color: row.get(7)?,
+        icon: row.get(8)?,
         notes: row.get(9)?,
         sort_order: row.get(10)?,
         last_connected_at: row.get(11)?,
+        is_favorite: row.get(12)?,
     })
 }
 
-const SELECT_COLUMNS: &str = "id, group_id, label, hostname, port, identity_id, jump_host_id, vpn_profile_id, color, notes, sort_order, last_connected_at";
+const SELECT_COLUMNS: &str = "id, group_id, label, hostname, port, identity_id, vpn_profile_id, color, icon, notes, sort_order, last_connected_at, is_favorite";
 
 pub fn get(conn: &Connection, id: Uuid) -> AppResult<Host> {
     conn.query_row(
@@ -57,7 +58,7 @@ pub fn list_by_vpn_profile(conn: &Connection, vpn_profile_id: Uuid) -> AppResult
 pub fn create(conn: &Connection, input: HostInput) -> AppResult<Host> {
     let id = Uuid::new_v4();
     conn.execute(
-        "INSERT INTO hosts (id, group_id, label, hostname, port, identity_id, jump_host_id, vpn_profile_id, color, notes, sort_order)
+        "INSERT INTO hosts (id, group_id, label, hostname, port, identity_id, vpn_profile_id, color, icon, notes, sort_order)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
         rusqlite::params![
             &id,
@@ -66,9 +67,9 @@ pub fn create(conn: &Connection, input: HostInput) -> AppResult<Host> {
             &input.hostname,
             input.port,
             &input.identity_id,
-            &input.jump_host_id,
             &input.vpn_profile_id,
             &input.color,
+            &input.icon,
             &input.notes,
             input.sort_order,
         ],
@@ -81,28 +82,29 @@ pub fn create(conn: &Connection, input: HostInput) -> AppResult<Host> {
         hostname: input.hostname,
         port: input.port,
         identity_id: input.identity_id,
-        jump_host_id: input.jump_host_id,
         vpn_profile_id: input.vpn_profile_id,
         color: input.color,
+        icon: input.icon,
         notes: input.notes,
         sort_order: input.sort_order,
         last_connected_at: None,
+        is_favorite: false,
     })
 }
 
 pub fn update(conn: &Connection, id: Uuid, input: HostInput) -> AppResult<Host> {
     let changed = conn.execute(
         "UPDATE hosts SET group_id = ?1, label = ?2, hostname = ?3, port = ?4, identity_id = ?5,
-            jump_host_id = ?6, vpn_profile_id = ?7, color = ?8, notes = ?9, sort_order = ?10 WHERE id = ?11",
+            vpn_profile_id = ?6, color = ?7, icon = ?8, notes = ?9, sort_order = ?10 WHERE id = ?11",
         rusqlite::params![
             &input.group_id,
             &input.label,
             &input.hostname,
             input.port,
             &input.identity_id,
-            &input.jump_host_id,
             &input.vpn_profile_id,
             &input.color,
+            &input.icon,
             &input.notes,
             input.sort_order,
             &id,
@@ -112,26 +114,25 @@ pub fn update(conn: &Connection, id: Uuid, input: HostInput) -> AppResult<Host> 
         return Err(AppError::NotFound);
     }
 
-    let last_connected_at: Option<String> = conn.query_row(
-        "SELECT last_connected_at FROM hosts WHERE id = ?1",
-        (&id,),
-        |row| row.get(0),
-    )?;
+    // Re-fetch rather than reconstruct by hand: `is_favorite` (and
+    // `last_connected_at`) aren't part of `HostInput` - they're toggled
+    // independently of the edit form - so the UPDATE above never touches
+    // them, and the only way to return their current value is to read the
+    // row back.
+    get(conn, id)
+}
 
-    Ok(Host {
-        id,
-        group_id: input.group_id,
-        label: input.label,
-        hostname: input.hostname,
-        port: input.port,
-        identity_id: input.identity_id,
-        jump_host_id: input.jump_host_id,
-        vpn_profile_id: input.vpn_profile_id,
-        color: input.color,
-        notes: input.notes,
-        sort_order: input.sort_order,
-        last_connected_at,
-    })
+// Toggles favorite status directly, independent of the full edit form -
+// mirrors `touch_last_connected`'s single-column-update shape.
+pub fn set_favorite(conn: &Connection, id: Uuid, favorite: bool) -> AppResult<Host> {
+    let changed = conn.execute(
+        "UPDATE hosts SET is_favorite = ?1 WHERE id = ?2",
+        rusqlite::params![favorite, &id],
+    )?;
+    if changed == 0 {
+        return Err(AppError::NotFound);
+    }
+    get(conn, id)
 }
 
 pub fn touch_last_connected(conn: &Connection, id: Uuid) -> AppResult<()> {
@@ -167,12 +168,26 @@ mod tests {
             hostname: "10.0.0.5".into(),
             port: 22,
             identity_id: None,
-            jump_host_id: None,
             vpn_profile_id: None,
             color: None,
+            icon: None,
             notes: None,
             sort_order: 0,
         }
+    }
+
+    #[test]
+    fn create_and_update_roundtrip_the_icon_field() {
+        let conn = test_conn();
+        let created = create(&conn, HostInput { icon: Some("server".into()), ..input() }).unwrap();
+        assert_eq!(created.icon, Some("server".into()));
+
+        let updated =
+            update(&conn, created.id, HostInput { icon: Some("database".into()), ..input() }).unwrap();
+        assert_eq!(updated.icon, Some("database".into()));
+
+        let cleared = update(&conn, created.id, HostInput { icon: None, ..input() }).unwrap();
+        assert_eq!(cleared.icon, None);
     }
 
     #[test]
@@ -217,27 +232,47 @@ mod tests {
     }
 
     #[test]
-    fn delete_nonexistent_host_fails() {
+    fn create_defaults_is_favorite_to_false() {
         let conn = test_conn();
-        let result = delete(&conn, Uuid::new_v4());
+        let created = create(&conn, input()).unwrap();
+        assert!(!created.is_favorite);
+    }
+
+    #[test]
+    fn set_favorite_toggles_and_persists() {
+        let conn = test_conn();
+        let created = create(&conn, input()).unwrap();
+
+        let favorited = set_favorite(&conn, created.id, true).unwrap();
+        assert!(favorited.is_favorite);
+        assert!(get(&conn, created.id).unwrap().is_favorite);
+
+        let unfavorited = set_favorite(&conn, created.id, false).unwrap();
+        assert!(!unfavorited.is_favorite);
+    }
+
+    #[test]
+    fn set_favorite_nonexistent_host_fails() {
+        let conn = test_conn();
+        let result = set_favorite(&conn, Uuid::new_v4(), true);
         assert!(matches!(result, Err(AppError::NotFound)));
     }
 
     #[test]
-    fn jump_host_can_reference_another_host() {
+    fn update_does_not_reset_is_favorite() {
         let conn = test_conn();
-        let bastion = create(&conn, input()).unwrap();
-        let internal = create(
-            &conn,
-            HostInput {
-                label: "internal-1".into(),
-                hostname: "10.0.1.5".into(),
-                jump_host_id: Some(bastion.id),
-                ..input()
-            },
-        )
-        .unwrap();
-        assert_eq!(internal.jump_host_id, Some(bastion.id));
+        let created = create(&conn, input()).unwrap();
+        set_favorite(&conn, created.id, true).unwrap();
+
+        let updated = update(&conn, created.id, HostInput { label: "renamed".into(), ..input() }).unwrap();
+        assert!(updated.is_favorite);
+    }
+
+    #[test]
+    fn delete_nonexistent_host_fails() {
+        let conn = test_conn();
+        let result = delete(&conn, Uuid::new_v4());
+        assert!(matches!(result, Err(AppError::NotFound)));
     }
 
     #[test]

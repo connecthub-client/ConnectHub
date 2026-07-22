@@ -6,7 +6,6 @@ use std::sync::{Arc, Mutex};
 use crate::error::{AppError, AppResult};
 use crate::ssh::session::SessionCommand;
 use crate::ssh::sftp::SftpMap;
-use crate::ssh::tunnel::TunnelMap;
 use crate::vault::VaultKey;
 use crate::vpn::VpnMap;
 
@@ -16,7 +15,6 @@ pub struct AppState {
     pub vault_key: Mutex<Option<VaultKey>>,
     pub sessions: Arc<DashMap<uuid::Uuid, tokio::sync::mpsc::UnboundedSender<SessionCommand>>>,
     pub sftp_sessions: SftpMap,
-    pub tunnels: TunnelMap,
     pub vpn_connections: VpnMap,
     // Set while a Google sign-in is waiting on the browser; letting the
     // frontend fire this early is the only way to get unstuck if the user
@@ -38,7 +36,6 @@ impl AppState {
             vault_key: Mutex::new(None),
             sessions: Arc::new(DashMap::new()),
             sftp_sessions: Arc::new(DashMap::new()),
-            tunnels: Arc::new(DashMap::new()),
             vpn_connections: Arc::new(DashMap::new()),
             google_login_cancel: Mutex::new(None),
         })

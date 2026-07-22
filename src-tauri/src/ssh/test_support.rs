@@ -3,7 +3,7 @@
 // exercise the real thing against a real local sshd, but are `#[ignore]`d
 // and need manual one-time setup (a throwaway keypair added to
 // ~/.ssh/authorized_keys) - they never run in a normal `cargo test` or CI.
-// This gives session.rs/sftp.rs/tunnel.rs/exec.rs's core logic *some*
+// This gives session.rs/sftp.rs/exec.rs's core logic *some*
 // coverage that runs by default, at the cost of only approximating a real
 // server: auth accepts exactly one generated-per-test keypair, "exec" and
 // "shell" are a canned fake rather than a real shell, and SFTP is backed
@@ -25,7 +25,6 @@ use russh_sftp::protocol::{Attrs, Data, File, FileAttributes, Handle, Name, Open
 use ssh_key::{Algorithm, LineEnding};
 use tokio::fs::OpenOptions;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
-use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
@@ -237,62 +236,6 @@ impl ServerHandler for TestSession {
             russh_sftp::server::run(channel.into_stream(), handler).await;
         });
         Ok(())
-    }
-
-    // Local port forwarding (direct-tcpip): connects to the requested
-    // target and pumps bytes between it and the channel - tunnel.rs's
-    // local-forward tests point the target host/port at a plain test TCP
-    // listener, so this doesn't need to understand SSH at all beyond
-    // relaying raw bytes both ways.
-    async fn channel_open_direct_tcpip(
-        &mut self,
-        channel: Channel<Msg>,
-        host_to_connect: &str,
-        port_to_connect: u32,
-        _originator_address: &str,
-        _originator_port: u32,
-        _session: &mut Session,
-    ) -> Result<bool, Self::Error> {
-        let target = format!("{host_to_connect}:{port_to_connect}");
-        match TcpStream::connect(&target).await {
-            Ok(stream) => {
-                tokio::spawn(pump_channel_to_tcp(channel, stream));
-                Ok(true)
-            }
-            Err(_) => Ok(false),
-        }
-    }
-}
-
-// Relays bytes between an accepted direct-tcpip SSH channel and the plain
-// TCP connection it was opened for - mirrors what a real sshd's local port
-// forwarding does, minimally.
-async fn pump_channel_to_tcp(mut channel: Channel<Msg>, mut stream: TcpStream) {
-    let mut buf = [0u8; 8192];
-    loop {
-        tokio::select! {
-            n = stream.read(&mut buf) => {
-                match n {
-                    Ok(0) | Err(_) => break,
-                    Ok(n) => {
-                        if channel.data(&buf[..n]).await.is_err() {
-                            break;
-                        }
-                    }
-                }
-            }
-            msg = channel.wait() => {
-                match msg {
-                    Some(russh::ChannelMsg::Data { data }) => {
-                        if stream.write_all(&data).await.is_err() {
-                            break;
-                        }
-                    }
-                    Some(russh::ChannelMsg::Eof) | Some(russh::ChannelMsg::Close) | None => break,
-                    _ => {}
-                }
-            }
-        }
     }
 }
 

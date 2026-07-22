@@ -14,7 +14,8 @@ use commands::backup_commands::{
 };
 use commands::group_commands::{group_create, group_delete, group_list, group_update};
 use commands::host_commands::{
-    host_create, host_delete, host_export_csv, host_import_csv, host_list, host_update,
+    host_create, host_delete, host_export_csv, host_import_csv, host_list, host_set_favorite,
+    host_update,
 };
 use commands::identity_commands::{
     identity_create, identity_delete, identity_list, identity_update,
@@ -34,7 +35,7 @@ use commands::sftp_commands::{
 use commands::snippet_commands::{
     snippet_create, snippet_delete, snippet_list, snippet_run_on_hosts, snippet_update,
 };
-use commands::tunnel_commands::{tunnel_list, tunnel_start, tunnel_stop};
+use commands::stats_commands::host_stats;
 use commands::vault_commands::vault_auto_unlock;
 use commands::vpn_commands::{
     vpn_active_statuses, vpn_connect, vpn_disconnect, vpn_disconnect_all, vpn_profile_create,
@@ -62,8 +63,10 @@ pub fn run() {
             host_create,
             host_update,
             host_delete,
+            host_set_favorite,
             host_export_csv,
             host_import_csv,
+            host_stats,
             identity_list,
             identity_create,
             identity_update,
@@ -93,9 +96,6 @@ pub fn run() {
             local_mkdir,
             local_rename,
             local_delete,
-            tunnel_start,
-            tunnel_stop,
-            tunnel_list,
             snippet_list,
             snippet_create,
             snippet_update,
@@ -125,8 +125,8 @@ pub fn run() {
             // Safety net: if the app is closing while a VPN is still up
             // (forgotten, or left over from a session the app didn't get a
             // chance to clean up after), signal every one of them to
-            // disconnect rather than leaving a tunnel silently rerouting
-            // traffic after the app itself is gone.
+            // disconnect rather than leaving it silently rerouting traffic
+            // after the app itself is gone.
             if let tauri::RunEvent::ExitRequested { .. } = event {
                 let state = app_handle.state::<AppState>();
                 vpn::disconnect_all(&state.vpn_connections);

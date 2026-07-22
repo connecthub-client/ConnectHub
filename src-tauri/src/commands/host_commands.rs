@@ -32,6 +32,12 @@ pub fn host_delete(state: State<AppState>, id: Uuid) -> AppResult<()> {
 }
 
 #[tauri::command]
+pub fn host_set_favorite(state: State<AppState>, id: Uuid, favorite: bool) -> AppResult<Host> {
+    let conn = state.db.lock().unwrap();
+    hosts::set_favorite(&conn, id, favorite)
+}
+
+#[tauri::command]
 pub fn host_export_csv(state: State<AppState>) -> AppResult<String> {
     let conn = state.db.lock().unwrap();
     host_csv::export_csv(&conn)
