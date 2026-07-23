@@ -77,18 +77,19 @@ Inspired by tools like [Termius](https://termius.com), [Tabby](https://tabby.sh)
 | Windows | x86_64 | `.msi` / NSIS installer | ⚠️ Tauri-supported, not yet published — build from source ([BUILD.md](BUILD.md)) |
 | macOS | Intel & Apple Silicon | `.dmg` | ⚠️ Tauri-supported, not yet published — build from source ([BUILD.md](BUILD.md)) |
 
-**v1.0.0 ships Linux artifacts only.** Windows and macOS builds are configured and supported by the codebase but haven't been built on those platforms yet (this release was built from a Linux machine, and Tauri's bundler doesn't cross-compile installers for other OSes) — see [Known Issues](#known-issues).
+**Linux artifacts only so far.** Windows and macOS builds are configured and supported by the codebase but haven't been built on those platforms yet (releases so far were built from a Linux machine, and Tauri's bundler doesn't cross-compile installers for other OSes) — see [Known Issues](#known-issues).
 
 ## Installation
 
-The simplest way to install ConnectHub is to grab the build for your OS from [**GitHub Releases**](https://github.com/connecthub-client/ConnectHub/releases/latest). Exact asset filenames are shown on each release page and follow the pattern below (version number will vary).
+The simplest way to install ConnectHub is to grab the build for your OS from [**GitHub Releases**](https://github.com/connecthub-client/ConnectHub/releases/latest).
 
 ### Linux
 
-One command — downloads and launches the AppImage, no install step, no root required:
+One command — downloads and launches the AppImage, no install step, no root required. This resolves the actual current release's asset URL via the GitHub API rather than hardcoding a version number, so it keeps working release after release:
 
 ```bash
-curl -fsSL -o ConnectHub.AppImage https://github.com/connecthub-client/ConnectHub/releases/latest/download/ConnectHub_1.0.0_amd64.AppImage \
+curl -fsSL $(curl -fsSL https://api.github.com/repos/connecthub-client/ConnectHub/releases/latest \
+    | grep -oP '"browser_download_url":\s*"\K[^"]+\.AppImage') -o ConnectHub.AppImage \
   && chmod +x ConnectHub.AppImage \
   && ./ConnectHub.AppImage
 ```
@@ -96,15 +97,18 @@ curl -fsSL -o ConnectHub.AppImage https://github.com/connecthub-client/ConnectHu
 Prefer a `.deb` (Debian/Ubuntu) that integrates with your app menu instead:
 
 ```bash
-curl -fsSL -o connecthub.deb https://github.com/connecthub-client/ConnectHub/releases/latest/download/ConnectHub_1.0.0_amd64.deb \
+curl -fsSL $(curl -fsSL https://api.github.com/repos/connecthub-client/ConnectHub/releases/latest \
+    | grep -oP '"browser_download_url":\s*"\K[^"]+\.deb') -o connecthub.deb \
   && sudo apt install ./connecthub.deb
 ```
 
-Fedora/RHEL-based distros can use the `.rpm` asset the same way with `dnf install ./ConnectHub-1.0.0-1.x86_64.rpm`.
+Fedora/RHEL-based distros can use the same pattern with `.rpm` in place of `.deb`, then `sudo dnf install ./connecthub.rpm`.
+
+After a `.deb`/`.rpm` install, launch **ConnectHub** from your desktop's application menu, or run `connecthub` (lowercase, no hyphen) from a terminal — not `sudo`, and not the package name (`connect-hub`), which apt/dnf show but isn't the actual command. See [INSTALL.md](INSTALL.md#linux) for the full rationale.
 
 ### Windows
 
-Not yet published as a pre-built installer — v1.0.0 only has Linux artifacts on [Releases](https://github.com/connecthub-client/ConnectHub/releases/latest) (see [Supported platforms](#supported-platforms)). Build from source instead: see [BUILD.md](BUILD.md). Once a Windows build is published, it'll be a `ConnectHub_<version>_x64-setup.exe` or `.msi` — run it, and since builds aren't code-signed yet, expect a SmartScreen warning on first run (click **More info → Run anyway**).
+Not yet published as a pre-built installer — only Linux artifacts exist on [Releases](https://github.com/connecthub-client/ConnectHub/releases/latest) so far (see [Supported platforms](#supported-platforms)). Build from source instead: see [BUILD.md](BUILD.md). Once a Windows build is published, it'll be a `ConnectHub_<version>_x64-setup.exe` or `.msi` — run it, and since builds aren't code-signed yet, expect a SmartScreen warning on first run (click **More info → Run anyway**).
 
 ### macOS
 
@@ -210,7 +214,7 @@ Full details in [ARCHITECTURE.md](ARCHITECTURE.md). To report a vulnerability, s
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md) for what's planned after v1.0.0 (code signing/notarization, Windows/macOS hardening, terminal search/clipboard addons, and more).
+See [ROADMAP.md](ROADMAP.md) for what's planned next (code signing/notarization, Windows/macOS hardening, and more).
 
 ## FAQ
 
@@ -237,7 +241,7 @@ Yes, alongside password and private-key auth.
 
 ## Known Issues
 
-- **v1.0.0 has no pre-built Windows or macOS installer** — only Linux (`.deb`/`.rpm`/`.AppImage`) was built and published, since this release was built from a Linux machine and Tauri's bundler doesn't cross-compile installers for other OSes. The codebase supports Windows/macOS and builds cleanly there, but hasn't had a release built or tested on either — build from source (see [BUILD.md](BUILD.md)) in the meantime, and please file an issue if you hit a platform-specific bug.
+- **No pre-built Windows or macOS installer yet** — only Linux (`.deb`/`.rpm`/`.AppImage`) has been built and published, since releases so far were built from a Linux machine and Tauri's bundler doesn't cross-compile installers for other OSes. The codebase supports Windows/macOS and builds cleanly there, but hasn't had a release built or tested on either — build from source (see [BUILD.md](BUILD.md)) in the meantime, and please file an issue if you hit a platform-specific bug.
 - Once Windows/macOS builds are published: macOS builds won't be code-signed or notarized yet, so Gatekeeper will block the first launch (see [Installation](#macos)); Windows builds won't be code-signed yet, so SmartScreen will warn on first run (see [Installation](#windows)).
 - VPN profile support (`openvpn` + polkit helper) is Linux-only for now.
 

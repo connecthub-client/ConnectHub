@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Install docs (README.md/INSTALL.md) hardcoded a version number (`1.0.0`) in `.../releases/latest/download/<filename>` URLs - that permalink only resolves if the exact filename exists in whatever release is *currently* tagged latest, so every copy-pasted command 404'd as soon as 1.1.0 shipped (reported by a user hitting this exact 404). Commands now resolve the current release's actual asset URL via the GitHub API instead, so they keep working release after release.
+- Documented that the installed **package** name (`connect-hub`, shown by `apt`/`dnf`) differs from the installed **binary** name (`connecthub`, no hyphen) - launching from a terminal after a `.deb`/`.rpm` install needs the latter, which isn't obvious from the install output (reported alongside the URL issue above).
+
 ## [1.1.0] — 2026-07-22
 
 ### Added
