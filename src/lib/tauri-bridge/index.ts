@@ -1,3 +1,4 @@
+export * from "./app";
 export * from "./vault";
 export * from "./backup";
 export * from "./groups";

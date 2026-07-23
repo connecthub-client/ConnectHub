@@ -1,3 +1,7 @@
+import { useEffect, useState } from "react";
+import { check, Update } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { appVersion } from "../../lib/tauri-bridge";
 import {
   CursorStyle,
   KEYBINDINGS,
@@ -6,10 +10,163 @@ import {
   ThemeMode,
   useSettingsStore,
 } from "../../state/settingsStore";
-import { inputClass, labelClass, selectClass } from "../forms/formStyles";
+import { inputClass, labelClass, primaryButtonClass, selectClass } from "../forms/formStyles";
 
 const THEME_MODES: ThemeMode[] = ["system", "light", "dark"];
 const CURSOR_STYLES: CursorStyle[] = ["block", "bar", "underline"];
+
+// "up-to-date" and "found" are both terminal outcomes of a check; "found"
+// additionally carries the Update resource needed to actually install it.
+type UpdateState =
+  | { phase: "idle" | "checking" | "up-to-date" }
+  | { phase: "found"; update: Update }
+  | { phase: "downloading"; update: Update; percent: number | null }
+  | { phase: "ready-to-restart" }
+  | { phase: "error"; message: string };
+
+function AboutSection() {
+  const [version, setVersion] = useState<string | null>(null);
+  const [state, setState] = useState<UpdateState>({ phase: "idle" });
+
+  // Best-effort - if this fails on mount (a transient IPC hiccup), leave
+  // the placeholder rather than routing it into the shared update-check
+  // error state (conflating "couldn't read the version" with "update
+  // check failed" under one message would be confusing), and retry it
+  // opportunistically whenever the user clicks "Check for updates" - the
+  // one retry affordance already on screen.
+  function loadVersion() {
+    appVersion()
+      .then(setVersion)
+      .catch(() => {});
+  }
+
+  useEffect(loadVersion, []);
+
+  async function handleCheckForUpdate() {
+    if (version === null) loadVersion();
+    setState({ phase: "checking" });
+    try {
+      const update = await check();
+      setState(update ? { phase: "found", update } : { phase: "up-to-date" });
+    } catch (e) {
+      setState({ phase: "error", message: String(e) });
+    }
+  }
+
+  async function handleInstall(update: Update) {
+    let total: number | null = null;
+    let downloaded = 0;
+    setState({ phase: "downloading", update, percent: null });
+    try {
+      await update.downloadAndInstall((event) => {
+        if (event.event === "Started") {
+          total = event.data.contentLength ?? null;
+          downloaded = 0;
+        } else if (event.event === "Progress") {
+          downloaded += event.data.chunkLength;
+          setState({
+            phase: "downloading",
+            update,
+            percent: total ? Math.min(100, Math.round((downloaded / total) * 100)) : null,
+          });
+        }
+      });
+      setState({ phase: "ready-to-restart" });
+    } catch (e) {
+      setState({ phase: "error", message: String(e) });
+    }
+  }
+
+  async function handleRestart() {
+    try {
+      await relaunch();
+    } catch (e) {
+      setState({ phase: "error", message: String(e) });
+    }
+  }
+
+  return (
+    <section className="mb-6">
+      <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-200">About</h3>
+      <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">
+        ConnectHub {version ? <span className="font-medium">v{version}</span> : "…"}
+      </p>
+
+      {(state.phase === "idle" ||
+        state.phase === "checking" ||
+        state.phase === "up-to-date" ||
+        state.phase === "error") && (
+        <button
+          type="button"
+          onClick={handleCheckForUpdate}
+          disabled={state.phase === "checking"}
+          className={`${primaryButtonClass} disabled:opacity-50`}
+        >
+          {state.phase === "checking" ? "Checking…" : "Check for updates"}
+        </button>
+      )}
+      {state.phase === "up-to-date" && (
+        <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
+          You're on the latest version.
+        </p>
+      )}
+
+      {state.phase === "found" && (
+        <div className="rounded-lg border border-teal-300 bg-teal-50 p-3 text-sm dark:border-teal-800 dark:bg-teal-950">
+          <p className="mb-1 font-medium text-teal-800 dark:text-teal-200">
+            Version {state.update.version} is available (you have {state.update.currentVersion}).
+          </p>
+          {state.update.body && (
+            <p className="mb-2 whitespace-pre-wrap text-xs text-teal-700 dark:text-teal-300">
+              {state.update.body}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => void handleInstall(state.update)}
+            className="rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-teal-700"
+          >
+            Download and install
+          </button>
+        </div>
+      )}
+
+      {state.phase === "downloading" && (
+        <div className="rounded-lg border border-teal-300 bg-teal-50 p-3 text-sm dark:border-teal-800 dark:bg-teal-950">
+          <p className="mb-2 text-teal-800 dark:text-teal-200">
+            Downloading version {state.update.version}
+            {state.percent !== null ? ` (${state.percent}%)` : "…"}
+          </p>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-teal-200 dark:bg-teal-900">
+            <div
+              className="h-full rounded-full bg-teal-600 transition-all"
+              style={{ width: `${state.percent ?? 0}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {state.phase === "ready-to-restart" && (
+        <div className="rounded-lg border border-teal-300 bg-teal-50 p-3 text-sm dark:border-teal-800 dark:bg-teal-950">
+          <p className="mb-2 text-teal-800 dark:text-teal-200">
+            Update installed — restart to finish updating.
+          </p>
+          <button
+            type="button"
+            onClick={() => void handleRestart()}
+            className="rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-teal-700"
+          >
+            Restart now
+          </button>
+        </div>
+      )}
+
+      {state.phase === "error" && (
+        <p className="mt-3 text-sm text-red-600 dark:text-red-400">{state.message}</p>
+      )}
+    </section>
+  );
+}
 
 export default function SettingsPanel() {
   const theme = useSettingsStore((s) => s.theme);
@@ -90,7 +247,7 @@ export default function SettingsPanel() {
         </select>
       </section>
 
-      <section>
+      <section className="mb-6">
         <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-200">Keybindings</h3>
         <div className="divide-y divide-slate-200 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
           {KEYBINDINGS.map((k) => (
@@ -103,6 +260,8 @@ export default function SettingsPanel() {
           ))}
         </div>
       </section>
+
+      <AboutSection />
     </div>
   );
 }

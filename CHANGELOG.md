@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Settings → About: shows the running version and a "Check for updates" button. Backed by Tauri's official updater plugin - a real update is downloaded, signature-verified, and installed in place (Linux: AppImage installs only self-update in place; `.deb`/`.rpm` installs still get a correct "update available" notice with nowhere in-app to install it, since the app has no standing permission to run a package-manager transaction on its own behalf). Only takes effect for whichever release ships this onward - a build from before this (1.1.1 and earlier) has no updater code in it and will never auto-check.
+
 ## [1.1.1] — 2026-07-23
 
 ### Added

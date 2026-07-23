@@ -8,6 +8,7 @@ mod state;
 mod vault;
 mod vpn;
 
+use commands::app_commands::app_version;
 use commands::backup_commands::{
     google_backup_now, google_login, google_login_cancel, google_logout, google_restore,
     google_status,
@@ -52,8 +53,11 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
+            app_version,
             vault_auto_unlock,
             group_list,
             group_create,

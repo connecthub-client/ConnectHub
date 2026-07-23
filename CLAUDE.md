@@ -13,9 +13,17 @@ Versioning follows [SemVer](https://semver.org). A release bumps the version in 
 1. Add a new section to `CHANGELOG.md` (move anything under `[Unreleased]` into it), following the existing Added/Changed/Fixed/Security grouping.
 2. Commit the version bump + changelog as its own commit.
 3. Tag `vX.Y.Z` and push the tag.
-4. Build platform bundles (see `BUILD.md`) and attach them to a GitHub Release, along with a checksums file.
+4. Build platform bundles **with the updater signing env vars set** (see `BUILD.md`'s "Auto-update signing" section) and attach them to a GitHub Release, along with a checksums file **and a `latest.json` manifest** - the in-app updater (Settings → About → "Check for updates") reads `latest.json` from the release tagged `latest`, so skipping it silently breaks auto-update for everyone already running a version that has the updater built in, without erroring anywhere obvious.
 
 There is no automated release pipeline yet (see `ROADMAP.md`); `.github/workflows/ci.yml` runs type-checks/tests/clippy on push/PR but does not build or publish release artifacts.
+
+### Auto-update
+
+Settings → About has a real in-app updater (`@tauri-apps/plugin-updater` + `tauri-plugin-updater`, wired up in `lib.rs`), not just a version-check-and-link. `check()` fetches `tauri.conf.json`'s configured `plugins.updater.endpoints` URL - `.../releases/latest/download/latest.json`, the same version-agnostic pattern this repo already uses elsewhere to avoid hardcoding a version in a `.../releases/latest/download/<filename>` URL (see `BUILD.md`'s "Release artifact naming") - verifies its Ed25519 signature against `plugins.updater.pubkey` in `tauri.conf.json` (public, safe to commit; the matching private key is **not** in the repo and must never be), and if newer, `update.downloadAndInstall()` handles the rest, followed by `relaunch()` from `tauri-plugin-process`.
+
+**This only works from whichever release first shipped the updater plugin onward** - a build from before that (including 1.1.1 and everything earlier) has no updater code in it at all, so those installs will never auto-check; users on them have to grab one newer release manually to bootstrap into the auto-update chain. Nothing to fix here, just a one-time gap inherent to adding this feature after the fact.
+
+**Linux is AppImage-only for the actual install step** - `downloadAndInstall()` can silently replace a running AppImage in place, but has no way to invoke `dpkg`/`rpm` to update a `.deb`/`.rpm` install, since those need a privileged package-manager transaction the app has no standing access to. `.deb`/`.rpm` users still get a correct "update available" check (and can grab the new package from the release page the About section would otherwise link to), they just can't complete the install step from inside the app. This is a Tauri updater limitation, not something specific to this app's own code.
 
 ## Repository conventions
 
@@ -56,6 +64,8 @@ There is no configured lint/format command for the frontend beyond `tsc`.
 ## Live integration tests
 
 Tests under `*::live_sshd_tests` modules (in `ssh/session.rs`, `ssh/sftp.rs`, `ssh/exec.rs`) are marked `#[ignore]` and connect to a **real local `sshd` on port 22** using a dedicated throwaway SSH keypair whose public half is appended to `~/.ssh/authorized_keys`. They hardcode the private key path to a location under the Claude session's scratchpad directory — when regenerating this environment, recreate that keypair and authorized_keys entry before running `cargo test --lib -- --ignored`, and never reuse or touch the real `~/.ssh` keys already present on the machine.
+
+`vpn::tests::ensure_host_route_records_nothing_when_the_route_helper_is_not_installed` (and its sibling `add_host_routes_...` test) are **not** `#[ignore]`d, but silently assume `setup::ROUTE_HELPER_PATH` (`/usr/local/libexec/connecthub-route-helper`) doesn't actually exist on the machine running `cargo test --lib` - unlike the SSH tests above, they don't guard against the opposite case. If a previous session ran `vpn::setup::install()` for real (e.g. to manually test the live VPN connect flow) and left the route helper + its `com.connecthub.route.policy`/`com.termora.vpn.policy` polkit actions installed system-wide, `ensure_host_route`'s "is the helper installed" check now finds it present and actually shells out to `pkexec` - since the narrow polkit policy authorizes it (`allow_active: yes`, no password prompt), this can genuinely run `ip route replace <ip>/32 dev tun0` as root during a plain test run, and the test then fails (or worse, mutates real routing state) instead of silently no-op'ing. Before running `cargo test --lib` after any session that did real, manual VPN testing, remove `/usr/local/libexec/{connecthub-route-helper,termora-openvpn-helper}` and `/usr/share/polkit-1/actions/{com.connecthub.route,com.termora.vpn}.policy` (all root-owned - needs an interactive `sudo`/`pkexec` prompt) to restore the pristine state these tests assume; VPN setup can always be re-run from the app's own VPN tab afterward if manual testing is needed again.
 
 ## Architecture
 
