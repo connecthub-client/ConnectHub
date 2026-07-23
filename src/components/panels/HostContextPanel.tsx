@@ -75,6 +75,7 @@ export default function HostContextPanel({
   const vpnProfiles = useVpnStore((s) => s.profiles);
   const vpnStatuses = useVpnStore((s) => s.statuses);
   const refreshVpnActive = useVpnStore((s) => s.refreshActive);
+  const ensureVpnUp = useVpnStore((s) => s.ensureVpnUp);
   const performancePanelVisible = useSettingsStore((s) => s.performancePanelVisible);
   const togglePerformancePanel = useSettingsStore((s) => s.togglePerformancePanel);
   const hostDetailsVisible = useSettingsStore((s) => s.hostDetailsVisible);
@@ -201,6 +202,22 @@ export default function HostContextPanel({
     setRunningId(runKey);
     setLastResult(null);
     try {
+      // No live session to piggy-back on (the branch above), so this is a
+      // fresh one-off connection - make sure the host's VPN (if any) is up
+      // and routed first, same as Connect/SFTP, rather than letting it
+      // silently time out against an unreachable private IP.
+      const gate = await ensureVpnUp(host);
+      if (!gate.ok) {
+        setLastResult({
+          label,
+          result: {
+            host_id: host.id,
+            output: null,
+            error: gate.message ?? "Could not connect the VPN for this host.",
+          },
+        });
+        return;
+      }
       const [result] = await runOnHosts([host.id], body);
       setLastResult({ label, result });
       recordCommandRun(host.id, {

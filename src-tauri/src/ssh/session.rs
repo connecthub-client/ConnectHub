@@ -129,8 +129,15 @@ impl client::Handler for ClientHandler {
     // connection presents a different key for the same host/port.
     async fn check_server_key(&mut self, server_public_key: &PublicKey) -> Result<bool, Self::Error> {
         let fingerprint = format!("SHA256:{}", server_public_key.fingerprint());
-        let conn = rusqlite::Connection::open(&self.db_path)?;
-        match known_hosts::verify_or_trust(&conn, &self.hostname, self.port, &fingerprint) {
+        let mut conn = rusqlite::Connection::open(&self.db_path)?;
+        // This connection is independent of AppState.db (see the comment on
+        // verify_or_trust for why), so without a busy_timeout it would fail
+        // immediately with SQLITE_BUSY - rather than just waiting the few
+        // milliseconds needed - if it happens to run at the exact same
+        // instant as any other write to this db file, including another
+        // concurrent connection attempt's own check_server_key call.
+        conn.busy_timeout(std::time::Duration::from_secs(5))?;
+        match known_hosts::verify_or_trust(&mut conn, &self.hostname, self.port, &fingerprint) {
             Ok(_) => Ok(true),
             Err(app_err) => Err(HandlerError::HostKeyRejected(app_err)),
         }

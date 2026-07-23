@@ -21,12 +21,11 @@ import SettingsPanel from "../components/panels/SettingsPanel";
 import BackupPanel from "../components/panels/BackupPanel";
 import TerminalView from "../components/terminal/TerminalView";
 import SftpBrowser from "../components/sftp/SftpBrowser";
-import { Group, Host, Identity, ImportSummary, localReadTextFile, localWriteTextFile, Snippet, VpnProfile, vpnEnsureHostRoute } from "../lib/tauri-bridge";
+import { Group, Host, Identity, ImportSummary, localReadTextFile, localWriteTextFile, Snippet, VpnProfile } from "../lib/tauri-bridge";
 import { useHostsStore } from "../state/hostsStore";
 import { useSessionsStore } from "../state/sessionsStore";
 import { useVpnStore } from "../state/vpnStore";
 import { useSettingsStore } from "../state/settingsStore";
-import { friendlyError } from "../lib/friendlyError";
 
 type ManageTab = "hosts" | "identities" | "keys" | "vpn" | "backup" | "settings";
 type MainView = { type: "manage"; tab: ManageTab } | { type: "session"; tabId: string };
@@ -57,9 +56,7 @@ export default function AppShell() {
 
   const loadVpnAll = useVpnStore((s) => s.loadAll);
   const releaseVpnIfUnused = useVpnStore((s) => s.releaseIfUnused);
-  const vpnStatuses = useVpnStore((s) => s.statuses);
-  const vpnConnect = useVpnStore((s) => s.connect);
-  const vpnProfiles = useVpnStore((s) => s.profiles);
+  const vpnEnsureUp = useVpnStore((s) => s.ensureVpnUp);
 
   const leftSidebarVisible = useSettingsStore((s) => s.leftSidebarVisible);
   const toggleLeftSidebar = useSettingsStore((s) => s.toggleLeftSidebar);
@@ -131,51 +128,48 @@ export default function AppShell() {
   // destinations so they read as clean, single-purpose views.
   const showHostTree = mainView.type === "session" || (mainView.type === "manage" && mainView.tab === "hosts");
 
-  // The single gate for "is it OK to open a session to this host right
-  // now" - every caller (double-click, right-click menu, the host
-  // panel's buttons) must go through this so a host's assigned VPN always
-  // gets a chance to connect first, rather than each entry point needing
-  // its own copy of this check (a host panel-only version of this used to
-  // exist and missed the sidebar's double-click/context-menu paths).
+  // The single gate for "is it OK to talk to this host's network right
+  // now" - every caller (double-click, right-click menu, the host panel's
+  // buttons) must go through this so a host's assigned VPN always gets a
+  // chance to connect (and this specific host gets its own route) first,
+  // rather than each entry point needing its own copy of this check (a
+  // host panel-only version of this used to exist and missed the
+  // sidebar's double-click/context-menu paths). The actual gating logic
+  // lives in vpnStore.ensureVpnUp so non-connection callers (Snippets'
+  // "run on hosts", Quick Commands' one-off exec fallback) can reuse it
+  // too - this wrapper only adds the inline busy/error UI state specific
+  // to the Connect/SFTP buttons here.
   async function ensureVpnUp(host: Host): Promise<boolean> {
     if (!host.vpn_profile_id) return true;
-    if (vpnStatuses[host.vpn_profile_id]?.state === "connected") {
-      // The VPN itself is already up, so vpnConnect (below) never runs for
-      // this attempt - but that's also the one place a host's own /32
-      // route gets added. A host connected to (or assigned this profile)
-      // after the VPN came up would otherwise never get one until the VPN
-      // is manually disconnected and reconnected. Best-effort: this is a
-      // reachability improvement, not a precondition for trying to
-      // connect, so a failure here is swallowed rather than blocking it.
-      vpnEnsureHostRoute(host.id).catch(() => {});
-      return true;
-    }
-
     setVpnGateError(null);
     setVpnGateHostId(host.id);
     try {
-      const status = await vpnConnect(host.vpn_profile_id);
-      if (status.state !== "connected") {
-        const profileLabel = vpnProfiles.find((p) => p.id === host.vpn_profile_id)?.label ?? "";
-        setVpnGateError({
-          hostId: host.id,
-          message:
-            status.state === "connecting"
-              ? `VPN "${profileLabel}" is taking longer than expected to connect - try again in a moment.`
-              : (status.message ?? `Could not connect VPN profile "${profileLabel}".`),
-        });
+      const result = await vpnEnsureUp(host);
+      if (!result.ok) {
+        setVpnGateError({ hostId: host.id, message: result.message ?? "Could not connect the VPN." });
         return false;
       }
       return true;
-    } catch (e) {
-      setVpnGateError({ hostId: host.id, message: friendlyError(e) });
-      return false;
     } finally {
       setVpnGateHostId(null);
     }
   }
 
   async function handleConnect(host: Host) {
+    // HostContextPanel's own Connect button disables itself once a session
+    // is open, but every other path into this function (HostTree's
+    // double-click and right-click "Connect", the Hosts grid's
+    // double-click) calls this directly with no such check - so without
+    // this guard here too, any of those would open a second, fully
+    // redundant terminal session/tab to a host already connected instead
+    // of just switching to the existing one. Scoped to "terminal"
+    // specifically since SFTP sessions are allowed to coexist alongside
+    // (or instead of) a terminal session for the same host.
+    const existing = openSessions.find((s) => s.host.id === host.id && s.kind === "terminal");
+    if (existing) {
+      setMainView({ type: "session", tabId: existing.tabId });
+      return;
+    }
     if (!(await ensureVpnUp(host))) return;
     const tabId = openSession(host, "terminal");
     setMainView({ type: "session", tabId });

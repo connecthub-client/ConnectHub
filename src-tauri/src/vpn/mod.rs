@@ -189,7 +189,10 @@ pub fn disconnect_all(vpn_map: &VpnMap) {
 pub async fn connect(state: &AppState, vpn_map: VpnMap, profile_id: Uuid) -> AppResult<VpnStatus> {
     if let Some(entry) = vpn_map.get(&profile_id) {
         let current = entry.status.lock().unwrap().clone();
-        if matches!(current.state, VpnState::Connecting | VpnState::Connected) {
+        if matches!(
+            current.state,
+            VpnState::Connecting | VpnState::Connected | VpnState::Disconnecting
+        ) {
             return Ok(current);
         }
     }
@@ -201,6 +204,102 @@ pub async fn connect(state: &AppState, vpn_map: VpnMap, profile_id: Uuid) -> App
         ));
     }
 
+    // Claim this profile's slot in `vpn_map` atomically, right here, before
+    // any of the fallible async setup below (db reads, file writes,
+    // spawning the pkexec helper). The `get` above and this claim are two
+    // separate DashMap operations - without an atomic claim between them,
+    // several concurrent connect() calls racing for the same
+    // not-yet-connected profile (e.g. Snippets' "run on hosts" gating
+    // multiple hosts that share one VPN profile, all in parallel) could
+    // each observe the profile as absent, and each go on to launch its own
+    // full openvpn process for it: every insert after the first would
+    // silently overwrite the previous ActiveVpn entry, leaking an orphaned
+    // openvpn process this app can no longer see or disconnect, and
+    // potentially fighting over the same tun routes. See try_claim's own
+    // comment for how the atomicity is actually achieved.
+    let claim = match try_claim(&vpn_map, profile_id) {
+        Err(current) => return Ok(current),
+        Ok(claim) => claim,
+    };
+
+    match start_connection(
+        state,
+        profile_id,
+        claim.status.clone(),
+        claim.control_rx,
+        claim.tun_iface,
+        claim.added_routes,
+        vpn_map.clone(),
+    )
+    .await
+    {
+        Ok(final_status) => Ok(final_status),
+        Err(e) => {
+            // The claim above was speculative - nothing was actually
+            // launched, so run_vpn's own cleanup() will never run to
+            // remove this entry. Without this, a failed connect attempt
+            // (bad profile data, disk full, pkexec missing) would leave a
+            // phantom "Connecting" entry in vpn_map forever: every future
+            // connect() call for this profile would see it as Occupied and
+            // just echo the same stale status back, permanently blocking
+            // any real reconnect attempt.
+            vpn_map.remove(&profile_id);
+            Err(e)
+        }
+    }
+}
+
+struct ClaimedConnection {
+    status: Arc<Mutex<VpnStatus>>,
+    control_rx: mpsc::UnboundedReceiver<VpnControl>,
+    tun_iface: Arc<Mutex<Option<String>>>,
+    added_routes: Arc<Mutex<Vec<(String, String)>>>,
+}
+
+// Atomically claims `profile_id`'s slot in `vpn_map` for a new connection
+// attempt: `Entry::Vacant`/`Entry::Occupied` is a single DashMap operation
+// (one shard lock, held only for this synchronous match), so of any number
+// of threads calling this for the same not-yet-connected profile at once,
+// exactly one observes `Vacant` and inserts, and every other one - even if
+// it started the race a moment earlier - is guaranteed to see the
+// just-inserted entry as `Occupied` rather than also seeing `Vacant`. An
+// `Occupied` entry always means Connecting, Connected, or Disconnecting
+// (see cleanup(), which removes the entry on every terminal state), so
+// reporting its current status back here is correct for all three: none of
+// them should trigger launching a second, competing connection.
+fn try_claim(vpn_map: &VpnMap, profile_id: Uuid) -> Result<ClaimedConnection, VpnStatus> {
+    let status = Arc::new(Mutex::new(VpnStatus { state: VpnState::Connecting, message: None }));
+    let tun_iface: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    let added_routes: Arc<Mutex<Vec<(String, String)>>> = Arc::new(Mutex::new(Vec::new()));
+    let (control_tx, control_rx) = mpsc::unbounded_channel();
+    match vpn_map.entry(profile_id) {
+        dashmap::mapref::entry::Entry::Occupied(e) => Err(e.get().status.lock().unwrap().clone()),
+        dashmap::mapref::entry::Entry::Vacant(e) => {
+            e.insert(ActiveVpn {
+                commands: control_tx,
+                status: status.clone(),
+                tun_iface: tun_iface.clone(),
+                added_routes: added_routes.clone(),
+            });
+            Ok(ClaimedConnection { status, control_rx, tun_iface, added_routes })
+        }
+    }
+}
+
+// The fallible half of connecting - db reads, config/auth file writes,
+// binding the management port, and spawning the pkexec helper - split out
+// so `connect` above can remove its speculative vpn_map claim on any
+// failure here (see its own comment) without duplicating this logic.
+#[allow(clippy::too_many_arguments)]
+async fn start_connection(
+    state: &AppState,
+    profile_id: Uuid,
+    status: Arc<Mutex<VpnStatus>>,
+    control_rx: mpsc::UnboundedReceiver<VpnControl>,
+    tun_iface: Arc<Mutex<Option<String>>>,
+    added_routes: Arc<Mutex<Vec<(String, String)>>>,
+    vpn_map: VpnMap,
+) -> AppResult<VpnStatus> {
     let (profile, auth) = {
         let conn = state.db.lock().unwrap();
         state.with_key(|key| {
@@ -257,24 +356,7 @@ pub async fn connect(state: &AppState, vpn_map: VpnMap, profile_id: Uuid) -> App
         .spawn()
         .map_err(|e| AppError::Vpn(format!("failed to launch pkexec: {e}")))?;
 
-    let (control_tx, control_rx) = mpsc::unbounded_channel();
-    let status = Arc::new(Mutex::new(VpnStatus { state: VpnState::Connecting, message: None }));
     let (ready_tx, ready_rx) = oneshot::channel();
-    // Populated by add_host_routes as each route is actually added, so
-    // cleanup can remove exactly those routes on disconnect - see
-    // remove_host_routes below for why routes otherwise leak.
-    let added_routes: Arc<Mutex<Vec<(String, String)>>> = Arc::new(Mutex::new(Vec::new()));
-    let tun_iface: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
-
-    vpn_map.insert(
-        profile_id,
-        ActiveVpn {
-            commands: control_tx,
-            status: status.clone(),
-            tun_iface: tun_iface.clone(),
-            added_routes: added_routes.clone(),
-        },
-    );
 
     tokio::spawn(run_vpn(
         profile_id,
@@ -953,5 +1035,49 @@ mod tests {
             added_routes.lock().unwrap().is_empty(),
             "must not record a route it never actually added"
         );
+    }
+
+    #[test]
+    fn try_claim_lets_only_one_of_many_concurrent_callers_through_for_the_same_profile() {
+        // Regression test for a real race: connect()'s old "check status,
+        // then later insert" pattern had async work (db reads, file
+        // writes, spawning pkexec) in between, so several hosts sharing
+        // one not-yet-connected VPN profile - e.g. Snippets' "run on
+        // hosts" gating them all in parallel - could each observe the
+        // profile as absent and each launch its own openvpn process,
+        // silently overwriting each other's ActiveVpn entry in vpn_map and
+        // leaking every process but the last. try_claim closes that gap by
+        // making the check-and-claim a single synchronous DashMap
+        // operation. Uses real OS threads (not async tasks on one runtime)
+        // so the race is genuine, not just cooperative-scheduling luck.
+        let vpn_map: VpnMap = Arc::new(DashMap::new());
+        let profile_id = Uuid::new_v4();
+
+        let handles: Vec<_> = (0..8)
+            .map(|_| {
+                let vpn_map = vpn_map.clone();
+                std::thread::spawn(move || try_claim(&vpn_map, profile_id).is_ok())
+            })
+            .collect();
+        let results: Vec<bool> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+        let wins = results.into_iter().filter(|won| *won).count();
+
+        assert_eq!(
+            wins, 1,
+            "exactly one of several concurrent connect attempts for the same profile must \
+             win the claim - any more would mean launching duplicate openvpn processes"
+        );
+        assert!(vpn_map.contains_key(&profile_id));
+    }
+
+    #[test]
+    fn try_claim_reports_the_current_status_to_callers_that_lose_the_race() {
+        let vpn_map: VpnMap = Arc::new(DashMap::new());
+        let (profile_id, _rx) = tracked(&vpn_map, VpnState::Connecting);
+
+        match try_claim(&vpn_map, profile_id) {
+            Err(status) => assert_eq!(status.state, VpnState::Connecting),
+            Ok(_) => panic!("must not be able to claim a profile that is already tracked"),
+        }
     }
 }

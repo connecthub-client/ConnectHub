@@ -293,6 +293,13 @@ mod tests {
         let profile_id = vpn_profiles::create(&conn, &key, vpn_input("profile-a")).unwrap().id;
         let other_profile_id = vpn_profiles::create(&conn, &key, vpn_input("profile-b")).unwrap().id;
 
+        // Three hosts on the same profile - not just two - since a query
+        // that happens to work for exactly 2 (e.g. an accidental LIMIT, or
+        // logic that only ever looks at the first match) wouldn't be caught
+        // by a 2-host fixture. This directly covers the "more than 2 hosts
+        // sharing one VPN profile" scenario the routing/on-demand-route
+        // logic elsewhere (vpn::add_host_routes/ensure_host_route) needs to
+        // handle for any number of hosts, not just a pair.
         let matching_a = create(
             &conn,
             HostInput { label: "a".into(), vpn_profile_id: Some(profile_id), ..input() },
@@ -303,17 +310,23 @@ mod tests {
             HostInput { label: "b".into(), vpn_profile_id: Some(profile_id), ..input() },
         )
         .unwrap();
-        create(
+        let matching_c = create(
             &conn,
-            HostInput { label: "c".into(), vpn_profile_id: Some(other_profile_id), ..input() },
+            HostInput { label: "c".into(), vpn_profile_id: Some(profile_id), ..input() },
         )
         .unwrap();
-        create(&conn, HostInput { label: "d".into(), ..input() }).unwrap();
+        create(
+            &conn,
+            HostInput { label: "other-profile".into(), vpn_profile_id: Some(other_profile_id), ..input() },
+        )
+        .unwrap();
+        create(&conn, HostInput { label: "no-profile".into(), ..input() }).unwrap();
 
         let matched = list_by_vpn_profile(&conn, profile_id).unwrap();
         let matched_ids: Vec<Uuid> = matched.iter().map(|h| h.id).collect();
-        assert_eq!(matched.len(), 2);
+        assert_eq!(matched.len(), 3);
         assert!(matched_ids.contains(&matching_a.id));
         assert!(matched_ids.contains(&matching_b.id));
+        assert!(matched_ids.contains(&matching_c.id));
     }
 }

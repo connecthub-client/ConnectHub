@@ -1,8 +1,20 @@
 import { create } from "zustand";
 import * as bridge from "../lib/tauri-bridge";
-import type { VpnConnectionStatus, VpnProfile, VpnProfileInput, VpnStatus } from "../lib/tauri-bridge";
+import type { Host, VpnConnectionStatus, VpnProfile, VpnProfileInput, VpnStatus } from "../lib/tauri-bridge";
 import { useHostsStore } from "./hostsStore";
 import { useSessionsStore } from "./sessionsStore";
+import { friendlyError } from "../lib/friendlyError";
+
+export interface VpnGateResult {
+  ok: boolean;
+  message?: string;
+}
+
+// How long to keep polling a profile that's already Connecting (someone
+// else's attempt, not this call's own) before giving up - matches the
+// bound used server-side (vpn::connect's own ready_rx wait).
+const VPN_GATE_POLL_TIMEOUT_MS = 25_000;
+const VPN_GATE_POLL_INTERVAL_MS = 400;
 
 interface VpnStoreState {
   profiles: VpnProfile[];
@@ -20,6 +32,16 @@ interface VpnStoreState {
   runSetup: () => Promise<void>;
   connect: (profileId: string) => Promise<VpnStatus>;
   disconnect: (profileId: string) => Promise<void>;
+  // The single gate for "is it OK to talk to this host's network right
+  // now" - brings the host's assigned VPN profile up if it isn't already,
+  // and either way makes sure this specific host has its own explicit
+  // route through the tunnel (vpn_ensure_host_route) before returning ok.
+  // Every caller that's about to open a session, run a one-off command, or
+  // otherwise reach a host over the network should go through this rather
+  // than assuming a "connected" profile status already means every host
+  // referencing it is actually routed - see vpn::ensure_host_route's own
+  // doc comment in the Rust backend for why that's not automatic.
+  ensureVpnUp: (host: Host) => Promise<VpnGateResult>;
   // Disconnects the VPN a host relies on, but only once nothing else (an
   // open terminal/SFTP session) still needs it - safe to call every time a
   // session closes, regardless of what else is sharing that same profile.
@@ -105,6 +127,57 @@ export const useVpnStore = create<VpnStoreState>((set, get) => ({
     set((s) => ({
       statuses: { ...s.statuses, [profileId]: { state: "disconnecting", message: null } },
     }));
+  },
+
+  ensureVpnUp: async (host) => {
+    const profileId = host.vpn_profile_id;
+    if (!profileId) return { ok: true };
+
+    try {
+      // Already up - vpn::add_host_routes only ran once, at the moment
+      // *this* profile first connected, using whichever hosts referenced
+      // it at that exact instant, so a host added/edited afterward still
+      // needs its own route added on demand here even though the profile
+      // itself needs no (re)connecting.
+      if (get().statuses[profileId]?.state === "connected") {
+        bridge.vpnEnsureHostRoute(host.id).catch(() => {});
+        return { ok: true };
+      }
+
+      let status = await get().connect(profileId);
+      // vpn::connect returns whatever status is current *immediately*,
+      // without waiting, whenever the profile is already Connecting or
+      // Connected (see its early-return guard) - if this call piggy-backed
+      // on a different host's still-in-flight attempt, poll for the real
+      // outcome instead of treating "still connecting" as a hard failure,
+      // since repeated calls are cheap/side-effect-free via that same
+      // guard while the connection is still settling.
+      const deadline = Date.now() + VPN_GATE_POLL_TIMEOUT_MS;
+      while (status.state === "connecting" && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, VPN_GATE_POLL_INTERVAL_MS));
+        status = await get().connect(profileId);
+      }
+
+      if (status.state !== "connected") {
+        const profileLabel = get().profiles.find((p) => p.id === profileId)?.label ?? "";
+        return {
+          ok: false,
+          message:
+            status.state === "connecting"
+              ? `VPN "${profileLabel}" is taking longer than expected to connect - try again in a moment.`
+              : (status.message ?? `Could not connect VPN profile "${profileLabel}".`),
+        };
+      }
+
+      // Covers both "this call drove the connection" (host was already in
+      // add_host_routes' initial snapshot, so this is a harmless no-op/
+      // route-replace) and "someone else's attempt finished while we were
+      // polling above" (host may not have been in that snapshot at all).
+      bridge.vpnEnsureHostRoute(host.id).catch(() => {});
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, message: friendlyError(e) };
+    }
   },
 
   releaseIfUnused: async (hostId) => {

@@ -97,6 +97,17 @@ export const useHostsStore = create<HostsState>((set, get) => ({
   updateHost: async (id, input) => {
     const host = await bridge.hostUpdate(id, input);
     await get().loadAll();
+    // Best-effort: if this host has a VPN profile (new, changed, or just
+    // still the same one) and that profile happens to already be
+    // connected, make sure THIS host has its own route through it right
+    // away rather than leaving it to whenever someone next happens to
+    // open a session to it - vpn::ensure_host_route already no-ops safely
+    // if the profile isn't connected, so this is always safe to call.
+    // Imports the bridge function directly (not via vpnStore) to avoid a
+    // circular import - vpnStore already imports this store.
+    if (host.vpn_profile_id) {
+      bridge.vpnEnsureHostRoute(host.id).catch(() => {});
+    }
     return host;
   },
   deleteHost: async (id) => {

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { HostExecResult, Snippet } from "../../lib/tauri-bridge";
 import { useHostsStore } from "../../state/hostsStore";
 import { useSnippetsStore } from "../../state/snippetsStore";
+import { useVpnStore } from "../../state/vpnStore";
 import { errorClass, labelClass, primaryButtonClass } from "./formStyles";
 
 interface RunSnippetFormProps {
@@ -12,6 +13,7 @@ interface RunSnippetFormProps {
 export default function RunSnippetForm({ snippet, onDone }: RunSnippetFormProps) {
   const hosts = useHostsStore((s) => s.hosts);
   const runOnHosts = useSnippetsStore((s) => s.runOnHosts);
+  const ensureVpnUp = useVpnStore((s) => s.ensureVpnUp);
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [running, setRunning] = useState(false);
@@ -31,8 +33,27 @@ export default function RunSnippetForm({ snippet, onDone }: RunSnippetFormProps)
     setError(null);
     setRunning(true);
     try {
-      const res = await runOnHosts(Array.from(selected), snippet.body);
-      setResults(res);
+      const targetHosts = hosts.filter((h) => selected.has(h.id));
+      // Gate every target host's VPN in parallel (they may not even share
+      // the same profile) rather than assuming a host is reachable just
+      // because it was selected - a host whose VPN never came up would
+      // otherwise just silently time out inside runOnHosts. A host that
+      // fails the gate is skipped rather than aborting the whole batch, so
+      // one unreachable host doesn't block results for the rest.
+      const gateResults = await Promise.all(targetHosts.map((h) => ensureVpnUp(h)));
+      const readyHostIds = targetHosts
+        .filter((_, i) => gateResults[i].ok)
+        .map((h) => h.id);
+      const vpnFailures: HostExecResult[] = targetHosts
+        .map((h, i) => ({ h, gate: gateResults[i] }))
+        .filter(({ gate }) => !gate.ok)
+        .map(({ h, gate }) => ({
+          host_id: h.id,
+          output: null,
+          error: gate.message ?? "Could not connect the VPN for this host.",
+        }));
+      const execResults = readyHostIds.length > 0 ? await runOnHosts(readyHostIds, snippet.body) : [];
+      setResults([...execResults, ...vpnFailures]);
     } catch (err) {
       setError(String(err));
     } finally {

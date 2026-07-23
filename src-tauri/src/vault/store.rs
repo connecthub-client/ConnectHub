@@ -42,6 +42,17 @@ pub fn open() -> AppResult<Connection> {
 
 fn open_at(path: &std::path::Path) -> AppResult<Connection> {
     let conn = Connection::open(path)?;
+    // SQLite's default busy_timeout is 0 - any write that finds the file
+    // already locked fails immediately with SQLITE_BUSY rather than
+    // waiting. This connection is normally the only writer (guarded by
+    // AppState.db's Mutex), but `ssh::known_hosts::verify_or_trust` opens
+    // its own short-lived connection to this same file on every SSH
+    // connect attempt (see its own comment for why) - without a
+    // busy_timeout here, a host CRUD/snippet/etc. write that happens to
+    // land in the same instant as one of those brief transactions would
+    // surface as a spurious "database is locked" error instead of just
+    // waiting the few milliseconds needed.
+    conn.busy_timeout(std::time::Duration::from_secs(5))?;
     init_schema(&conn)?;
     // vault.db holds every encrypted secret (identity passwords, private
     // keys, passphrases, VPN passwords, the Google refresh token) - harden
