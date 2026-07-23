@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-07-24
+
 ### Added
 
 - **Resizable panels**: the left sidebar and right panel (Host Details/Snippets) can now be drag-resized at their inner edge, VSCode-style, with the last width remembered independently of show/hide state; double-click a handle to reset it to the default width.
@@ -100,7 +102,8 @@ Initial public release.
 - VPN helper scripts run under narrowly-scoped polkit rules and force `--script-security 0`, so an uploaded `.ovpn` config can never execute arbitrary code as root.
 - Vault key derivation and the per-installation auto-unlock secret were hardened during development; see [ARCHITECTURE.md](ARCHITECTURE.md#vault--master-password) for the current design and its tradeoffs.
 
-[Unreleased]: https://github.com/connecthub-client/ConnectHub/compare/v1.1.2...HEAD
+[Unreleased]: https://github.com/connecthub-client/ConnectHub/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/connecthub-client/ConnectHub/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/connecthub-client/ConnectHub/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/connecthub-client/ConnectHub/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/connecthub-client/ConnectHub/compare/v1.0.0...v1.1.0
