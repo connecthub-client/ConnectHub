@@ -49,6 +49,15 @@ enum VpnControl {
 pub(crate) struct ActiveVpn {
     commands: mpsc::UnboundedSender<VpnControl>,
     status: Arc<Mutex<VpnStatus>>,
+    // Populated once, by add_host_routes, the moment the tunnel interface is
+    // known - lets ensure_host_route (below) add a route for a host on
+    // demand without needing to rediscover the interface itself.
+    tun_iface: Arc<Mutex<Option<String>>>,
+    // Shared with add_host_routes/ensure_host_route so every route added
+    // for this connection (whether at initial connect or added later on
+    // demand) is retracted by cleanup() on disconnect - see
+    // remove_host_routes.
+    added_routes: Arc<Mutex<Vec<(String, String)>>>,
 }
 
 pub type VpnMap = Arc<DashMap<Uuid, ActiveVpn>>;
@@ -255,8 +264,17 @@ pub async fn connect(state: &AppState, vpn_map: VpnMap, profile_id: Uuid) -> App
     // cleanup can remove exactly those routes on disconnect - see
     // remove_host_routes below for why routes otherwise leak.
     let added_routes: Arc<Mutex<Vec<(String, String)>>> = Arc::new(Mutex::new(Vec::new()));
+    let tun_iface: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
 
-    vpn_map.insert(profile_id, ActiveVpn { commands: control_tx, status: status.clone() });
+    vpn_map.insert(
+        profile_id,
+        ActiveVpn {
+            commands: control_tx,
+            status: status.clone(),
+            tun_iface: tun_iface.clone(),
+            added_routes: added_routes.clone(),
+        },
+    );
 
     tokio::spawn(run_vpn(
         profile_id,
@@ -270,6 +288,7 @@ pub async fn connect(state: &AppState, vpn_map: VpnMap, profile_id: Uuid) -> App
         ready_tx,
         target_hostnames,
         added_routes,
+        tun_iface,
     ));
 
     // Wait (bounded) for the first Connected/Error transition so the
@@ -295,6 +314,7 @@ async fn run_vpn(
     ready_tx: oneshot::Sender<VpnStatus>,
     target_hostnames: Vec<String>,
     added_routes: Arc<Mutex<Vec<(String, String)>>>,
+    tun_iface: Arc<Mutex<Option<String>>>,
 ) {
     let mut ready_tx = Some(ready_tx);
 
@@ -347,7 +367,8 @@ async fn run_vpn(
                                 if let Some(local_ip) = extract_local_tunnel_ip(&text) {
                                     let hostnames = target_hostnames.clone();
                                     let added_routes = added_routes.clone();
-                                    tokio::spawn(add_host_routes(local_ip, hostnames, added_routes));
+                                    let tun_iface = tun_iface.clone();
+                                    tokio::spawn(add_host_routes(local_ip, hostnames, added_routes, tun_iface));
                                 }
                             }
                         }
@@ -482,36 +503,81 @@ async fn add_host_routes(
     local_tunnel_ip: String,
     hostnames: Vec<String>,
     added_routes: Arc<Mutex<Vec<(String, String)>>>,
+    tun_iface: Arc<Mutex<Option<String>>>,
 ) {
     if hostnames.is_empty() {
-        return;
-    }
-    if !std::path::Path::new(setup::ROUTE_HELPER_PATH).exists() {
         return;
     }
     let Some(iface) = find_tun_interface(&local_tunnel_ip).await else {
         return;
     };
+    // Published so ensure_host_route can add a route on demand later, for a
+    // host that gets connected (or assigned this profile) after this
+    // one-time pass already ran - see its doc comment for why that matters.
+    *tun_iface.lock().unwrap() = Some(iface.clone());
     for hostname in hostnames {
-        for ip in resolve_all_ipv4(&hostname).await {
-            let status = tokio::process::Command::new("pkexec")
-                .arg(setup::ROUTE_HELPER_PATH)
-                .arg("add")
-                .arg(&iface)
-                .arg(&ip)
-                .stdin(std::process::Stdio::null())
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .status()
-                .await;
-            // Only remembered for later removal if it actually succeeded -
-            // otherwise cleanup would try to delete a route that was never
-            // added.
-            if matches!(status, Ok(s) if s.success()) {
-                added_routes.lock().unwrap().push((iface.clone(), ip));
-            }
+        add_routes_for_hostname(&iface, &hostname, &added_routes).await;
+    }
+}
+
+// Resolves `hostname` to every IPv4 address it has and adds a /32 route
+// through `iface` for each - the actual per-hostname work shared by
+// add_host_routes' initial bulk pass and ensure_host_route's later,
+// single-host, on-demand pass.
+async fn add_routes_for_hostname(
+    iface: &str,
+    hostname: &str,
+    added_routes: &Arc<Mutex<Vec<(String, String)>>>,
+) {
+    if !std::path::Path::new(setup::ROUTE_HELPER_PATH).exists() {
+        return;
+    }
+    for ip in resolve_all_ipv4(hostname).await {
+        let status = tokio::process::Command::new("pkexec")
+            .arg(setup::ROUTE_HELPER_PATH)
+            .arg("add")
+            .arg(iface)
+            .arg(&ip)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .await;
+        // Only remembered for later removal if it actually succeeded -
+        // otherwise cleanup would try to delete a route that was never
+        // added.
+        if matches!(status, Ok(s) if s.success()) {
+            added_routes.lock().unwrap().push((iface.to_string(), ip));
         }
     }
+}
+
+// Adds `host_id`'s /32 route on demand, for a host connected to (or
+// assigned this VPN profile) after the profile's own VPN connection
+// already came up. add_host_routes above only fires once, on the VPN's own
+// CONNECTED transition, using whichever hosts referenced this profile at
+// that exact moment - the frontend's ensureVpnUp only calls vpn::connect
+// when a profile isn't already connected, so a host added afterward would
+// otherwise never get a route until the VPN is manually disconnected and
+// reconnected. Best-effort and idempotent like the rest of this module
+// (the route helper uses `ip route replace`, safe to call repeatedly) - a
+// no-op if the host has no VPN profile, that profile isn't connected, or
+// the interface isn't known yet for some other best-effort reason above.
+pub async fn ensure_host_route(state: &AppState, vpn_map: &VpnMap, host_id: Uuid) -> AppResult<()> {
+    let host = {
+        let conn = state.db.lock().unwrap();
+        crate::data::hosts::get(&conn, host_id)?
+    };
+    let Some(profile_id) = host.vpn_profile_id else { return Ok(()) };
+    let Some(entry) = vpn_map.get(&profile_id) else { return Ok(()) };
+    if entry.status.lock().unwrap().state != VpnState::Connected {
+        return Ok(());
+    }
+    let Some(iface) = entry.tun_iface.lock().unwrap().clone() else { return Ok(()) };
+    let added_routes = entry.added_routes.clone();
+    drop(entry); // release the DashMap shard lock before the await below
+    add_routes_for_hostname(&iface, &host.hostname, &added_routes).await;
+    Ok(())
 }
 
 // Finds which tun interface currently has `local_ip` assigned, by shelling
@@ -632,7 +698,15 @@ mod tests {
     fn tracked(vpn_map: &VpnMap, state: VpnState) -> (Uuid, mpsc::UnboundedReceiver<VpnControl>) {
         let (tx, rx) = mpsc::unbounded_channel();
         let id = Uuid::new_v4();
-        vpn_map.insert(id, ActiveVpn { commands: tx, status: Arc::new(Mutex::new(VpnStatus { state, message: None })) });
+        vpn_map.insert(
+            id,
+            ActiveVpn {
+                commands: tx,
+                status: Arc::new(Mutex::new(VpnStatus { state, message: None })),
+                tun_iface: Arc::new(Mutex::new(None)),
+                added_routes: Arc::new(Mutex::new(Vec::new())),
+            },
+        );
         (id, rx)
     }
 
@@ -742,9 +816,141 @@ mod tests {
     #[tokio::test]
     async fn add_host_routes_records_nothing_when_the_route_helper_is_not_installed() {
         let added = Arc::new(Mutex::new(Vec::new()));
-        add_host_routes("10.8.0.6".into(), vec!["example.com".into()], added.clone()).await;
+        let tun_iface = Arc::new(Mutex::new(None));
+        add_host_routes("10.8.0.6".into(), vec!["example.com".into()], added.clone(), tun_iface).await;
         assert!(
             added.lock().unwrap().is_empty(),
+            "must not record a route it never actually added"
+        );
+    }
+
+    fn build_app_state() -> AppState {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        crate::data::init_schema(&conn).unwrap();
+        AppState {
+            db: std::sync::Mutex::new(conn),
+            db_path: std::path::PathBuf::new(),
+            vault_key: std::sync::Mutex::new(Some(crate::vault::kdf::test_key())),
+            sessions: Arc::new(DashMap::new()),
+            sftp_sessions: Arc::new(DashMap::new()),
+            vpn_connections: Arc::new(DashMap::new()),
+            google_login_cancel: std::sync::Mutex::new(None),
+        }
+    }
+
+    // Creates a host with `hostname`, referencing a freshly-created VPN
+    // profile - returns the host id and profile id together, since every
+    // ensure_host_route test needs both.
+    fn host_with_vpn_profile(state: &AppState, hostname: &str) -> (Uuid, Uuid) {
+        let conn = state.db.lock().unwrap();
+        let profile = state
+            .with_key(|key| {
+                crate::data::vpn_profiles::create(
+                    &conn,
+                    key,
+                    crate::models::vpn_profile::VpnProfileInput {
+                        label: "test profile".into(),
+                        config: "client\nremote vpn.example.com 1194\n".into(),
+                        auth_username: None,
+                        auth_password: None,
+                        avoid_default_route: true,
+                    },
+                )
+            })
+            .unwrap();
+        let host = crate::data::hosts::create(
+            &conn,
+            crate::models::host::HostInput {
+                group_id: None,
+                label: "test host".into(),
+                hostname: hostname.into(),
+                port: 22,
+                identity_id: None,
+                vpn_profile_id: Some(profile.id),
+                color: None,
+                icon: None,
+                notes: None,
+                sort_order: 0,
+            },
+        )
+        .unwrap();
+        (host.id, profile.id)
+    }
+
+    #[tokio::test]
+    async fn ensure_host_route_is_a_noop_when_the_profile_is_not_connected_at_all() {
+        let state = build_app_state();
+        let (host_id, _profile_id) = host_with_vpn_profile(&state, "10.0.0.5");
+        let vpn_map: VpnMap = Arc::new(DashMap::new());
+
+        // No entry in vpn_map for this host's profile - simulates a VPN
+        // that was never connected. Must return Ok(()), not error/panic.
+        assert!(ensure_host_route(&state, &vpn_map, host_id).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn ensure_host_route_is_a_noop_when_the_profile_is_only_connecting() {
+        let state = build_app_state();
+        let (host_id, profile_id) = host_with_vpn_profile(&state, "10.0.0.5");
+        let vpn_map: VpnMap = Arc::new(DashMap::new());
+        let (tx, _rx) = mpsc::unbounded_channel();
+        vpn_map.insert(
+            profile_id,
+            ActiveVpn {
+                commands: tx,
+                status: Arc::new(Mutex::new(VpnStatus { state: VpnState::Connecting, message: None })),
+                tun_iface: Arc::new(Mutex::new(Some("tun0".into()))),
+                added_routes: Arc::new(Mutex::new(Vec::new())),
+            },
+        );
+
+        assert!(ensure_host_route(&state, &vpn_map, host_id).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn ensure_host_route_is_a_noop_when_the_tunnel_interface_is_not_known_yet() {
+        let state = build_app_state();
+        let (host_id, profile_id) = host_with_vpn_profile(&state, "10.0.0.5");
+        let vpn_map: VpnMap = Arc::new(DashMap::new());
+        let (tx, _rx) = mpsc::unbounded_channel();
+        vpn_map.insert(
+            profile_id,
+            ActiveVpn {
+                commands: tx,
+                status: Arc::new(Mutex::new(VpnStatus { state: VpnState::Connected, message: None })),
+                tun_iface: Arc::new(Mutex::new(None)),
+                added_routes: Arc::new(Mutex::new(Vec::new())),
+            },
+        );
+
+        assert!(ensure_host_route(&state, &vpn_map, host_id).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn ensure_host_route_records_nothing_when_the_route_helper_is_not_installed() {
+        // Mirrors add_host_routes_records_nothing_when_the_route_helper_is_not_installed
+        // above - this environment never has the real route helper
+        // installed at setup::ROUTE_HELPER_PATH, so this exercises the real
+        // Connected + known-interface path through to add_routes_for_hostname
+        // without actually shelling out to pkexec.
+        let state = build_app_state();
+        let (host_id, profile_id) = host_with_vpn_profile(&state, "10.0.0.5");
+        let vpn_map: VpnMap = Arc::new(DashMap::new());
+        let added_routes = Arc::new(Mutex::new(Vec::new()));
+        let (tx, _rx) = mpsc::unbounded_channel();
+        vpn_map.insert(
+            profile_id,
+            ActiveVpn {
+                commands: tx,
+                status: Arc::new(Mutex::new(VpnStatus { state: VpnState::Connected, message: None })),
+                tun_iface: Arc::new(Mutex::new(Some("tun0".into()))),
+                added_routes: added_routes.clone(),
+            },
+        );
+
+        assert!(ensure_host_route(&state, &vpn_map, host_id).await.is_ok());
+        assert!(
+            added_routes.lock().unwrap().is_empty(),
             "must not record a route it never actually added"
         );
     }

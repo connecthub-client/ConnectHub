@@ -38,9 +38,9 @@ use commands::snippet_commands::{
 use commands::stats_commands::host_stats;
 use commands::vault_commands::vault_auto_unlock;
 use commands::vpn_commands::{
-    vpn_active_statuses, vpn_connect, vpn_disconnect, vpn_disconnect_all, vpn_profile_create,
-    vpn_profile_delete, vpn_profile_list, vpn_profile_update, vpn_setup_install, vpn_setup_status,
-    vpn_status,
+    vpn_active_statuses, vpn_connect, vpn_disconnect, vpn_disconnect_all, vpn_ensure_host_route,
+    vpn_profile_create, vpn_profile_delete, vpn_profile_list, vpn_profile_update,
+    vpn_setup_install, vpn_setup_status, vpn_status,
 };
 use state::AppState;
 use tauri::Manager;
@@ -118,6 +118,7 @@ pub fn run() {
             vpn_status,
             vpn_active_statuses,
             vpn_disconnect_all,
+            vpn_ensure_host_route,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

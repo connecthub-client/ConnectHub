@@ -21,7 +21,7 @@ import SettingsPanel from "../components/panels/SettingsPanel";
 import BackupPanel from "../components/panels/BackupPanel";
 import TerminalView from "../components/terminal/TerminalView";
 import SftpBrowser from "../components/sftp/SftpBrowser";
-import { Group, Host, Identity, ImportSummary, localReadTextFile, localWriteTextFile, Snippet, VpnProfile } from "../lib/tauri-bridge";
+import { Group, Host, Identity, ImportSummary, localReadTextFile, localWriteTextFile, Snippet, VpnProfile, vpnEnsureHostRoute } from "../lib/tauri-bridge";
 import { useHostsStore } from "../state/hostsStore";
 import { useSessionsStore } from "../state/sessionsStore";
 import { useVpnStore } from "../state/vpnStore";
@@ -139,7 +139,17 @@ export default function AppShell() {
   // exist and missed the sidebar's double-click/context-menu paths).
   async function ensureVpnUp(host: Host): Promise<boolean> {
     if (!host.vpn_profile_id) return true;
-    if (vpnStatuses[host.vpn_profile_id]?.state === "connected") return true;
+    if (vpnStatuses[host.vpn_profile_id]?.state === "connected") {
+      // The VPN itself is already up, so vpnConnect (below) never runs for
+      // this attempt - but that's also the one place a host's own /32
+      // route gets added. A host connected to (or assigned this profile)
+      // after the VPN came up would otherwise never get one until the VPN
+      // is manually disconnected and reconnected. Best-effort: this is a
+      // reachability improvement, not a precondition for trying to
+      // connect, so a failure here is swallowed rather than blocking it.
+      vpnEnsureHostRoute(host.id).catch(() => {});
+      return true;
+    }
 
     setVpnGateError(null);
     setVpnGateHostId(host.id);

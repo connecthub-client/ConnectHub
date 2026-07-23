@@ -70,3 +70,14 @@ pub fn vpn_active_statuses(state: State<AppState>) -> Vec<VpnConnectionStatus> {
 pub fn vpn_disconnect_all(state: State<AppState>) {
     vpn::disconnect_all(&state.vpn_connections)
 }
+
+// Called by the frontend's ensureVpnUp whenever it finds the target host's
+// VPN profile already connected (so it never calls vpn_connect at all) -
+// covers a host added to (or assigned) that profile after the VPN came up,
+// which would otherwise never get its own /32 route. See
+// vpn::ensure_host_route's doc comment for the full rationale.
+#[tauri::command]
+pub async fn vpn_ensure_host_route(state: State<'_, AppState>, host_id: Uuid) -> AppResult<()> {
+    let vpn_connections = state.vpn_connections.clone();
+    vpn::ensure_host_route(&state, &vpn_connections, host_id).await
+}

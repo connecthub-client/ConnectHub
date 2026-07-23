@@ -44,3 +44,12 @@ export function vpnActiveStatuses(): Promise<VpnConnectionStatus[]> {
 export function vpnDisconnectAll(): Promise<void> {
   return invoke("vpn_disconnect_all");
 }
+
+// Call whenever a host's VPN profile is already connected (so vpnConnect
+// itself is never invoked) - covers a host added to/assigned that profile
+// after the VPN came up, which would otherwise never get its own /32
+// route until the VPN is manually disconnected and reconnected. See
+// vpn::ensure_host_route's doc comment in the Rust backend.
+export function vpnEnsureHostRoute(hostId: string): Promise<void> {
+  return invoke("vpn_ensure_host_route", { hostId });
+}
