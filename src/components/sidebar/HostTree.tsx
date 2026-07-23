@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Group, Host } from "../../lib/tauri-bridge";
+import { getGroupChildren } from "../../lib/groupTree";
 import { useHostsStore } from "../../state/hostsStore";
 import { useSessionsStore } from "../../state/sessionsStore";
 import { useConfirm } from "../common/useConfirm";
@@ -86,6 +87,26 @@ export default function HostTree(props: HostTreeProps) {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
+      return next;
+    });
+  }
+
+  // Only touches real group ids, leaving the Favorites/Recent/All Servers
+  // section headers' own collapse state untouched (those share the same
+  // `collapsed` set via synthetic ids, but aren't what "every group" means
+  // here).
+  function expandAllGroups() {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      groups.forEach((g) => next.delete(g.id));
+      return next;
+    });
+  }
+
+  function collapseAllGroups() {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      groups.forEach((g) => next.add(g.id));
       return next;
     });
   }
@@ -203,12 +224,9 @@ export default function HostTree(props: HostTreeProps) {
   }
 
   function renderLevel(parentId: string | null, depth: number) {
-    const childGroups = groups
-      .filter((g) => g.parent_id === parentId && groupHasMatch(g.id))
-      .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
-    const childHosts = hosts
-      .filter((h) => h.group_id === parentId && hostMatches(h))
-      .sort((a, b) => a.sort_order - b.sort_order || a.label.localeCompare(b.label));
+    const { childGroups: allChildGroups, childHosts: allChildHosts } = getGroupChildren(groups, hosts, parentId);
+    const childGroups = allChildGroups.filter((g) => groupHasMatch(g.id));
+    const childHosts = allChildHosts.filter(hostMatches);
 
     return (
       <>
@@ -373,6 +391,24 @@ export default function HostTree(props: HostTreeProps) {
         placeholder="Search hosts…"
         className="mx-2 mb-2 w-[calc(100%-1rem)] rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 outline-none focus:border-teal-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
       />
+      {groups.length > 0 && (
+        <div className="mx-2 mb-2 flex gap-2 text-xs">
+          <button
+            type="button"
+            onClick={expandAllGroups}
+            className="flex-1 rounded-lg border border-slate-300 px-2 py-1 font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            Expand all
+          </button>
+          <button
+            type="button"
+            onClick={collapseAllGroups}
+            className="flex-1 rounded-lg border border-slate-300 px-2 py-1 font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            Collapse all
+          </button>
+        </div>
+      )}
       {deleteError && (
         <p className="mx-2 mb-2 rounded-lg bg-red-50 px-2 py-1.5 text-xs text-red-700 dark:bg-red-950 dark:text-red-400">
           {deleteError}

@@ -1,4 +1,4 @@
-import { NavIcon, NavIconKey } from "../common/navIcons";
+import { NavIcon, NavIconKey, sidebarToggleIcon } from "../common/navIcons";
 
 const ITEMS: { tab: string; icon: NavIconKey; label: string }[] = [
   { tab: "hosts", icon: "hosts", label: "Hosts" },
@@ -65,7 +65,7 @@ export default function ActivityBar({
         aria-label={leftSidebarVisible ? "Hide sidebar" : "Show sidebar"}
         className="mb-1 flex h-7 w-10 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-200 hover:text-teal-600 dark:hover:bg-slate-800 dark:hover:text-teal-400"
       >
-        {leftSidebarVisible ? "«" : "»"}
+        <NavIcon icon={sidebarToggleIcon("left", leftSidebarVisible)} className="h-4 w-4" />
       </button>
       {ITEMS.map((item) => (
         <ActivityButton key={item.tab} item={item} active={activeTab === item.tab} onSelect={onSelect} />

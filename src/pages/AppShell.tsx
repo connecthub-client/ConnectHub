@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import ActivityBar from "../components/layout/ActivityBar";
-import { NavIcon } from "../components/common/navIcons";
+import { NavIcon, sidebarToggleIcon } from "../components/common/navIcons";
+import ResizeHandle from "../components/common/ResizeHandle";
 import HostTree from "../components/sidebar/HostTree";
 import Modal from "../components/common/Modal";
 import GroupForm from "../components/forms/GroupForm";
@@ -9,7 +10,7 @@ import HostForm from "../components/forms/HostForm";
 import IdentityForm from "../components/forms/IdentityForm";
 import KeyForm from "../components/forms/KeyForm";
 import HostContextPanel from "../components/panels/HostContextPanel";
-import { HostIcon } from "../components/common/hostIcons";
+import HostCard from "../components/common/HostCard";
 import IdentitiesPanel from "../components/panels/IdentitiesPanel";
 import KeysPanel from "../components/panels/KeysPanel";
 import SnippetsDrawer from "../components/panels/SnippetsDrawer";
@@ -22,10 +23,15 @@ import BackupPanel from "../components/panels/BackupPanel";
 import TerminalView from "../components/terminal/TerminalView";
 import SftpBrowser from "../components/sftp/SftpBrowser";
 import { Group, Host, Identity, ImportSummary, localReadTextFile, localWriteTextFile, Snippet, VpnProfile } from "../lib/tauri-bridge";
+import { getGroupChildren } from "../lib/groupTree";
 import { useHostsStore } from "../state/hostsStore";
 import { useSessionsStore } from "../state/sessionsStore";
 import { useVpnStore } from "../state/vpnStore";
-import { useSettingsStore } from "../state/settingsStore";
+import {
+  DEFAULT_LEFT_SIDEBAR_WIDTH,
+  DEFAULT_RIGHT_PANEL_WIDTH,
+  useSettingsStore,
+} from "../state/settingsStore";
 
 type ManageTab = "hosts" | "identities" | "keys" | "vpn" | "backup" | "settings";
 type MainView = { type: "manage"; tab: ManageTab } | { type: "session"; tabId: string };
@@ -44,8 +50,11 @@ export default function AppShell() {
   const loadAll = useHostsStore((s) => s.loadAll);
   const loaded = useHostsStore((s) => s.loaded);
   const hosts = useHostsStore((s) => s.hosts);
+  const groups = useHostsStore((s) => s.groups);
   const exportHostsCsv = useHostsStore((s) => s.exportHostsCsv);
   const importHostsCsv = useHostsStore((s) => s.importHostsCsv);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [hostsGridSearch, setHostsGridSearch] = useState("");
 
   const openSessions = useSessionsStore((s) => s.openSessions);
   const sessionStatuses = useSessionsStore((s) => s.statuses);
@@ -53,6 +62,34 @@ export default function AppShell() {
   const closeSession = useSessionsStore((s) => s.closeSession);
   const reorderSessions = useSessionsStore((s) => s.reorderSessions);
   const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
+  // Which index the dragged tab would land at if dropped right now - drawn
+  // as an insertion line before that tab (or, at openSessions.length, at
+  // the very end of the bar) so the user sees where it'll land before
+  // releasing, not just which tab is being dragged.
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const tabBarRef = useRef<HTMLDivElement>(null);
+  const [tabBarOverflowing, setTabBarOverflowing] = useState(false);
+  const [tabOverflowMenuOpen, setTabOverflowMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const el = tabBarRef.current;
+    if (!el) {
+      setTabBarOverflowing(false);
+      return;
+    }
+    const check = () => setTabBarOverflowing(el.scrollWidth > el.clientWidth + 1);
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [openSessions.length]);
+
+  useEffect(() => {
+    if (!tabOverflowMenuOpen) return;
+    const close = () => setTabOverflowMenuOpen(false);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [tabOverflowMenuOpen]);
 
   const loadVpnAll = useVpnStore((s) => s.loadAll);
   const releaseVpnIfUnused = useVpnStore((s) => s.releaseIfUnused);
@@ -61,10 +98,16 @@ export default function AppShell() {
   const leftSidebarVisible = useSettingsStore((s) => s.leftSidebarVisible);
   const toggleLeftSidebar = useSettingsStore((s) => s.toggleLeftSidebar);
   const setLeftSidebarVisible = useSettingsStore((s) => s.setLeftSidebarVisible);
+  const leftSidebarWidth = useSettingsStore((s) => s.leftSidebarWidth);
+  const setLeftSidebarWidth = useSettingsStore((s) => s.setLeftSidebarWidth);
   const snippetsDrawerOpen = useSettingsStore((s) => s.snippetsDrawerOpen);
   const toggleSnippetsDrawer = useSettingsStore((s) => s.toggleSnippetsDrawer);
   const rightPanelVisible = useSettingsStore((s) => s.rightPanelVisible);
   const toggleRightPanel = useSettingsStore((s) => s.toggleRightPanel);
+  const rightPanelWidth = useSettingsStore((s) => s.rightPanelWidth);
+  const setRightPanelWidth = useSettingsStore((s) => s.setRightPanelWidth);
+  const [isDraggingLeftPanel, setIsDraggingLeftPanel] = useState(false);
+  const [isDraggingRightPanel, setIsDraggingRightPanel] = useState(false);
 
   const [selectedHostId, setSelectedHostId] = useState<string | null>(null);
   const [mainView, setMainView] = useState<MainView>({ type: "manage", tab: "hosts" });
@@ -88,6 +131,16 @@ export default function AppShell() {
         if (mainView.type === "session") {
           e.preventDefault();
           handleCloseTab(mainView.tabId);
+        }
+        return;
+      }
+
+      if (e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        if (e.shiftKey) {
+          toggleRightPanel();
+        } else {
+          toggleLeftSidebar();
         }
         return;
       }
@@ -243,6 +296,90 @@ export default function AppShell() {
     }
   }
 
+  function toggleGroupCollapsed(id: string) {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const hostsGridQuery = hostsGridSearch.trim().toLowerCase();
+
+  function hostMatchesGridSearch(host: Host): boolean {
+    if (!hostsGridQuery) return true;
+    return host.label.toLowerCase().includes(hostsGridQuery) || host.hostname.toLowerCase().includes(hostsGridQuery);
+  }
+
+  // A group stays visible while searching if any host anywhere inside it
+  // (directly, or inside a nested subgroup) matches - mirrors
+  // HostTree.tsx's own groupHasMatch, so a match several levels deep isn't
+  // hidden along with its non-matching ancestors.
+  function groupHasGridMatch(groupId: string): boolean {
+    if (!hostsGridQuery) return true;
+    if (hosts.some((h) => h.group_id === groupId && hostMatchesGridSearch(h))) return true;
+    return groups.some((g) => g.parent_id === groupId && groupHasGridMatch(g.id));
+  }
+
+  // Recursively renders one level of the group tree as: each child group's
+  // own header (folder icon, name, direct host count, expand toggle)
+  // followed by its expanded contents, then that level's own direct hosts
+  // as a trailing card grid - same group-then-hosts ordering HostTree.tsx
+  // uses, degenerating to today's flat grid when there are no groups at
+  // all. Expand/collapse state is local to this view, independent of
+  // HostTree's own - they're different jobs (compact navigation vs. card
+  // browsing) over the same data, not something that needs to stay synced.
+  function renderGroupSection(parentId: string | null) {
+    const { childGroups: allChildGroups, childHosts: allChildHosts } = getGroupChildren(groups, hosts, parentId);
+    const childGroups = allChildGroups.filter((g) => groupHasGridMatch(g.id));
+    const childHosts = allChildHosts.filter(hostMatchesGridSearch);
+
+    return (
+      <>
+        {childGroups.map((group) => {
+          const isCollapsed = !hostsGridQuery && collapsedGroups.has(group.id);
+          const directCount = hosts.filter((h) => h.group_id === group.id).length;
+          return (
+            <div key={group.id} className="mb-3">
+              <button
+                type="button"
+                onClick={() => toggleGroupCollapsed(group.id)}
+                className="mb-2 flex w-full items-center gap-2 rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-200 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <span className="w-3 shrink-0 text-xs text-slate-400">{isCollapsed ? "▸" : "▾"}</span>
+                <NavIcon icon="folder" className="h-4 w-4 shrink-0 text-slate-400" />
+                <span className="truncate">{group.name}</span>
+                <span className="ml-auto shrink-0 text-xs font-normal text-slate-400">
+                  {directCount} host{directCount === 1 ? "" : "s"}
+                </span>
+              </button>
+              {!isCollapsed && (
+                <div className="ml-5 border-l border-slate-200 pl-3 dark:border-slate-800">
+                  {renderGroupSection(group.id)}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {childHosts.length > 0 && (
+          <div className="mb-3 grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
+            {childHosts.map((h) => (
+              <HostCard
+                key={h.id}
+                host={h}
+                isSelected={selectedHostId === h.id}
+                isOpen={openSessions.some((s) => s.host.id === h.id)}
+                onSelect={() => setSelectedHostId(h.id)}
+                onConnect={() => handleConnect(h)}
+              />
+            ))}
+          </div>
+        )}
+      </>
+    );
+  }
+
   if (loadError) {
     return (
       <div className="flex h-full items-center justify-center bg-slate-100 dark:bg-slate-900">
@@ -268,8 +405,16 @@ export default function AppShell() {
         onToggleSidebar={toggleLeftSidebar}
       />
 
-      {leftSidebarVisible && showHostTree && (
-        <aside className="flex w-64 shrink-0 flex-col border-r border-slate-200 dark:border-slate-800 dark:bg-slate-950">
+      {showHostTree && (
+        <>
+        <aside
+          style={{ width: leftSidebarVisible ? leftSidebarWidth : 0 }}
+          aria-hidden={!leftSidebarVisible}
+          className={`shrink-0 overflow-hidden border-r border-slate-200 dark:border-slate-800 dark:bg-slate-950 ${
+            isDraggingLeftPanel ? "" : "transition-[width] duration-150 ease-out"
+          }`}
+        >
+        <div className="flex h-full flex-col" style={{ width: leftSidebarWidth }}>
           <div className="flex gap-2 border-b border-slate-200 p-2 dark:border-slate-800">
             <button
               type="button"
@@ -326,80 +471,185 @@ export default function AppShell() {
               onNewSubgroup={(parentId) => setModal({ kind: "group", parentId })}
             />
           </div>
+        </div>
         </aside>
+        {leftSidebarVisible && (
+          <ResizeHandle
+            panelSide="left"
+            width={leftSidebarWidth}
+            onResize={setLeftSidebarWidth}
+            onReset={() => setLeftSidebarWidth(DEFAULT_LEFT_SIDEBAR_WIDTH)}
+            onDragStateChange={setIsDraggingLeftPanel}
+          />
+        )}
+        </>
       )}
 
-      <main className="flex flex-1 flex-col overflow-hidden">
+      <main className="flex min-w-[320px] flex-1 flex-col overflow-hidden">
         {openSessions.length > 0 && (
-          <div className="flex items-center gap-1 overflow-x-auto border-b border-slate-200 bg-slate-100 p-2 dark:border-slate-800 dark:bg-slate-950">
-            {openSessions.map((s, index) => {
-              const active = mainView.type === "session" && mainView.tabId === s.tabId;
-              // SFTP tabs don't report a connect/error lifecycle into
-              // sessionsStore the way terminal tabs do - only style the dot
-              // by real status for terminal sessions, otherwise fall back
-              // to plain active/inactive coloring.
-              const status = s.kind === "terminal" ? sessionStatuses[s.tabId] : undefined;
-              const statusLabel =
-                status === "connected"
-                  ? "Connected"
-                  : status === "connecting"
-                    ? "Connecting…"
-                    : status === "error"
-                      ? "Connection error"
-                      : status === "closed"
-                        ? "Session closed"
-                        : undefined;
-              const dotClass =
-                status === "connected"
-                  ? "bg-emerald-500"
-                  : status === "connecting"
-                    ? "bg-amber-500 animate-pulse"
-                    : status === "error"
-                      ? "bg-red-500"
-                      : active
-                        ? "bg-emerald-500"
-                        : "bg-slate-400 dark:bg-slate-600";
-              return (
-                <div
-                  key={s.tabId}
-                  draggable
-                  onDragStart={() => setDraggedTabId(s.tabId)}
-                  onDragEnd={() => setDraggedTabId(null)}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    if (!draggedTabId || draggedTabId === s.tabId) return;
-                    const fromIndex = openSessions.findIndex((x) => x.tabId === draggedTabId);
-                    if (fromIndex !== -1) reorderSessions(fromIndex, index);
-                    setDraggedTabId(null);
-                  }}
-                  className={`group flex shrink-0 items-center gap-2 rounded-t-md border-b-2 px-3 py-1.5 text-sm ${
-                    active
-                      ? "border-teal-500 bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-50"
-                      : "border-transparent text-slate-500 hover:bg-slate-200/60 dark:text-slate-400 dark:hover:bg-slate-900/60"
-                  } ${draggedTabId === s.tabId ? "opacity-40" : ""}`}
+          <div className="flex items-stretch border-b border-slate-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-950">
+            {tabBarOverflowing && (
+              <button
+                type="button"
+                onClick={() => tabBarRef.current?.scrollBy({ left: -160, behavior: "smooth" })}
+                title="Scroll tabs left"
+                className="shrink-0 px-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+              >
+                <NavIcon icon="chevronLeft" className="h-4 w-4" />
+              </button>
+            )}
+            <div
+              ref={tabBarRef}
+              className="flex flex-1 items-center gap-1 overflow-x-auto p-2"
+              onDragOver={(e) => {
+                if (!draggedTabId) return;
+                e.preventDefault();
+                setDragOverIndex(openSessions.length);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (!draggedTabId) return;
+                const fromIndex = openSessions.findIndex((x) => x.tabId === draggedTabId);
+                if (fromIndex !== -1) reorderSessions(fromIndex, openSessions.length - 1);
+                setDraggedTabId(null);
+                setDragOverIndex(null);
+              }}
+            >
+              {openSessions.map((s, index) => {
+                const active = mainView.type === "session" && mainView.tabId === s.tabId;
+                // SFTP tabs don't report a connect/error lifecycle into
+                // sessionsStore the way terminal tabs do - only style the dot
+                // by real status for terminal sessions, otherwise fall back
+                // to plain active/inactive coloring.
+                const status = s.kind === "terminal" ? sessionStatuses[s.tabId] : undefined;
+                const statusLabel =
+                  status === "connected"
+                    ? "Connected"
+                    : status === "connecting"
+                      ? "Connecting…"
+                      : status === "error"
+                        ? "Connection error"
+                        : status === "closed"
+                          ? "Session closed"
+                          : undefined;
+                const dotClass =
+                  status === "connected"
+                    ? "bg-emerald-500"
+                    : status === "connecting"
+                      ? "bg-amber-500 animate-pulse"
+                      : status === "error"
+                        ? "bg-red-500"
+                        : active
+                          ? "bg-emerald-500"
+                          : "bg-slate-400 dark:bg-slate-600";
+                return (
+                  <Fragment key={s.tabId}>
+                    {dragOverIndex === index && draggedTabId && draggedTabId !== s.tabId && (
+                      <div className="h-6 w-0.5 shrink-0 self-center rounded bg-teal-500" />
+                    )}
+                    <div
+                      draggable
+                      onDragStart={() => setDraggedTabId(s.tabId)}
+                      onDragEnd={() => {
+                        setDraggedTabId(null);
+                        setDragOverIndex(null);
+                      }}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (draggedTabId && draggedTabId !== s.tabId) setDragOverIndex(index);
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (!draggedTabId || draggedTabId === s.tabId) return;
+                        const fromIndex = openSessions.findIndex((x) => x.tabId === draggedTabId);
+                        if (fromIndex !== -1) reorderSessions(fromIndex, index);
+                        setDraggedTabId(null);
+                        setDragOverIndex(null);
+                      }}
+                      className={`group flex shrink-0 items-center gap-2 rounded-t-md border-b-2 px-3 py-1.5 text-sm ${
+                        active
+                          ? "border-teal-500 bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-50"
+                          : "border-transparent text-slate-500 hover:bg-slate-200/60 dark:text-slate-400 dark:hover:bg-slate-900/60"
+                      } ${draggedTabId === s.tabId ? "opacity-40" : ""}`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setMainView({ type: "session", tabId: s.tabId })}
+                        title={statusLabel}
+                        className="flex max-w-48 items-center gap-1.5 truncate"
+                      >
+                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dotClass}`} />
+                        {s.kind === "sftp" ? "📁 " : ""}
+                        {s.host.label}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleCloseTab(s.tabId)}
+                        className="text-xs text-slate-400 opacity-0 hover:text-slate-700 group-hover:opacity-100 dark:hover:text-slate-200"
+                        title="Close session"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </Fragment>
+                );
+              })}
+              {dragOverIndex === openSessions.length && draggedTabId && (
+                <div className="h-6 w-0.5 shrink-0 self-center rounded bg-teal-500" />
+              )}
+            </div>
+            {tabBarOverflowing && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => tabBarRef.current?.scrollBy({ left: 160, behavior: "smooth" })}
+                  title="Scroll tabs right"
+                  className="shrink-0 px-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
                 >
+                  <NavIcon icon="chevronRight" className="h-4 w-4" />
+                </button>
+                <div className="relative shrink-0">
                   <button
                     type="button"
-                    onClick={() => setMainView({ type: "session", tabId: s.tabId })}
-                    title={statusLabel}
-                    className="flex max-w-48 items-center gap-1.5 truncate"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setTabOverflowMenuOpen((open) => !open);
+                    }}
+                    title="List all open tabs"
+                    className="flex h-full items-center px-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
                   >
-                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dotClass}`} />
-                    {s.kind === "sftp" ? "📁 " : ""}
-                    {s.host.label}
+                    ▾
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => handleCloseTab(s.tabId)}
-                    className="text-xs text-slate-400 opacity-0 hover:text-slate-700 group-hover:opacity-100 dark:hover:text-slate-200"
-                    title="Close session"
-                  >
-                    ✕
-                  </button>
+                  {tabOverflowMenuOpen && (
+                    <div
+                      className="absolute right-0 top-full z-50 max-h-72 w-56 overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 text-sm shadow-lg dark:border-slate-700 dark:bg-slate-800"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {openSessions.map((s) => (
+                        <button
+                          key={s.tabId}
+                          type="button"
+                          onClick={() => {
+                            setMainView({ type: "session", tabId: s.tabId });
+                            setTabOverflowMenuOpen(false);
+                          }}
+                          className={`flex w-full items-center gap-1.5 truncate px-3 py-1.5 text-left hover:bg-slate-100 dark:hover:bg-slate-700 ${
+                            mainView.type === "session" && mainView.tabId === s.tabId
+                              ? "text-teal-600 dark:text-teal-400"
+                              : "text-slate-700 dark:text-slate-200"
+                          }`}
+                        >
+                          {s.kind === "sftp" ? "📁 " : ""}
+                          {s.host.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              );
-            })}
+              </>
+            )}
           </div>
         )}
 
@@ -410,58 +660,46 @@ export default function AppShell() {
             }`}
           >
             {mainView.type === "manage" && mainView.tab === "hosts" && (
-              hosts.length === 0 ? (
+              hosts.length === 0 && groups.length === 0 ? (
                 <p className="text-sm text-slate-400">
                   Select a host from the sidebar, or create a new one.
                 </p>
               ) : (
                 <>
+                  <div className="mb-3 flex items-center gap-2">
+                    <input
+                      value={hostsGridSearch}
+                      onChange={(e) => setHostsGridSearch(e.currentTarget.value)}
+                      placeholder="Search hosts…"
+                      className="w-64 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 outline-none focus:border-teal-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    />
+                    {groups.length > 0 && (
+                      <div className="ml-auto flex shrink-0 gap-2 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => setCollapsedGroups(new Set())}
+                          className="rounded-lg border border-slate-300 px-2 py-1 font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                        >
+                          Expand all
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCollapsedGroups(new Set(groups.map((g) => g.id)))}
+                          className="rounded-lg border border-slate-300 px-2 py-1 font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                        >
+                          Collapse all
+                        </button>
+                      </div>
+                    )}
+                  </div>
                   <p className="mb-3 text-xs text-slate-400">
                     Click to select, double-click to connect.
                   </p>
-                  <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
-                    {hosts.map((h) => {
-                      const isOpen = openSessions.some((s) => s.host.id === h.id);
-                      return (
-                        <button
-                          key={h.id}
-                          type="button"
-                          onClick={() => setSelectedHostId(h.id)}
-                          onDoubleClick={() => {
-                            setSelectedHostId(h.id);
-                            if (h.identity_id) handleConnect(h);
-                          }}
-                          title={h.identity_id ? "Double-click to connect" : undefined}
-                          className={`flex flex-col items-start gap-1 rounded-xl border p-3 text-left shadow-sm transition-shadow hover:shadow-md ${
-                            selectedHostId === h.id
-                              ? "border-teal-500 bg-teal-50 dark:bg-teal-950/30"
-                              : "border-slate-200 bg-white hover:border-teal-400 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-600"
-                          }`}
-                        >
-                          <div className="flex w-full items-center gap-2">
-                            {h.icon && (
-                              <HostIcon
-                                icon={h.icon}
-                                className="h-4 w-4 shrink-0"
-                                style={{ color: h.color ?? undefined }}
-                              />
-                            )}
-                            <span className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
-                              {h.label}
-                            </span>
-                            <span
-                              className={`ml-auto h-1.5 w-1.5 shrink-0 rounded-full ${
-                                isOpen ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-700"
-                              }`}
-                            />
-                          </div>
-                          <span className="truncate text-xs text-slate-400">
-                            {h.hostname}:{h.port}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  {hostsGridQuery && !hosts.some(hostMatchesGridSearch) ? (
+                    <p className="text-sm text-slate-400">No hosts match "{hostsGridSearch.trim()}".</p>
+                  ) : (
+                    renderGroupSection(null)
+                  )}
                 </>
               )
             )}
@@ -507,26 +745,44 @@ export default function AppShell() {
         </div>
       </main>
 
-      {rightPanelVisible &&
-        (snippetsDrawerOpen ? (
-          <SnippetsDrawer
-            onNew={() => setModal({ kind: "snippet" })}
-            onEdit={(snippet) => setModal({ kind: "snippet", snippet })}
-            onRun={(snippet) => setModal({ kind: "run-snippet", snippet })}
-            onClose={toggleSnippetsDrawer}
-          />
-        ) : (
-          contextHost && (
-            <HostContextPanel
-              host={contextHost}
-              sessionOpen={contextHostSessionOpen}
-              vpnBusy={vpnGateHostId === contextHost.id}
-              vpnError={vpnGateError?.hostId === contextHost.id ? vpnGateError.message : null}
-              onConnect={() => handleConnect(contextHost)}
-              onOpenSftp={() => handleOpenSftp(contextHost)}
+      {rightPanelVisible && (
+        <ResizeHandle
+          panelSide="right"
+          width={rightPanelWidth}
+          onResize={setRightPanelWidth}
+          onReset={() => setRightPanelWidth(DEFAULT_RIGHT_PANEL_WIDTH)}
+          onDragStateChange={setIsDraggingRightPanel}
+        />
+      )}
+      <div
+        style={{ width: rightPanelVisible ? rightPanelWidth : 0 }}
+        aria-hidden={!rightPanelVisible}
+        className={`shrink-0 overflow-hidden ${
+          isDraggingRightPanel ? "" : "transition-[width] duration-150 ease-out"
+        }`}
+      >
+        <div style={{ width: rightPanelWidth }}>
+          {snippetsDrawerOpen ? (
+            <SnippetsDrawer
+              onNew={() => setModal({ kind: "snippet" })}
+              onEdit={(snippet) => setModal({ kind: "snippet", snippet })}
+              onRun={(snippet) => setModal({ kind: "run-snippet", snippet })}
+              onClose={toggleSnippetsDrawer}
             />
-          )
-        ))}
+          ) : (
+            contextHost && (
+              <HostContextPanel
+                host={contextHost}
+                sessionOpen={contextHostSessionOpen}
+                vpnBusy={vpnGateHostId === contextHost.id}
+                vpnError={vpnGateError?.hostId === contextHost.id ? vpnGateError.message : null}
+                onConnect={() => handleConnect(contextHost)}
+                onOpenSftp={() => handleOpenSftp(contextHost)}
+              />
+            )
+          )}
+        </div>
+      </div>
 
       <nav className="flex w-12 shrink-0 flex-col items-center gap-1 border-l border-slate-200 bg-slate-100 py-2 dark:border-slate-800 dark:bg-slate-950">
         <button
@@ -536,7 +792,7 @@ export default function AppShell() {
           onClick={toggleRightPanel}
           className="flex h-8 w-10 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-200 dark:text-slate-400 dark:hover:bg-slate-800"
         >
-          {rightPanelVisible ? "»" : "«"}
+          <NavIcon icon={sidebarToggleIcon("right", rightPanelVisible)} className="h-4 w-4" />
         </button>
         <button
           type="button"

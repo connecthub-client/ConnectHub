@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Resizable panels**: the left sidebar and right panel (Host Details/Snippets) can now be drag-resized at their inner edge, VSCode-style, with the last width remembered independently of show/hide state; double-click a handle to reset it to the default width.
+- The center "Hosts" view now mirrors the host tree's group structure - groups render as expandable folder sections (with a live host count) instead of every host being shown in one flat grid, with the same search box and "Expand all"/"Collapse all" controls as the sidebar tree (which also gained its own "Expand all"/"Collapse all").
+- Session tabs: dragging one now shows an insertion-line indicator for exactly where it'll land, dropping in the tab bar's empty trailing space moves it to the end instead of doing nothing, and once there are enough tabs to overflow the bar, scroll-nudge buttons and a dropdown listing every open tab appear so none get lost off-screen.
+- `Ctrl/Cmd+B` / `Ctrl/Cmd+Shift+B` toggle the left sidebar / right panel, matching VSCode's own shortcut.
+
+### Changed
+
+- The left/right sidebar collapse toggles now animate (a slide, not an instant show/hide) and use a proper chevron icon instead of `«`/`»` text glyphs.
+
 ## [1.1.2] — 2026-07-23
 
 ### Added

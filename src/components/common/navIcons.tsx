@@ -62,6 +62,9 @@ const NAV_ICON_PATHS: Record<string, ReactNode> = {
       <path d="M13.7 4.3l-1.6 1.6M5.9 12.1l-1.6 1.6M13.7 13.7l-1.6-1.6M5.9 5.9 4.3 4.3" />
     </>
   ),
+  chevronLeft: <path d="M11 4 6 9l5 5" />,
+  chevronRight: <path d="M7 4l5 5-5 5" />,
+  folder: <path d="M2.5 5a1 1 0 0 1 1-1h3.2l1.3 1.6h6.5a1 1 0 0 1 1 1v6.4a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1V5Z" />,
 };
 
 export type NavIconKey = keyof typeof NAV_ICON_PATHS;
@@ -72,4 +75,15 @@ export function NavIcon({ icon, className }: { icon: NavIconKey; className?: str
       {NAV_ICON_PATHS[icon]}
     </svg>
   );
+}
+
+// Which chevron a sidebar/panel collapse toggle should show: it points
+// toward the screen edge the panel collapses into while visible (away from
+// center), and toward center once hidden (where the panel would reappear
+// from). Both edges follow this one rule - expressed here once rather than
+// as two independently hand-written ternaries, which is what actually
+// drifted before, not the direction logic itself.
+export function sidebarToggleIcon(side: "left" | "right", visible: boolean): NavIconKey {
+  const pointsLeft = side === "left" ? visible : !visible;
+  return pointsLeft ? "chevronLeft" : "chevronRight";
 }
