@@ -1,7 +1,7 @@
 {
   "name": "connecthub",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Modern cross-platform SSH client with SSH, SFTP, SCP, per-host VPN, and workspace management.",
   "author": "ConnectHub Contributors",
   "license": "MIT",
