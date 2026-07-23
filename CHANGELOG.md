@@ -6,10 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- A "Connecting to `<host>` (`<hostname>:<port>`)…" overlay with a spinner now covers the terminal pane while a session is connecting, instead of the previously blank/black pane with only a small status-bar label - reported as easy to mistake for the app having frozen.
+
 ### Fixed
 
 - Install docs (README.md/INSTALL.md) hardcoded a version number (`1.0.0`) in `.../releases/latest/download/<filename>` URLs - that permalink only resolves if the exact filename exists in whatever release is *currently* tagged latest, so every copy-pasted command 404'd as soon as 1.1.0 shipped (reported by a user hitting this exact 404). Commands now resolve the current release's actual asset URL via the GitHub API instead, so they keep working release after release.
 - Documented that the installed **package** name (`connect-hub`, shown by `apt`/`dnf`) differs from the installed **binary** name (`connecthub`, no hyphen) - launching from a terminal after a `.deb`/`.rpm` install needs the latter, which isn't obvious from the install output (reported alongside the URL issue above).
+- A host added to (or assigned) a VPN profile *after* that profile's VPN was already connected never got its own explicit `/32` route - `add_host_routes` only ran once, on the VPN's own CONNECTED transition, snapshotting whichever hosts referenced the profile at that exact moment. Reported as two hosts sharing one VPN profile + SSH identity, where only the host present when the VPN first connected was ever reachable through the app, while both connected fine manually (outside the app) with the same VPN/credentials. `ensure_host_route` now adds a host's route on demand whenever `ensureVpnUp` finds its profile already connected, so a host added later gets routed without needing the VPN disconnected and reconnected.
 
 ## [1.1.0] — 2026-07-22
 

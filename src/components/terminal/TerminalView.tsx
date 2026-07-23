@@ -360,8 +360,20 @@ export default function TerminalView({ host, tabId, onClose }: TerminalViewProps
         </div>
       )}
 
-      <div className="min-h-0 flex-1 p-2" style={{ backgroundColor: themePreset.background }}>
+      <div className="relative min-h-0 flex-1 p-2" style={{ backgroundColor: themePreset.background }}>
         <div ref={containerRef} className="h-full w-full" />
+        {status === "connecting" && (
+          <div
+            className="absolute inset-0 flex flex-col items-center justify-center gap-3"
+            style={{ backgroundColor: themePreset.background }}
+          >
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-500 border-t-teal-400" />
+            <p className="text-sm" style={{ color: themePreset.foreground }}>
+              Connecting to <span className="font-medium">{host.label}</span> ({host.hostname}:
+              {host.port})…
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center justify-between border-t border-slate-200 bg-slate-100 px-4 py-1 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
