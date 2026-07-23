@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.1.2] — 2026-07-23
+
 ### Added
 
 - Settings → About: shows the running version and a "Check for updates" button. Backed by Tauri's official updater plugin - a real update is downloaded, signature-verified, and installed in place (Linux: AppImage installs only self-update in place; `.deb`/`.rpm` installs still get a correct "update available" notice with nowhere in-app to install it, since the app has no standing permission to run a package-manager transaction on its own behalf). Only takes effect for whichever release ships this onward - a build from before this (1.1.1 and earlier) has no updater code in it and will never auto-check.
@@ -87,7 +89,8 @@ Initial public release.
 - VPN helper scripts run under narrowly-scoped polkit rules and force `--script-security 0`, so an uploaded `.ovpn` config can never execute arbitrary code as root.
 - Vault key derivation and the per-installation auto-unlock secret were hardened during development; see [ARCHITECTURE.md](ARCHITECTURE.md#vault--master-password) for the current design and its tradeoffs.
 
-[Unreleased]: https://github.com/connecthub-client/ConnectHub/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/connecthub-client/ConnectHub/compare/v1.1.2...HEAD
+[1.1.2]: https://github.com/connecthub-client/ConnectHub/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/connecthub-client/ConnectHub/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/connecthub-client/ConnectHub/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/connecthub-client/ConnectHub/releases/tag/v1.0.0
