@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-08-01
+
 ### Added
 
 - **Auto-reconnect for dropped terminal sessions** (Settings → Terminal, off by default): when enabled, a terminal session that drops (idle timeout, network blip) retries automatically a few times with backoff instead of leaving a frozen pane. A manual "Reconnect" button in the error banner is always available either way, regardless of the setting.
@@ -109,7 +111,8 @@ Initial public release.
 - VPN helper scripts run under narrowly-scoped polkit rules and force `--script-security 0`, so an uploaded `.ovpn` config can never execute arbitrary code as root.
 - Vault key derivation and the per-installation auto-unlock secret were hardened during development; see [ARCHITECTURE.md](ARCHITECTURE.md#vault--master-password) for the current design and its tradeoffs.
 
-[Unreleased]: https://github.com/connecthub-client/ConnectHub/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/connecthub-client/ConnectHub/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/connecthub-client/ConnectHub/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/connecthub-client/ConnectHub/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/connecthub-client/ConnectHub/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/connecthub-client/ConnectHub/compare/v1.1.0...v1.1.1
