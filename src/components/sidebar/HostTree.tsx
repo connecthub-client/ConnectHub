@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Group, Host } from "../../lib/tauri-bridge";
 import { getGroupChildren } from "../../lib/groupTree";
 import { useHostsStore } from "../../state/hostsStore";
 import { useSessionsStore } from "../../state/sessionsStore";
 import { useConfirm } from "../common/useConfirm";
+import { useHostContextMenu } from "../common/useHostContextMenu";
 import { HostIcon } from "../common/hostIcons";
 
 interface HostTreeProps {
@@ -16,71 +17,27 @@ interface HostTreeProps {
   onNewSubgroup: (parentId: string | null) => void;
 }
 
-interface ContextMenuState {
-  host: Host;
-  x: number;
-  y: number;
-}
-
 const RECENT_LIMIT = 5;
 
 export default function HostTree(props: HostTreeProps) {
   const groups = useHostsStore((s) => s.groups);
   const hosts = useHostsStore((s) => s.hosts);
   const deleteGroup = useHostsStore((s) => s.deleteGroup);
-  const deleteHost = useHostsStore((s) => s.deleteHost);
-  const createHost = useHostsStore((s) => s.createHost);
   const toggleHostFavorite = useHostsStore((s) => s.toggleHostFavorite);
   const openSessions = useSessionsStore((s) => s.openSessions);
   const openHostIds = new Set(openSessions.map((s) => s.host.id));
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const query = search.trim().toLowerCase();
-  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const { confirm, confirmDialog } = useConfirm();
+  const { confirm, confirmDialog: groupConfirmDialog } = useConfirm();
   const [deleteError, setDeleteError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!contextMenu) return;
-    // Move focus into the menu so Tab/Shift+Tab and Enter work immediately
-    // for keyboard users, without requiring a Tab press first to reach it
-    // from wherever focus happened to be.
-    menuRef.current?.querySelector<HTMLButtonElement>("button:not([disabled])")?.focus();
-    const close = () => setContextMenu(null);
-    const onKeyDown = (e: KeyboardEvent) => {
-      // Previously closed on ANY keydown, which meant ArrowDown/Enter -
-      // the natural way to navigate a menu from the keyboard - dismissed
-      // it instead of navigating. Only Escape should close it here; Tab
-      // and Enter are left to behave normally on whichever menu button
-      // currently has focus.
-      if (e.key === "Escape") close();
-    };
-    window.addEventListener("click", close);
-    window.addEventListener("contextmenu", close);
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("click", close);
-      window.removeEventListener("contextmenu", close);
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [contextMenu]);
-
-  async function handleDuplicate(host: Host) {
-    setContextMenu(null);
-    await createHost({
-      group_id: host.group_id,
-      label: `${host.label} (copy)`,
-      hostname: host.hostname,
-      port: host.port,
-      identity_id: host.identity_id,
-      vpn_profile_id: host.vpn_profile_id,
-      color: host.color,
-      icon: host.icon,
-      notes: host.notes,
-      sort_order: host.sort_order,
-    });
-  }
+  const {
+    openContextMenu,
+    menu,
+    confirmDialog: hostConfirmDialog,
+    deleteError: hostDeleteError,
+    handleDeleteHost,
+  } = useHostContextMenu(props.onConnectHost, props.onEditHost);
 
   function toggle(id: string) {
     setCollapsed((prev) => {
@@ -126,18 +83,6 @@ export default function HostTree(props: HostTreeProps) {
     return groups.some((g) => g.parent_id === groupId && groupHasMatch(g.id));
   }
 
-  async function handleDeleteHost(host: Host) {
-    setContextMenu(null);
-    setDeleteError(null);
-    if (await confirm(`Delete host "${host.label}"?`, { danger: true })) {
-      try {
-        await deleteHost(host.id);
-      } catch (err) {
-        setDeleteError(String(err));
-      }
-    }
-  }
-
   // Shared row markup for a host, used both inside the group tree (with
   // indentation) and in the flat Favorites/Recent sections (depth 0).
   function renderHostRow(host: Host, depth: number) {
@@ -159,7 +104,7 @@ export default function HostTree(props: HostTreeProps) {
             e.preventDefault();
             e.stopPropagation();
             props.onSelectHost(host);
-            setContextMenu({ host, x: e.clientX, y: e.clientY });
+            openContextMenu(host, e);
           }}
           title={host.identity_id ? "Double-click to connect" : undefined}
           className="flex flex-1 items-center gap-1.5 text-left text-slate-700 dark:text-slate-300"
@@ -316,59 +261,14 @@ export default function HostTree(props: HostTreeProps) {
     );
   }
 
-  const menu = contextMenu && (
-    <div
-      ref={menuRef}
-      role="menu"
-      className="fixed z-50 w-40 rounded-lg border border-slate-200 bg-white py-1 text-sm shadow-lg dark:border-slate-700 dark:bg-slate-800"
-      style={{ top: contextMenu.y, left: contextMenu.x }}
-      onClick={(e) => e.stopPropagation()}
-    >
-      <button
-        type="button"
-        disabled={!contextMenu.host.identity_id}
-        onClick={() => {
-          props.onConnectHost(contextMenu.host);
-          setContextMenu(null);
-        }}
-        className="block w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-300 dark:text-slate-200 dark:hover:bg-slate-700 dark:disabled:text-slate-600"
-      >
-        Connect
-      </button>
-      <button
-        type="button"
-        onClick={() => handleDuplicate(contextMenu.host)}
-        className="block w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700"
-      >
-        Duplicate
-      </button>
-      <button
-        type="button"
-        onClick={() => {
-          props.onEditHost(contextMenu.host);
-          setContextMenu(null);
-        }}
-        className="block w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700"
-      >
-        Edit
-      </button>
-      <button
-        type="button"
-        onClick={() => handleDeleteHost(contextMenu.host)}
-        className="block w-full px-3 py-1.5 text-left text-red-600 hover:bg-slate-100 dark:hover:bg-slate-700"
-      >
-        Delete
-      </button>
-    </div>
-  );
-
   if (groups.length === 0 && hosts.length === 0) {
     return (
       <>
         <p className="px-2 py-4 text-sm text-slate-400">
           No hosts yet. Use "New host" above to add one.
         </p>
-        {confirmDialog}
+        {groupConfirmDialog}
+        {hostConfirmDialog}
       </>
     );
   }
@@ -409,9 +309,9 @@ export default function HostTree(props: HostTreeProps) {
           </button>
         </div>
       )}
-      {deleteError && (
+      {(deleteError || hostDeleteError) && (
         <p className="mx-2 mb-2 rounded-lg bg-red-50 px-2 py-1.5 text-xs text-red-700 dark:bg-red-950 dark:text-red-400">
-          {deleteError}
+          {deleteError || hostDeleteError}
         </p>
       )}
       {query ? (
@@ -441,7 +341,8 @@ export default function HostTree(props: HostTreeProps) {
         </>
       )}
       {menu}
-      {confirmDialog}
+      {groupConfirmDialog}
+      {hostConfirmDialog}
     </div>
   );
 }

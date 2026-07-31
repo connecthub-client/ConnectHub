@@ -13,7 +13,10 @@ export interface OpenSession {
 // only as local state inside TerminalView - same reasoning as vpnStore's
 // `statuses` map: the tab bar needs to show it without the terminal
 // component itself needing to be mounted/rendered to report it.
-export type SessionStatus = "connecting" | "connected" | "closed" | "error";
+// "reconnecting" is a distinct in-between state from "connecting" - it
+// means TerminalView.tsx is retrying an existing tab's dropped connection
+// (settingsStore.autoReconnectEnabled), not opening a brand-new session.
+export type SessionStatus = "connecting" | "connected" | "closed" | "error" | "reconnecting";
 
 interface SessionsState {
   openSessions: OpenSession[];

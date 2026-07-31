@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Auto-reconnect for dropped terminal sessions** (Settings → Terminal, off by default): when enabled, a terminal session that drops (idle timeout, network blip) retries automatically a few times with backoff instead of leaving a frozen pane. A manual "Reconnect" button in the error banner is always available either way, regardless of the setting.
+- The center Hosts grid's cards now have the same right-click Connect/Duplicate/Edit/Delete menu the sidebar's host tree already had - previously only available from the sidebar.
+- New/Edit forms for Host, Group, Identity, Key, and VPN profile now open inline in the right panel instead of a popup window - fill out the form, then Save (or, for hosts, "Save & Connect" to immediately open a session) or Cancel.
+- Connecting to a host (or opening SFTP) now automatically hides the left sidebar to give the session more room; the right panel is left exactly as you had it either way.
+
 ## [1.2.0] — 2026-07-24
 
 ### Added

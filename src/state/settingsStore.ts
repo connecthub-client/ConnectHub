@@ -72,6 +72,12 @@ interface SettingsState {
   // active terminal session followed by Enter; OFF just types it into the
   // terminal's input line for the user to review/edit/submit themselves.
   quickCommandAutoRun: boolean;
+  // Opt-in, off by default: TerminalView.tsx retries a dropped terminal
+  // connection a bounded number of times with backoff instead of just
+  // freezing the pane - see its own comment for why this stays opt-in
+  // (retrying against a host that's deliberately unreachable, or one behind
+  // a VPN that's since disconnected, isn't always what a user wants).
+  autoReconnectEnabled: boolean;
   setTheme: (theme: ThemeMode) => void;
   setTerminalFontFamily: (fontFamily: string) => void;
   setTerminalFontSize: (fontSize: number) => void;
@@ -82,10 +88,12 @@ interface SettingsState {
   setLeftSidebarWidth: (width: number) => void;
   toggleSnippetsDrawer: () => void;
   toggleRightPanel: () => void;
+  setRightPanelVisible: (visible: boolean) => void;
   setRightPanelWidth: (width: number) => void;
   togglePerformancePanel: () => void;
   toggleHostDetails: () => void;
   toggleQuickCommandAutoRun: () => void;
+  toggleAutoReconnect: () => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -104,6 +112,7 @@ export const useSettingsStore = create<SettingsState>()(
       performancePanelVisible: true,
       hostDetailsVisible: true,
       quickCommandAutoRun: true,
+      autoReconnectEnabled: false,
 
       setTheme: (theme) => set({ theme }),
       setTerminalFontFamily: (terminalFontFamily) => set({ terminalFontFamily }),
@@ -116,11 +125,13 @@ export const useSettingsStore = create<SettingsState>()(
         set({ leftSidebarWidth: clamp(width, MIN_LEFT_SIDEBAR_WIDTH, MAX_LEFT_SIDEBAR_WIDTH) }),
       toggleSnippetsDrawer: () => set({ snippetsDrawerOpen: !get().snippetsDrawerOpen }),
       toggleRightPanel: () => set({ rightPanelVisible: !get().rightPanelVisible }),
+      setRightPanelVisible: (rightPanelVisible) => set({ rightPanelVisible }),
       setRightPanelWidth: (width) =>
         set({ rightPanelWidth: clamp(width, MIN_RIGHT_PANEL_WIDTH, MAX_RIGHT_PANEL_WIDTH) }),
       togglePerformancePanel: () => set({ performancePanelVisible: !get().performancePanelVisible }),
       toggleHostDetails: () => set({ hostDetailsVisible: !get().hostDetailsVisible }),
       toggleQuickCommandAutoRun: () => set({ quickCommandAutoRun: !get().quickCommandAutoRun }),
+      toggleAutoReconnect: () => set({ autoReconnectEnabled: !get().autoReconnectEnabled }),
     }),
     {
       name: "connecthub-settings",

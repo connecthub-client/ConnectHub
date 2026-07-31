@@ -179,6 +179,8 @@ export default function SettingsPanel() {
   const setTerminalCursorStyle = useSettingsStore((s) => s.setTerminalCursorStyle);
   const terminalThemeKey = useSettingsStore((s) => s.terminalThemeKey);
   const setTerminalThemeKey = useSettingsStore((s) => s.setTerminalThemeKey);
+  const autoReconnectEnabled = useSettingsStore((s) => s.autoReconnectEnabled);
+  const toggleAutoReconnect = useSettingsStore((s) => s.toggleAutoReconnect);
 
   return (
     <div className="max-w-xl">
@@ -245,6 +247,36 @@ export default function SettingsPanel() {
             </option>
           ))}
         </select>
+
+        <div className="mt-4 flex items-center justify-between">
+          <span className={labelClass}>Auto-reconnect dropped sessions</span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={autoReconnectEnabled}
+            aria-label="Auto-reconnect dropped sessions"
+            onClick={toggleAutoReconnect}
+            title={
+              autoReconnectEnabled
+                ? "On: a dropped terminal session retries automatically a few times before giving up"
+                : "Off: a dropped terminal session shows an error with a manual Reconnect button"
+            }
+            className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
+              autoReconnectEnabled ? "bg-teal-600" : "bg-slate-300 dark:bg-slate-700"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                autoReconnectEnabled ? "translate-x-4" : "translate-x-0"
+              }`}
+            />
+          </button>
+        </div>
+        <p className="mt-1 text-xs text-slate-400">
+          When a terminal session drops (idle timeout, network blip), retry a few times with
+          backoff before giving up. A manual "Reconnect" button is always available in the error
+          banner either way.
+        </p>
       </section>
 
       <section className="mb-6">

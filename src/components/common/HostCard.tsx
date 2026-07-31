@@ -7,6 +7,7 @@ interface HostCardProps {
   isOpen: boolean;
   onSelect: () => void;
   onConnect: () => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
 }
 
 // One host, rendered as a card - shared by the center Hosts grid's flat
@@ -14,7 +15,7 @@ interface HostCardProps {
 // markup. The identity-required double-click guard lives here rather than
 // in each caller, mirroring HostTree.tsx's renderHostRow doing the same for
 // its own row markup.
-export default function HostCard({ host, isSelected, isOpen, onSelect, onConnect }: HostCardProps) {
+export default function HostCard({ host, isSelected, isOpen, onSelect, onConnect, onContextMenu }: HostCardProps) {
   return (
     <button
       type="button"
@@ -23,6 +24,7 @@ export default function HostCard({ host, isSelected, isOpen, onSelect, onConnect
         onSelect();
         if (host.identity_id) onConnect();
       }}
+      onContextMenu={onContextMenu}
       title={host.identity_id ? "Double-click to connect" : undefined}
       className={`flex flex-col items-start gap-1 rounded-xl border p-3 text-left shadow-sm transition-shadow hover:shadow-md ${
         isSelected

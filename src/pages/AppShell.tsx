@@ -3,13 +3,11 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import ActivityBar from "../components/layout/ActivityBar";
 import { NavIcon, sidebarToggleIcon } from "../components/common/navIcons";
 import ResizeHandle from "../components/common/ResizeHandle";
+import { useHostContextMenu } from "../components/common/useHostContextMenu";
 import HostTree from "../components/sidebar/HostTree";
 import Modal from "../components/common/Modal";
-import GroupForm from "../components/forms/GroupForm";
-import HostForm from "../components/forms/HostForm";
-import IdentityForm from "../components/forms/IdentityForm";
-import KeyForm from "../components/forms/KeyForm";
 import HostContextPanel from "../components/panels/HostContextPanel";
+import InlineFormPanel, { isInlineFormModal } from "../components/panels/InlineFormPanel";
 import HostCard from "../components/common/HostCard";
 import IdentitiesPanel from "../components/panels/IdentitiesPanel";
 import KeysPanel from "../components/panels/KeysPanel";
@@ -17,7 +15,6 @@ import SnippetsDrawer from "../components/panels/SnippetsDrawer";
 import SnippetForm from "../components/forms/SnippetForm";
 import RunSnippetForm from "../components/forms/RunSnippetForm";
 import VpnPanel from "../components/panels/VpnPanel";
-import VpnProfileForm from "../components/forms/VpnProfileForm";
 import SettingsPanel from "../components/panels/SettingsPanel";
 import BackupPanel from "../components/panels/BackupPanel";
 import TerminalView from "../components/terminal/TerminalView";
@@ -55,6 +52,23 @@ export default function AppShell() {
   const importHostsCsv = useHostsStore((s) => s.importHostsCsv);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [hostsGridSearch, setHostsGridSearch] = useState("");
+  // The same Connect/Duplicate/Edit/Delete menu HostTree.tsx's sidebar rows
+  // already have, offered here too so right-click behaves identically
+  // whether triggered from the sidebar or the center grid.
+  const {
+    openContextMenu: openGridContextMenu,
+    menu: gridContextMenu,
+    confirmDialog: gridContextMenuConfirmDialog,
+  } = useHostContextMenu(
+    (host) => {
+      setSelectedHostId(host.id);
+      handleConnect(host);
+    },
+    (host) => {
+      setSelectedHostId(host.id);
+      openModal({ kind: "host", host });
+    },
+  );
 
   const openSessions = useSessionsStore((s) => s.openSessions);
   const sessionStatuses = useSessionsStore((s) => s.statuses);
@@ -104,6 +118,7 @@ export default function AppShell() {
   const toggleSnippetsDrawer = useSettingsStore((s) => s.toggleSnippetsDrawer);
   const rightPanelVisible = useSettingsStore((s) => s.rightPanelVisible);
   const toggleRightPanel = useSettingsStore((s) => s.toggleRightPanel);
+  const setRightPanelVisible = useSettingsStore((s) => s.setRightPanelVisible);
   const rightPanelWidth = useSettingsStore((s) => s.rightPanelWidth);
   const setRightPanelWidth = useSettingsStore((s) => s.setRightPanelWidth);
   const [isDraggingLeftPanel, setIsDraggingLeftPanel] = useState(false);
@@ -112,6 +127,17 @@ export default function AppShell() {
   const [selectedHostId, setSelectedHostId] = useState<string | null>(null);
   const [mainView, setMainView] = useState<MainView>({ type: "manage", tab: "hosts" });
   const [modal, setModal] = useState<ModalState>(null);
+  // Host/Group/Identity/Key/VpnProfile forms render inline in the right
+  // panel (InlineFormPanel), so opening one of those also makes sure the
+  // panel is actually visible - Snippet/RunSnippet modals don't need this,
+  // hence checking isInlineFormModal rather than doing this in setModal
+  // itself.
+  function openModal(state: ModalState) {
+    setModal(state);
+    if (isInlineFormModal(state)) {
+      setRightPanelVisible(true);
+    }
+  }
   const [loadError, setLoadError] = useState<string | null>(null);
   const [importResult, setImportResult] = useState<ImportSummary | null>(null);
   const [csvError, setCsvError] = useState<string | null>(null);
@@ -221,17 +247,23 @@ export default function AppShell() {
     const existing = openSessions.find((s) => s.host.id === host.id && s.kind === "terminal");
     if (existing) {
       setMainView({ type: "session", tabId: existing.tabId });
+      // Auto-hide so the terminal gets the room, matching a brand-new
+      // connect below - never touch rightPanelVisible here, so a manually
+      // hidden right panel stays hidden rather than being forced back open.
+      setLeftSidebarVisible(false);
       return;
     }
     if (!(await ensureVpnUp(host))) return;
     const tabId = openSession(host, "terminal");
     setMainView({ type: "session", tabId });
+    setLeftSidebarVisible(false);
   }
 
   async function handleOpenSftp(host: Host) {
     if (!(await ensureVpnUp(host))) return;
     const tabId = openSession(host, "sftp");
     setMainView({ type: "session", tabId });
+    setLeftSidebarVisible(false);
   }
 
   function handleCloseTab(tabId: string) {
@@ -372,6 +404,12 @@ export default function AppShell() {
                 isOpen={openSessions.some((s) => s.host.id === h.id)}
                 onSelect={() => setSelectedHostId(h.id)}
                 onConnect={() => handleConnect(h)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setSelectedHostId(h.id);
+                  openGridContextMenu(h, e);
+                }}
               />
             ))}
           </div>
@@ -418,14 +456,14 @@ export default function AppShell() {
           <div className="flex gap-2 border-b border-slate-200 p-2 dark:border-slate-800">
             <button
               type="button"
-              onClick={() => setModal({ kind: "host" })}
+              onClick={() => openModal({ kind: "host" })}
               className="flex-1 rounded-lg bg-teal-600 shadow-sm px-2 py-1.5 text-xs font-medium text-white hover:bg-teal-700"
             >
               + Host
             </button>
             <button
               type="button"
-              onClick={() => setModal({ kind: "group" })}
+              onClick={() => openModal({ kind: "group" })}
               className="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
             >
               + Group
@@ -465,10 +503,13 @@ export default function AppShell() {
                 setSelectedHostId(host.id);
                 handleConnect(host);
               }}
-              onEditGroup={(group) => setModal({ kind: "group", group })}
-              onEditHost={(host) => setModal({ kind: "host", host })}
-              onNewHost={(groupId) => setModal({ kind: "host", groupId })}
-              onNewSubgroup={(parentId) => setModal({ kind: "group", parentId })}
+              onEditGroup={(group) => openModal({ kind: "group", group })}
+              onEditHost={(host) => {
+                setSelectedHostId(host.id);
+                openModal({ kind: "host", host });
+              }}
+              onNewHost={(groupId) => openModal({ kind: "host", groupId })}
+              onNewSubgroup={(parentId) => openModal({ kind: "group", parentId })}
             />
           </div>
         </div>
@@ -527,15 +568,17 @@ export default function AppShell() {
                     ? "Connected"
                     : status === "connecting"
                       ? "Connecting…"
-                      : status === "error"
-                        ? "Connection error"
-                        : status === "closed"
-                          ? "Session closed"
-                          : undefined;
+                      : status === "reconnecting"
+                        ? "Reconnecting…"
+                        : status === "error"
+                          ? "Connection error"
+                          : status === "closed"
+                            ? "Session closed"
+                            : undefined;
                 const dotClass =
                   status === "connected"
                     ? "bg-emerald-500"
-                    : status === "connecting"
+                    : status === "connecting" || status === "reconnecting"
                       ? "bg-amber-500 animate-pulse"
                       : status === "error"
                         ? "bg-red-500"
@@ -700,22 +743,24 @@ export default function AppShell() {
                   ) : (
                     renderGroupSection(null)
                   )}
+                  {gridContextMenu}
+                  {gridContextMenuConfirmDialog}
                 </>
               )
             )}
             {mainView.type === "manage" && mainView.tab === "identities" && (
               <IdentitiesPanel
-                onNew={() => setModal({ kind: "identity" })}
-                onEdit={(identity) => setModal({ kind: "identity", identity })}
+                onNew={() => openModal({ kind: "identity" })}
+                onEdit={(identity) => openModal({ kind: "identity", identity })}
               />
             )}
             {mainView.type === "manage" && mainView.tab === "keys" && (
-              <KeysPanel onNew={() => setModal({ kind: "key" })} />
+              <KeysPanel onNew={() => openModal({ kind: "key" })} />
             )}
             {mainView.type === "manage" && mainView.tab === "vpn" && (
               <VpnPanel
-                onNew={() => setModal({ kind: "vpn-profile" })}
-                onEdit={(profile) => setModal({ kind: "vpn-profile", profile })}
+                onNew={() => openModal({ kind: "vpn-profile" })}
+                onEdit={(profile) => openModal({ kind: "vpn-profile", profile })}
               />
             )}
             {mainView.type === "manage" && mainView.tab === "backup" && <BackupPanel />}
@@ -761,8 +806,17 @@ export default function AppShell() {
           isDraggingRightPanel ? "" : "transition-[width] duration-150 ease-out"
         }`}
       >
-        <div style={{ width: rightPanelWidth }}>
-          {snippetsDrawerOpen ? (
+        <div style={{ width: rightPanelWidth }} className="h-full">
+          {isInlineFormModal(modal) ? (
+            <InlineFormPanel
+              modal={modal}
+              onDone={() => setModal(null)}
+              onSaveAndConnectHost={(host) => {
+                setModal(null);
+                handleConnect(host);
+              }}
+            />
+          ) : snippetsDrawerOpen ? (
             <SnippetsDrawer
               onNew={() => setModal({ kind: "snippet" })}
               onEdit={(snippet) => setModal({ kind: "snippet", snippet })}
@@ -809,26 +863,6 @@ export default function AppShell() {
         </button>
       </nav>
 
-      {modal?.kind === "group" && (
-        <Modal title={modal.group ? "Edit group" : "New group"} onClose={() => setModal(null)}>
-          <GroupForm group={modal.group} defaultParentId={modal.parentId} onDone={() => setModal(null)} />
-        </Modal>
-      )}
-      {modal?.kind === "host" && (
-        <Modal title={modal.host ? "Edit host" : "New host"} onClose={() => setModal(null)}>
-          <HostForm host={modal.host} defaultGroupId={modal.groupId} onDone={() => setModal(null)} />
-        </Modal>
-      )}
-      {modal?.kind === "identity" && (
-        <Modal title={modal.identity ? "Edit identity" : "New identity"} onClose={() => setModal(null)}>
-          <IdentityForm identity={modal.identity} onDone={() => setModal(null)} />
-        </Modal>
-      )}
-      {modal?.kind === "key" && (
-        <Modal title="New SSH key" onClose={() => setModal(null)}>
-          <KeyForm onDone={() => setModal(null)} />
-        </Modal>
-      )}
       {modal?.kind === "snippet" && (
         <Modal title={modal.snippet ? "Edit snippet" : "New snippet"} onClose={() => setModal(null)}>
           <SnippetForm snippet={modal.snippet} onDone={() => setModal(null)} />
@@ -837,11 +871,6 @@ export default function AppShell() {
       {modal?.kind === "run-snippet" && (
         <Modal title={`Run "${modal.snippet.label}"`} onClose={() => setModal(null)}>
           <RunSnippetForm snippet={modal.snippet} onDone={() => setModal(null)} />
-        </Modal>
-      )}
-      {modal?.kind === "vpn-profile" && (
-        <Modal title={modal.profile ? "Edit VPN profile" : "New VPN profile"} onClose={() => setModal(null)}>
-          <VpnProfileForm profile={modal.profile} onDone={() => setModal(null)} />
         </Modal>
       )}
       {importResult && (

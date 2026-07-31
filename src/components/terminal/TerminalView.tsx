@@ -10,7 +10,7 @@ import { sessionConnect, sessionDisconnect, sessionResize, sessionWrite } from "
 import { Host } from "../../lib/tauri-bridge";
 import { TERMINAL_THEME_PRESETS, useSettingsStore } from "../../state/settingsStore";
 import { useHostsStore } from "../../state/hostsStore";
-import { useSessionsStore } from "../../state/sessionsStore";
+import { SessionStatus, useSessionsStore } from "../../state/sessionsStore";
 import { parseRemoteHistory, rankRemoteHistory, useCommandHistoryStore } from "../../state/commandHistoryStore";
 import { useSnippetsStore } from "../../state/snippetsStore";
 import { friendlyError } from "../../lib/friendlyError";
@@ -37,6 +37,16 @@ const HISTORY_FETCH_COMMAND =
 // (a real secret ending up in plaintext local history).
 const SECRET_PROMPT_RE = /password|passphrase/i;
 
+// Bounded retry schedule for settingsStore.autoReconnectEnabled - a flaky
+// host gets a few chances with increasing delay rather than being hammered
+// in a tight loop; once exhausted, the manual "Reconnect" button (always
+// shown regardless of the setting) is the fallback. Only "error" events
+// (keepalive failure, network drop) trigger this - a "closed" event is left
+// alone (no auto-retry) since it's ambiguous whether the user just typed
+// `exit`, and silently reconnecting a deliberately-closed shell would be
+// surprising.
+const RECONNECT_BACKOFF_MS = [2000, 4000, 8000, 16000, 30000];
+
 interface TerminalViewProps {
   host: Host;
   tabId: string;
@@ -59,12 +69,14 @@ export default function TerminalView({ host, tabId, onClose }: TerminalViewProps
   const searchAddonRef = useRef<SearchAddon | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const sessionIdRef = useRef<string | null>(null);
-  const [status, setLocalStatus] = useState<"connecting" | "connected" | "closed" | "error">(
-    "connecting",
-  );
+  // Set inside the connect effect to the effect's own connectSession()
+  // closure, so the manual "Reconnect" button (in render scope) can trigger
+  // a fresh attempt without needing its own copy of the connect logic.
+  const connectSessionRef = useRef<(() => void) | null>(null);
+  const [status, setLocalStatus] = useState<SessionStatus>("connecting");
   // Mirrors into sessionsStore so the tab bar (which doesn't render this
   // component's own header) can show live connection status too.
-  function setStatus(next: "connecting" | "connected" | "closed" | "error") {
+  function setStatus(next: SessionStatus) {
     setLocalStatus(next);
     useSessionsStore.getState().setStatus(tabId, next);
   }
@@ -125,6 +137,8 @@ export default function TerminalView({ host, tabId, onClose }: TerminalViewProps
     searchAddonRef.current = searchAddon;
 
     let disposed = false;
+    let reconnectAttempts = 0;
+    let reconnectTimeout: ReturnType<typeof setTimeout> | undefined;
 
     // Best-effort local-echo tracking of what the user types, so
     // HostContextPanel's "Most used"/"Recent" can reflect real terminal
@@ -137,56 +151,96 @@ export default function TerminalView({ host, tabId, onClose }: TerminalViewProps
     let outputTail = "";
     let suppressNextLine = false;
 
-    setStatus("connecting");
-    sessionConnect(host.id, (event) => {
-      if (event.type === "data") {
-        const bytes = base64ToBytes(event.data);
-        term.write(bytes);
-        outputTail = (outputTail + new TextDecoder().decode(bytes)).slice(-256);
-        if (SECRET_PROMPT_RE.test(outputTail)) {
-          suppressNextLine = true;
-          // Otherwise the matched text just sits in the tail (nothing else
-          // has pushed it out of the last 256 characters yet) and keeps
-          // re-matching on every subsequent chunk, effectively suppressing
-          // history forever instead of for one line.
-          outputTail = "";
-        }
-      } else if (event.type === "closed") {
-        setStatus("closed");
-      } else if (event.type === "error") {
-        setStatus("error");
-        setError(event.message);
+    // Schedules an automatic retry if the setting is on and attempts
+    // remain, otherwise settles into the given terminal status - shared by
+    // both the "error" event branch and the initial-connect failure path,
+    // since both represent "not connected, tab still open."
+    function handleDisconnect(settledStatus: "closed" | "error") {
+      if (disposed) return;
+      sessionIdRef.current = null;
+      if (
+        settledStatus === "error" &&
+        useSettingsStore.getState().autoReconnectEnabled &&
+        reconnectAttempts < RECONNECT_BACKOFF_MS.length
+      ) {
+        const delay = RECONNECT_BACKOFF_MS[reconnectAttempts];
+        reconnectAttempts += 1;
+        setStatus("reconnecting");
+        reconnectTimeout = setTimeout(() => connectSession(), delay);
+      } else {
+        setStatus(settledStatus);
       }
-    })
-      .then((sessionId) => {
-        if (disposed) {
-          sessionDisconnect(sessionId);
-          return;
-        }
-        sessionIdRef.current = sessionId;
-        setStatus("connected");
-        sessionResize(sessionId, term.cols, term.rows);
-        useHostsStore.getState().loadAll();
-        useSessionsStore.getState().setSessionId(tabId, sessionId);
+    }
 
-        // Best-effort - a restricted account, a shell with no history file,
-        // or a server that doesn't allow this one-off exec just means
-        // HostContextPanel falls back to its own locally-recorded ranking.
-        useSnippetsStore
-          .getState()
-          .runOnHosts([host.id], HISTORY_FETCH_COMMAND)
-          .then(([result]) => {
-            if (disposed || !result?.output?.stdout) return;
-            const commands = parseRemoteHistory(result.output.stdout);
-            if (commands.length === 0) return;
-            useCommandHistoryStore.getState().setRemoteTopUsed(host.id, rankRemoteHistory(commands, 10));
-          })
-          .catch(() => {});
+    function connectSession() {
+      if (disposed) return;
+      clearTimeout(reconnectTimeout);
+      setError(null);
+      setStatus(reconnectAttempts > 0 ? "reconnecting" : "connecting");
+      sessionConnect(host.id, (event) => {
+        if (disposed) return;
+        if (event.type === "data") {
+          const bytes = base64ToBytes(event.data);
+          term.write(bytes);
+          outputTail = (outputTail + new TextDecoder().decode(bytes)).slice(-256);
+          if (SECRET_PROMPT_RE.test(outputTail)) {
+            suppressNextLine = true;
+            // Otherwise the matched text just sits in the tail (nothing
+            // else has pushed it out of the last 256 characters yet) and
+            // keeps re-matching on every subsequent chunk, effectively
+            // suppressing history forever instead of for one line.
+            outputTail = "";
+          }
+        } else if (event.type === "closed") {
+          handleDisconnect("closed");
+        } else if (event.type === "error") {
+          setError(event.message);
+          handleDisconnect("error");
+        }
       })
-      .catch((e) => {
-        setStatus("error");
-        setError(friendlyError(e));
-      });
+        .then((sessionId) => {
+          if (disposed) {
+            sessionDisconnect(sessionId);
+            return;
+          }
+          sessionIdRef.current = sessionId;
+          reconnectAttempts = 0;
+          setStatus("connected");
+          sessionResize(sessionId, term.cols, term.rows);
+          useHostsStore.getState().loadAll();
+          useSessionsStore.getState().setSessionId(tabId, sessionId);
+
+          // Best-effort - a restricted account, a shell with no history
+          // file, or a server that doesn't allow this one-off exec just
+          // means HostContextPanel falls back to its own locally-recorded
+          // ranking.
+          useSnippetsStore
+            .getState()
+            .runOnHosts([host.id], HISTORY_FETCH_COMMAND)
+            .then(([result]) => {
+              if (disposed || !result?.output?.stdout) return;
+              const commands = parseRemoteHistory(result.output.stdout);
+              if (commands.length === 0) return;
+              useCommandHistoryStore.getState().setRemoteTopUsed(host.id, rankRemoteHistory(commands, 10));
+            })
+            .catch(() => {});
+        })
+        .catch((e) => {
+          setError(friendlyError(e));
+          handleDisconnect("error");
+        });
+    }
+
+    // Lets the manual "Reconnect" button (render scope, outside this
+    // effect) trigger a fresh attempt - resets the backoff counter, since a
+    // deliberate click shouldn't be throttled by however far the automatic
+    // schedule had already progressed.
+    connectSessionRef.current = () => {
+      reconnectAttempts = 0;
+      connectSession();
+    };
+
+    connectSession();
 
     const onData = term.onData((data) => {
       if (sessionIdRef.current) {
@@ -240,6 +294,7 @@ export default function TerminalView({ host, tabId, onClose }: TerminalViewProps
 
     return () => {
       disposed = true;
+      clearTimeout(reconnectTimeout);
       resizeObserver.disconnect();
       onData.dispose();
       if (sessionIdRef.current) {
@@ -286,7 +341,9 @@ export default function TerminalView({ host, tabId, onClose }: TerminalViewProps
                 ? "bg-emerald-500"
                 : status === "connecting"
                   ? "bg-amber-500"
-                  : "bg-red-500"
+                  : status === "reconnecting"
+                    ? "bg-amber-500 animate-pulse"
+                    : "bg-red-500"
             }`}
           />
           <span className="font-medium text-slate-900 dark:text-slate-100">{host.label}</span>
@@ -303,10 +360,17 @@ export default function TerminalView({ host, tabId, onClose }: TerminalViewProps
         </button>
       </div>
 
-      {error && (
-        <p className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-400">
-          {error}
-        </p>
+      {(status === "error" || status === "closed") && (
+        <div className="flex items-center justify-between gap-3 border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-400">
+          <span>{error ?? "Session closed."}</span>
+          <button
+            type="button"
+            onClick={() => connectSessionRef.current?.()}
+            className="shrink-0 rounded-lg border border-red-300 px-2 py-1 text-xs font-medium hover:bg-red-100 dark:border-red-800 dark:hover:bg-red-900"
+          >
+            Reconnect
+          </button>
+        </div>
       )}
 
       {searchOpen && (
@@ -362,14 +426,15 @@ export default function TerminalView({ host, tabId, onClose }: TerminalViewProps
 
       <div className="relative min-h-0 flex-1 p-2" style={{ backgroundColor: themePreset.background }}>
         <div ref={containerRef} className="h-full w-full" />
-        {status === "connecting" && (
+        {(status === "connecting" || status === "reconnecting") && (
           <div
             className="absolute inset-0 flex flex-col items-center justify-center gap-3"
             style={{ backgroundColor: themePreset.background }}
           >
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-500 border-t-teal-400" />
             <p className="text-sm" style={{ color: themePreset.foreground }}>
-              Connecting to <span className="font-medium">{host.label}</span> ({host.hostname}:
+              {status === "reconnecting" ? "Reconnecting to " : "Connecting to "}
+              <span className="font-medium">{host.label}</span> ({host.hostname}:
               {host.port})…
             </p>
           </div>
@@ -380,6 +445,7 @@ export default function TerminalView({ host, tabId, onClose }: TerminalViewProps
         <span>
           {status === "connected" && `Connected to ${host.label}`}
           {status === "connecting" && "Connecting…"}
+          {status === "reconnecting" && "Reconnecting…"}
           {status === "closed" && "Session closed"}
           {status === "error" && "Connection error"}
         </span>

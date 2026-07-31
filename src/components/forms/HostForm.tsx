@@ -11,6 +11,12 @@ interface HostFormProps {
   host?: Host;
   defaultGroupId?: string | null;
   onDone: () => void;
+  // Optional: when provided, a second "Save & Connect" submit button
+  // appears alongside the plain save action - called with the freshly
+  // created/updated host instead of onDone, so the caller can immediately
+  // open a session (reusing its own existing connect flow - VPN gating,
+  // tab opening, etc. - rather than this form duplicating any of that).
+  onSaveAndConnect?: (host: Host) => void;
 }
 
 type InlineAuthMethod = Extract<AuthMethod, "password" | "private_key">;
@@ -25,7 +31,7 @@ const COLOR_PRESETS = [
   "#a855f7", // purple
 ];
 
-export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps) {
+export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnect }: HostFormProps) {
   const groups = useHostsStore((s) => s.groups);
   const identities = useHostsStore((s) => s.identities);
   const keys = useHostsStore((s) => s.keys);
@@ -110,9 +116,14 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
     }
   }
 
-  async function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+    // Which of the two submit buttons was actually clicked - SubmitEvent's
+    // `submitter` (widely supported, including WebKitGTK) is the standard
+    // way to distinguish this when a form has more than one submit button.
+    const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+    const connectAfterSave = submitter?.value === "connect";
 
     if (identityMode === "new" && authMethod === "private_key") {
       if (keyMode === "existing" && !sshKeyId) {
@@ -194,12 +205,12 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
         notes: notes || null,
         sort_order: host?.sort_order ?? 0,
       };
-      if (host) {
-        await updateHost(host.id, input);
+      const savedHost = host ? await updateHost(host.id, input) : await createHost(input);
+      if (connectAfterSave && onSaveAndConnect) {
+        onSaveAndConnect(savedHost);
       } else {
-        await createHost(input);
+        onDone();
       }
-      onDone();
     } catch (err) {
       setError(String(err));
     } finally {
@@ -628,9 +639,21 @@ export default function HostForm({ host, defaultGroupId, onDone }: HostFormProps
 
       {error && <p className={errorClass}>{error}</p>}
 
-      <button type="submit" disabled={submitting} className={primaryButtonClass}>
-        {submitting ? "Saving…" : host ? "Save changes" : "Create host"}
-      </button>
+      <div className="flex gap-2">
+        <button type="submit" value="save" disabled={submitting} className={`${primaryButtonClass} flex-1`}>
+          {submitting ? "Saving…" : host ? "Save changes" : "Create host"}
+        </button>
+        {onSaveAndConnect && (
+          <button
+            type="submit"
+            value="connect"
+            disabled={submitting}
+            className="flex-1 rounded-md border border-teal-600 px-3 py-2 text-sm font-medium text-teal-700 transition hover:bg-teal-50 disabled:opacity-50 dark:text-teal-400 dark:hover:bg-teal-950"
+          >
+            {submitting ? "Saving…" : "Save & Connect"}
+          </button>
+        )}
+      </div>
     </form>
   );
 }
