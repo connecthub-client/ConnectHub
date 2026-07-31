@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.3.1] — 2026-08-01
+
 ### Fixed
 
 - Settings → About → "Check for updates" no longer shows the confusing raw error "invalid updater binary format" on Linux `.deb`/`.rpm` installs. The in-app updater's install step can only ever work for AppImage installs there (a `.deb`/`.rpm` install expects the downloaded artifact to itself be a `.deb`/`.rpm`, but our releases only ever publish an AppImage); it now detects this up front and points to the GitHub releases page to download the new version manually instead.
@@ -115,7 +117,8 @@ Initial public release.
 - VPN helper scripts run under narrowly-scoped polkit rules and force `--script-security 0`, so an uploaded `.ovpn` config can never execute arbitrary code as root.
 - Vault key derivation and the per-installation auto-unlock secret were hardened during development; see [ARCHITECTURE.md](ARCHITECTURE.md#vault--master-password) for the current design and its tradeoffs.
 
-[Unreleased]: https://github.com/connecthub-client/ConnectHub/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/connecthub-client/ConnectHub/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/connecthub-client/ConnectHub/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/connecthub-client/ConnectHub/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/connecthub-client/ConnectHub/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/connecthub-client/ConnectHub/compare/v1.1.1...v1.1.2
