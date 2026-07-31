@@ -8,7 +8,7 @@ mod state;
 mod vault;
 mod vpn;
 
-use commands::app_commands::app_version;
+use commands::app_commands::{app_update_installable, app_version};
 use commands::backup_commands::{
     google_backup_now, google_login, google_login_cancel, google_logout, google_restore,
     google_status,
@@ -58,6 +58,7 @@ pub fn run() {
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             app_version,
+            app_update_installable,
             vault_auto_unlock,
             group_list,
             group_create,

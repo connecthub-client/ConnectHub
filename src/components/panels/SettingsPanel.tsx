@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { check, Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
-import { appVersion } from "../../lib/tauri-bridge";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { appUpdateInstallable, appVersion } from "../../lib/tauri-bridge";
 import {
   CursorStyle,
   KEYBINDINGS,
@@ -24,9 +25,16 @@ type UpdateState =
   | { phase: "ready-to-restart" }
   | { phase: "error"; message: string };
 
+const RELEASES_URL = "https://github.com/connecthub-client/ConnectHub/releases/latest";
+
 function AboutSection() {
   const [version, setVersion] = useState<string | null>(null);
   const [state, setState] = useState<UpdateState>({ phase: "idle" });
+  // Defaults true (incl. while the check below is still loading) since it's only
+  // ever meaningfully false on a Linux .deb/.rpm install, where the updater plugin
+  // can't apply a downloaded update (see app_update_installable's Rust-side doc
+  // comment) - every other platform/install always supports it.
+  const [installable, setInstallable] = useState(true);
 
   // Best-effort - if this fails on mount (a transient IPC hiccup), leave
   // the placeholder rather than routing it into the shared update-check
@@ -41,6 +49,11 @@ function AboutSection() {
   }
 
   useEffect(loadVersion, []);
+  useEffect(() => {
+    appUpdateInstallable()
+      .then(setInstallable)
+      .catch(() => {});
+  }, []);
 
   async function handleCheckForUpdate() {
     if (version === null) loadVersion();
@@ -73,7 +86,16 @@ function AboutSection() {
       });
       setState({ phase: "ready-to-restart" });
     } catch (e) {
-      setState({ phase: "error", message: String(e) });
+      const message = String(e);
+      // Same underlying cause as the installable check above (a .deb/.rpm install fed
+      // an AppImage-format artifact) can still surface here if that check missed an
+      // edge case - translate the raw backend string rather than showing it as-is.
+      setState({
+        phase: "error",
+        message: message.includes("invalid updater binary format")
+          ? "Automatic install isn't supported for this installation - download the new version from the releases page instead."
+          : message,
+      });
     }
   }
 
@@ -121,13 +143,29 @@ function AboutSection() {
               {state.update.body}
             </p>
           )}
-          <button
-            type="button"
-            onClick={() => void handleInstall(state.update)}
-            className="rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-teal-700"
-          >
-            Download and install
-          </button>
+          {installable ? (
+            <button
+              type="button"
+              onClick={() => void handleInstall(state.update)}
+              className="rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-teal-700"
+            >
+              Download and install
+            </button>
+          ) : (
+            <div>
+              <p className="mb-2 text-xs text-teal-700 dark:text-teal-300">
+                Automatic install isn't supported for a .deb/.rpm installation - download the
+                new version from the releases page instead.
+              </p>
+              <button
+                type="button"
+                onClick={() => void openUrl(RELEASES_URL)}
+                className="rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-teal-700"
+              >
+                Open releases page
+              </button>
+            </div>
+          )}
         </div>
       )}
 

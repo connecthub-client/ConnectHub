@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Settings → About → "Check for updates" no longer shows the confusing raw error "invalid updater binary format" on Linux `.deb`/`.rpm` installs. The in-app updater's install step can only ever work for AppImage installs there (a `.deb`/`.rpm` install expects the downloaded artifact to itself be a `.deb`/`.rpm`, but our releases only ever publish an AppImage); it now detects this up front and points to the GitHub releases page to download the new version manually instead.
+
 ## [1.3.0] — 2026-08-01
 
 ### Added
