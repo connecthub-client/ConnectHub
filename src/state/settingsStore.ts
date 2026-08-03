@@ -38,6 +38,10 @@ export const MIN_RIGHT_PANEL_WIDTH = 260;
 export const MAX_RIGHT_PANEL_WIDTH = 560;
 export const DEFAULT_RIGHT_PANEL_WIDTH = 320;
 
+export const MIN_VAULT_AUTO_LOCK_MINUTES = 1;
+export const MAX_VAULT_AUTO_LOCK_MINUTES = 120;
+export const DEFAULT_VAULT_AUTO_LOCK_MINUTES = 5;
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
@@ -78,6 +82,18 @@ interface SettingsState {
   // (retrying against a host that's deliberately unreachable, or one behind
   // a VPN that's since disconnected, isn't always what a user wants).
   autoReconnectEnabled: boolean;
+  // Adds friction on top of the vault's always-auto-unlock model (there is
+  // no master password to reintroduce) - after this many idle minutes,
+  // App.tsx shows a full-screen lock overlay and calls vault_lock so
+  // secret-decrypting commands genuinely fail until "Unlock" re-derives
+  // the same per-installation key. Off by default, same as auto-reconnect.
+  vaultAutoLockEnabled: boolean;
+  vaultAutoLockMinutes: number;
+  // X11-primary-selection-style: selecting text in a terminal immediately
+  // copies it to the system clipboard, no explicit copy action needed. On
+  // by default (the whole point is zero setup) but toggleable in case a
+  // stray selection ever clobbers something the user copied elsewhere.
+  autoCopyOnSelectEnabled: boolean;
   setTheme: (theme: ThemeMode) => void;
   setTerminalFontFamily: (fontFamily: string) => void;
   setTerminalFontSize: (fontSize: number) => void;
@@ -94,6 +110,9 @@ interface SettingsState {
   toggleHostDetails: () => void;
   toggleQuickCommandAutoRun: () => void;
   toggleAutoReconnect: () => void;
+  toggleVaultAutoLock: () => void;
+  setVaultAutoLockMinutes: (minutes: number) => void;
+  toggleAutoCopyOnSelect: () => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -113,6 +132,9 @@ export const useSettingsStore = create<SettingsState>()(
       hostDetailsVisible: true,
       quickCommandAutoRun: true,
       autoReconnectEnabled: false,
+      vaultAutoLockEnabled: false,
+      vaultAutoLockMinutes: DEFAULT_VAULT_AUTO_LOCK_MINUTES,
+      autoCopyOnSelectEnabled: true,
 
       setTheme: (theme) => set({ theme }),
       setTerminalFontFamily: (terminalFontFamily) => set({ terminalFontFamily }),
@@ -132,6 +154,12 @@ export const useSettingsStore = create<SettingsState>()(
       toggleHostDetails: () => set({ hostDetailsVisible: !get().hostDetailsVisible }),
       toggleQuickCommandAutoRun: () => set({ quickCommandAutoRun: !get().quickCommandAutoRun }),
       toggleAutoReconnect: () => set({ autoReconnectEnabled: !get().autoReconnectEnabled }),
+      toggleVaultAutoLock: () => set({ vaultAutoLockEnabled: !get().vaultAutoLockEnabled }),
+      setVaultAutoLockMinutes: (minutes) =>
+        set({
+          vaultAutoLockMinutes: clamp(minutes, MIN_VAULT_AUTO_LOCK_MINUTES, MAX_VAULT_AUTO_LOCK_MINUTES),
+        }),
+      toggleAutoCopyOnSelect: () => set({ autoCopyOnSelectEnabled: !get().autoCopyOnSelectEnabled }),
     }),
     {
       name: "connecthub-settings",
@@ -147,6 +175,11 @@ export const useSettingsStore = create<SettingsState>()(
           MAX_LEFT_SIDEBAR_WIDTH,
         );
         merged.rightPanelWidth = clamp(merged.rightPanelWidth, MIN_RIGHT_PANEL_WIDTH, MAX_RIGHT_PANEL_WIDTH);
+        merged.vaultAutoLockMinutes = clamp(
+          merged.vaultAutoLockMinutes,
+          MIN_VAULT_AUTO_LOCK_MINUTES,
+          MAX_VAULT_AUTO_LOCK_MINUTES,
+        );
         return merged;
       },
     },

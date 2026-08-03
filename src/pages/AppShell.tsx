@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import ActivityBar from "../components/layout/ActivityBar";
 import { NavIcon, sidebarToggleIcon } from "../components/common/navIcons";
+import CommandPalette, { PaletteAction } from "../components/common/CommandPalette";
 import ResizeHandle from "../components/common/ResizeHandle";
 import { useHostContextMenu } from "../components/common/useHostContextMenu";
 import HostTree from "../components/sidebar/HostTree";
@@ -17,20 +18,34 @@ import RunSnippetForm from "../components/forms/RunSnippetForm";
 import VpnPanel from "../components/panels/VpnPanel";
 import SettingsPanel from "../components/panels/SettingsPanel";
 import BackupPanel from "../components/panels/BackupPanel";
+import WorkspacesPanel from "../components/panels/WorkspacesPanel";
 import TerminalView from "../components/terminal/TerminalView";
 import SftpBrowser from "../components/sftp/SftpBrowser";
-import { Group, Host, Identity, ImportSummary, localReadTextFile, localWriteTextFile, Snippet, VpnProfile } from "../lib/tauri-bridge";
+import {
+  Group,
+  Host,
+  Identity,
+  ImportSummary,
+  localReadTextFile,
+  localWriteTextFile,
+  Snippet,
+  VpnProfile,
+  Workspace,
+  workspaceListTabs,
+} from "../lib/tauri-bridge";
 import { getGroupChildren } from "../lib/groupTree";
 import { useHostsStore } from "../state/hostsStore";
 import { useSessionsStore } from "../state/sessionsStore";
+import { useTagsStore } from "../state/tagsStore";
 import { useVpnStore } from "../state/vpnStore";
+import { useWorkspacesStore } from "../state/workspacesStore";
 import {
   DEFAULT_LEFT_SIDEBAR_WIDTH,
   DEFAULT_RIGHT_PANEL_WIDTH,
   useSettingsStore,
 } from "../state/settingsStore";
 
-type ManageTab = "hosts" | "identities" | "keys" | "vpn" | "backup" | "settings";
+type ManageTab = "hosts" | "identities" | "keys" | "vpn" | "workspaces" | "backup" | "settings";
 type MainView = { type: "manage"; tab: ManageTab } | { type: "session"; tabId: string };
 
 type ModalState =
@@ -42,6 +57,18 @@ type ModalState =
   | { kind: "run-snippet"; snippet: Snippet }
   | { kind: "vpn-profile"; profile?: VpnProfile }
   | null;
+
+// A fixed, evenly-split grid (not drag-resizable, unlike the sidebar/right
+// panel) - 2 panes sit side by side, 3 or 4 form a 2x2 grid with a 3rd pane
+// spanning the full bottom row.
+function paneGridClass(count: number): string {
+  if (count <= 1) return "";
+  return count === 2 ? "grid grid-cols-2 gap-1" : "grid grid-cols-2 grid-rows-2 gap-1";
+}
+
+function paneCellClass(count: number, index: number): string {
+  return count === 3 && index === 2 ? "col-span-2" : "";
+}
 
 export default function AppShell() {
   const loadAll = useHostsStore((s) => s.loadAll);
@@ -75,6 +102,9 @@ export default function AppShell() {
   const openSession = useSessionsStore((s) => s.openSession);
   const closeSession = useSessionsStore((s) => s.closeSession);
   const reorderSessions = useSessionsStore((s) => s.reorderSessions);
+  const addPane = useSessionsStore((s) => s.addPane);
+  const closePane = useSessionsStore((s) => s.closePane);
+  const toggleBroadcast = useSessionsStore((s) => s.toggleBroadcast);
   const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
   // Which index the dragged tab would land at if dropped right now - drawn
   // as an insertion line before that tab (or, at openSessions.length, at
@@ -105,7 +135,10 @@ export default function AppShell() {
     return () => window.removeEventListener("click", close);
   }, [tabOverflowMenuOpen]);
 
+  const loadTagsAll = useTagsStore((s) => s.loadAll);
   const loadVpnAll = useVpnStore((s) => s.loadAll);
+  const loadWorkspacesAll = useWorkspacesStore((s) => s.loadAll);
+  const createWorkspace = useWorkspacesStore((s) => s.createWorkspace);
   const releaseVpnIfUnused = useVpnStore((s) => s.releaseIfUnused);
   const vpnEnsureUp = useVpnStore((s) => s.ensureVpnUp);
 
@@ -138,6 +171,7 @@ export default function AppShell() {
       setRightPanelVisible(true);
     }
   }
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [importResult, setImportResult] = useState<ImportSummary | null>(null);
   const [csvError, setCsvError] = useState<string | null>(null);
@@ -145,8 +179,10 @@ export default function AppShell() {
   const [vpnGateError, setVpnGateError] = useState<{ hostId: string; message: string } | null>(null);
 
   useEffect(() => {
-    Promise.all([loadAll(), loadVpnAll()]).catch((e) => setLoadError(String(e)));
-  }, [loadAll, loadVpnAll]);
+    Promise.all([loadAll(), loadVpnAll(), loadTagsAll(), loadWorkspacesAll()]).catch((e) =>
+      setLoadError(String(e)),
+    );
+  }, [loadAll, loadVpnAll, loadTagsAll, loadWorkspacesAll]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -158,6 +194,12 @@ export default function AppShell() {
           e.preventDefault();
           handleCloseTab(mainView.tabId);
         }
+        return;
+      }
+
+      if (e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen(true);
         return;
       }
 
@@ -243,8 +285,15 @@ export default function AppShell() {
     // redundant terminal session/tab to a host already connected instead
     // of just switching to the existing one. Scoped to "terminal"
     // specifically since SFTP sessions are allowed to coexist alongside
-    // (or instead of) a terminal session for the same host.
-    const existing = openSessions.find((s) => s.host.id === host.id && s.kind === "terminal");
+    // (or instead of) a terminal session for the same host. Reads fresh
+    // from the store rather than the component's own `openSessions` -
+    // handleOpenWorkspace calls this repeatedly in a tight loop with
+    // `await`s in between, and the closure over this render's
+    // `openSessions` would otherwise still show the state from before any
+    // of those awaited opens actually landed.
+    const existing = useSessionsStore
+      .getState()
+      .openSessions.find((s) => s.host.id === host.id && s.kind === "terminal");
     if (existing) {
       setMainView({ type: "session", tabId: existing.tabId });
       // Auto-hide so the terminal gets the room, matching a brand-new
@@ -282,6 +331,71 @@ export default function AppShell() {
     }
   }
 
+  // Splitting a pane connects to the same host the tab is already open to -
+  // still goes through the shared VPN gate (ensureVpnUp), since a VPN that
+  // was up when the tab first opened could have dropped since. Reads fresh
+  // from the store for the same reason as handleConnect's `existing` lookup
+  // above - handleOpenWorkspace calls this in a loop across several awaits.
+  async function handleAddPane(tabId: string) {
+    const session = useSessionsStore.getState().openSessions.find((s) => s.tabId === tabId);
+    if (!session) return;
+    if (!(await ensureVpnUp(session.host))) return;
+    addPane(tabId);
+  }
+
+  // A pane's own "Close" button reads as "close the tab" when it's the
+  // tab's only pane (matching every single-pane tab's existing behavior),
+  // and as "close just this pane" once there's more than one.
+  function handleClosePane(tabId: string, paneId: string) {
+    const session = openSessions.find((s) => s.tabId === tabId);
+    if (!session || session.panes.length <= 1) {
+      handleCloseTab(tabId);
+      return;
+    }
+    closePane(tabId, paneId);
+  }
+
+  // Captures exactly what's open right now - host, kind, and pane count per
+  // tab - as a named snapshot. Not an auto-restored session: reopening it
+  // later is always an explicit "Open" click (see WorkspacesPanel.tsx).
+  async function handleSaveCurrentLayout(label: string) {
+    await createWorkspace(
+      label,
+      openSessions.map((s, i) => ({
+        host_id: s.host.id,
+        kind: s.kind,
+        pane_count: s.kind === "terminal" ? s.panes.length : 1,
+        sort_order: i,
+      })),
+    );
+  }
+
+  // Replays a saved workspace's tabs through the exact same handleConnect/
+  // handleOpenSftp/handleAddPane paths every other entry point uses, so VPN
+  // gating and the duplicate-tab guard apply automatically rather than
+  // needing a parallel connect flow here. A tab whose host was deleted
+  // since the workspace was saved is silently skipped - the CASCADE on
+  // workspace_tabs.host_id already dropped its row backend-side.
+  async function handleOpenWorkspace(workspace: Workspace) {
+    const tabs = await workspaceListTabs(workspace.id);
+    for (const tab of [...tabs].sort((a, b) => a.sort_order - b.sort_order)) {
+      const host = hosts.find((h) => h.id === tab.host_id);
+      if (!host) continue;
+      if (tab.kind === "sftp") {
+        await handleOpenSftp(host);
+        continue;
+      }
+      await handleConnect(host);
+      const openedTabId = useSessionsStore
+        .getState()
+        .openSessions.find((s) => s.host.id === host.id && s.kind === "terminal")?.tabId;
+      if (!openedTabId) continue;
+      for (let i = 1; i < tab.pane_count; i++) {
+        await handleAddPane(openedTabId);
+      }
+    }
+  }
+
   // VSCode's own Activity Bar behavior: clicking the already-active item
   // toggles the Primary Side Bar; clicking a different one switches to it
   // and makes sure the sidebar is showing (so it doesn't seem to do nothing
@@ -294,6 +408,25 @@ export default function AppShell() {
       setLeftSidebarVisible(true);
     }
   }
+
+  // Static navigation/creation actions for the Ctrl/Cmd+K command palette -
+  // host quick-open is handled separately inside CommandPalette itself
+  // (it needs live host search, not a fixed list). "New Host"/"New Group"
+  // go through the same openModal used by every other "+ New" entry point
+  // so the inline form panel opens exactly the way it already does
+  // elsewhere.
+  const paletteActions: PaletteAction[] = [
+    { id: "new-host", label: "New Host", run: () => openModal({ kind: "host" }) },
+    { id: "new-group", label: "New Group", run: () => openModal({ kind: "group" }) },
+    { id: "go-hosts", label: "Go to Hosts", run: () => handleActivitySelect("hosts") },
+    { id: "go-identities", label: "Go to Identities", run: () => handleActivitySelect("identities") },
+    { id: "go-keys", label: "Go to Keys", run: () => handleActivitySelect("keys") },
+    { id: "go-vpn", label: "Go to VPN", run: () => handleActivitySelect("vpn") },
+    { id: "go-workspaces", label: "Go to Workspaces", run: () => handleActivitySelect("workspaces") },
+    { id: "go-backup", label: "Go to Backup", run: () => handleActivitySelect("backup") },
+    { id: "go-settings", label: "Go to Settings (Known Hosts, etc.)", run: () => handleActivitySelect("settings") },
+    { id: "toggle-snippets", label: "Toggle Snippets panel", run: () => toggleSnippetsDrawer() },
+  ];
 
   async function handleExportCsv() {
     setCsvError(null);
@@ -341,7 +474,11 @@ export default function AppShell() {
 
   function hostMatchesGridSearch(host: Host): boolean {
     if (!hostsGridQuery) return true;
-    return host.label.toLowerCase().includes(hostsGridQuery) || host.hostname.toLowerCase().includes(hostsGridQuery);
+    return (
+      host.label.toLowerCase().includes(hostsGridQuery) ||
+      host.hostname.toLowerCase().includes(hostsGridQuery) ||
+      host.tags.some((t) => t.label.toLowerCase().includes(hostsGridQuery))
+    );
   }
 
   // A group stays visible while searching if any host anywhere inside it
@@ -561,8 +698,9 @@ export default function AppShell() {
                 // SFTP tabs don't report a connect/error lifecycle into
                 // sessionsStore the way terminal tabs do - only style the dot
                 // by real status for terminal sessions, otherwise fall back
-                // to plain active/inactive coloring.
-                const status = s.kind === "terminal" ? sessionStatuses[s.tabId] : undefined;
+                // to plain active/inactive coloring. A split tab's dot
+                // reflects its first (primary) pane specifically.
+                const status = s.kind === "terminal" ? sessionStatuses[s.panes[0]?.paneId] : undefined;
                 const statusLabel =
                   status === "connected"
                     ? "Connected"
@@ -763,6 +901,13 @@ export default function AppShell() {
                 onEdit={(profile) => openModal({ kind: "vpn-profile", profile })}
               />
             )}
+            {mainView.type === "manage" && mainView.tab === "workspaces" && (
+              <WorkspacesPanel
+                hasOpenSessions={openSessions.length > 0}
+                onSaveCurrentLayout={handleSaveCurrentLayout}
+                onOpen={handleOpenWorkspace}
+              />
+            )}
             {mainView.type === "manage" && mainView.tab === "backup" && <BackupPanel />}
             {mainView.type === "manage" && mainView.tab === "settings" && <SettingsPanel />}
           </div>
@@ -778,10 +923,26 @@ export default function AppShell() {
               key={s.tabId}
               className={`absolute inset-0 ${
                 mainView.type === "session" && mainView.tabId === s.tabId ? "visible" : "invisible"
-              }`}
+              } ${s.kind === "terminal" && s.panes.length > 1 ? paneGridClass(s.panes.length) : ""}`}
             >
               {s.kind === "terminal" ? (
-                <TerminalView host={s.host} tabId={s.tabId} onClose={() => handleCloseTab(s.tabId)} />
+                s.panes.map((pane, i) => (
+                  <div
+                    key={pane.paneId}
+                    className={s.panes.length > 1 ? paneCellClass(s.panes.length, i) : "h-full"}
+                  >
+                    <TerminalView
+                      host={pane.host}
+                      tabId={s.tabId}
+                      paneId={pane.paneId}
+                      paneCount={s.panes.length}
+                      broadcastEnabled={s.broadcastEnabled}
+                      onSplit={() => handleAddPane(s.tabId)}
+                      onToggleBroadcast={() => toggleBroadcast(s.tabId)}
+                      onClose={() => handleClosePane(s.tabId, pane.paneId)}
+                    />
+                  </div>
+                ))
               ) : (
                 <SftpBrowser host={s.host} onClose={() => handleCloseTab(s.tabId)} />
               )}
@@ -898,6 +1059,14 @@ export default function AppShell() {
             Close
           </button>
         </Modal>
+      )}
+      {paletteOpen && (
+        <CommandPalette
+          hosts={hosts}
+          actions={paletteActions}
+          onConnectHost={handleConnect}
+          onClose={() => setPaletteOpen(false)}
+        />
       )}
     </div>
   );

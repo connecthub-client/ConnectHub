@@ -1,7 +1,9 @@
 import { FormEvent, useState } from "react";
 import { Group } from "../../lib/tauri-bridge";
 import { useHostsStore } from "../../state/hostsStore";
+import { FieldErrors } from "../../lib/formValidation";
 import { errorClass, inputClass, labelClass, primaryButtonClass, selectClass } from "./formStyles";
+import FieldError from "./FieldError";
 import RequiredMark from "./RequiredMark";
 
 interface GroupFormProps {
@@ -18,11 +20,17 @@ export default function GroupForm({ group, defaultParentId, onDone }: GroupFormP
   const [name, setName] = useState(group?.name ?? "");
   const [parentId, setParentId] = useState(group?.parent_id ?? defaultParentId ?? "");
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    setFieldErrors({});
+    if (!name.trim()) {
+      setFieldErrors({ name: "Enter a name." });
+      return;
+    }
     setSubmitting(true);
     try {
       const input = { name, parent_id: parentId || null, sort_order: group?.sort_order ?? 0 };
@@ -40,7 +48,7 @@ export default function GroupForm({ group, defaultParentId, onDone }: GroupFormP
   }
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form onSubmit={handleSubmit} noValidate>
       <label className={labelClass}>
         Name
         <RequiredMark />
@@ -52,6 +60,7 @@ export default function GroupForm({ group, defaultParentId, onDone }: GroupFormP
         className={inputClass}
         required
       />
+      <FieldError message={fieldErrors.name} />
 
       <label className={labelClass}>Parent group</label>
       <select

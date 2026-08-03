@@ -1,6 +1,50 @@
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior};
+use serde::Serialize;
 
 use crate::error::{AppError, AppResult};
+
+#[derive(Debug, Clone, Serialize)]
+pub struct KnownHost {
+    pub hostname: String,
+    pub port: u16,
+    pub key_fingerprint: String,
+    pub accepted_at: String,
+}
+
+// Settings' Known Hosts panel - lets a user review/remove a pinned
+// fingerprint instead of only ever trusting one via TOFU at connect time.
+// Goes through the normal AppState.db connection (a plain read), unlike
+// verify_or_trust above which is called mid-SSH-handshake from
+// ClientHandler's own separate connection.
+pub fn list(conn: &Connection) -> AppResult<Vec<KnownHost>> {
+    let mut stmt = conn.prepare(
+        "SELECT hostname, port, key_fingerprint, accepted_at FROM known_hosts
+         ORDER BY hostname, port",
+    )?;
+    let rows = stmt.query_map((), |row| {
+        Ok(KnownHost {
+            hostname: row.get(0)?,
+            port: row.get(1)?,
+            key_fingerprint: row.get(2)?,
+            accepted_at: row.get(3)?,
+        })
+    })?;
+    Ok(rows.collect::<Result<Vec<_>, _>>()?)
+}
+
+// Removing a pin doesn't need to touch anything else - the next connect to
+// this (hostname, port) just runs verify_or_trust's None branch again,
+// re-trusting whatever key it sees exactly like a first-ever connection.
+pub fn delete(conn: &Connection, hostname: &str, port: u16) -> AppResult<()> {
+    let changed = conn.execute(
+        "DELETE FROM known_hosts WHERE hostname = ?1 AND port = ?2",
+        (hostname, port),
+    )?;
+    if changed == 0 {
+        return Err(AppError::NotFound);
+    }
+    Ok(())
+}
 
 pub fn init_schema(conn: &Connection) -> AppResult<()> {
     conn.execute(
@@ -110,6 +154,39 @@ mod tests {
         verify_or_trust(&mut conn, "example.com", 22, "SHA256:abc").unwrap();
         let result = verify_or_trust(&mut conn, "example.com", 22, "SHA256:different");
         assert!(matches!(result, Err(AppError::HostKeyMismatch { .. })));
+    }
+
+    #[test]
+    fn list_returns_every_pinned_host() {
+        let mut conn = test_conn();
+        verify_or_trust(&mut conn, "a.example.com", 22, "SHA256:aaa").unwrap();
+        verify_or_trust(&mut conn, "b.example.com", 2222, "SHA256:bbb").unwrap();
+
+        let listed = list(&conn).unwrap();
+        assert_eq!(listed.len(), 2);
+        assert!(listed.iter().any(|h| h.hostname == "a.example.com" && h.port == 22));
+        assert!(listed.iter().any(|h| h.hostname == "b.example.com" && h.port == 2222));
+    }
+
+    #[test]
+    fn delete_removes_the_pin_so_the_next_connect_is_trusted_as_new() {
+        let mut conn = test_conn();
+        verify_or_trust(&mut conn, "example.com", 22, "SHA256:abc").unwrap();
+
+        delete(&conn, "example.com", 22).unwrap();
+        assert!(list(&conn).unwrap().is_empty());
+
+        // Reconnecting with a different key now succeeds as a fresh trust,
+        // not a mismatch - proving the old pin is really gone.
+        let result = verify_or_trust(&mut conn, "example.com", 22, "SHA256:different").unwrap();
+        assert!(matches!(result, HostKeyCheck::TrustedNew));
+    }
+
+    #[test]
+    fn delete_nonexistent_pin_fails() {
+        let conn = test_conn();
+        let result = delete(&conn, "nobody.example.com", 22);
+        assert!(matches!(result, Err(AppError::NotFound)));
     }
 
     #[test]

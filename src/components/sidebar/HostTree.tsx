@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Group, Host } from "../../lib/tauri-bridge";
 import { getGroupChildren } from "../../lib/groupTree";
 import { useHostsStore } from "../../state/hostsStore";
@@ -29,6 +29,35 @@ export default function HostTree(props: HostTreeProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const query = search.trim().toLowerCase();
+  const [tagFilter, setTagFilter] = useState<Set<string>>(new Set());
+  // Only tags actually assigned to at least one host - an unused tag
+  // (e.g. one someone created via TagInput then removed again) shouldn't
+  // clutter this filter row.
+  const usedTags = Array.from(
+    new Map(hosts.flatMap((h) => h.tags).map((t) => [t.id, t])).values(),
+  ).sort((a, b) => a.label.localeCompare(b.label));
+
+  // If a tag stops being used by any host (its last host was deleted, or
+  // untagged) while it's an active filter, drop it from the filter too -
+  // otherwise the chip that would let the user clear it disappears from
+  // this same list, leaving the tree stuck on "no hosts match" with no way
+  // back short of a page reload.
+  useEffect(() => {
+    const usedIds = new Set(hosts.flatMap((h) => h.tags).map((t) => t.id));
+    setTagFilter((prev) => {
+      const next = new Set([...prev].filter((id) => usedIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [hosts]);
+
+  function toggleTagFilter(id: string) {
+    setTagFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
   const { confirm, confirmDialog: groupConfirmDialog } = useConfirm();
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const {
@@ -68,17 +97,25 @@ export default function HostTree(props: HostTreeProps) {
     });
   }
 
+  const isFiltering = query !== "" || tagFilter.size > 0;
+
   function hostMatches(host: Host): boolean {
-    if (!query) return true;
-    return host.label.toLowerCase().includes(query) || host.hostname.toLowerCase().includes(query);
+    if (!isFiltering) return true;
+    const textOk =
+      !query ||
+      host.label.toLowerCase().includes(query) ||
+      host.hostname.toLowerCase().includes(query) ||
+      host.tags.some((t) => t.label.toLowerCase().includes(query));
+    const tagOk = tagFilter.size === 0 || host.tags.some((t) => tagFilter.has(t.id));
+    return textOk && tagOk;
   }
 
-  // A group is worth showing while searching if any host anywhere inside
+  // A group is worth showing while filtering if any host anywhere inside
   // it (directly, or inside a nested subgroup) matches - otherwise a
   // matching host several levels deep would have every ancestor group
   // filtered out along with it.
   function groupHasMatch(groupId: string): boolean {
-    if (!query) return true;
+    if (!isFiltering) return true;
     if (hosts.some((h) => h.group_id === groupId && hostMatches(h))) return true;
     return groups.some((g) => g.parent_id === groupId && groupHasMatch(g.id));
   }
@@ -187,7 +224,7 @@ export default function HostTree(props: HostTreeProps) {
                 className="flex flex-1 items-center gap-1.5 text-left text-slate-700 dark:text-slate-300"
               >
                 <span className="w-3 text-xs text-slate-400">
-                  {!query && collapsed.has(group.id) ? "▸" : "▾"}
+                  {!isFiltering && collapsed.has(group.id) ? "▸" : "▾"}
                 </span>
                 <span className="font-medium">{group.name}</span>
               </button>
@@ -235,7 +272,7 @@ export default function HostTree(props: HostTreeProps) {
                 </button>
               </div>
             </div>
-            {(query || !collapsed.has(group.id)) && renderLevel(group.id, depth + 1)}
+            {(isFiltering || !collapsed.has(group.id)) && renderLevel(group.id, depth + 1)}
           </div>
         ))}
 
@@ -273,7 +310,7 @@ export default function HostTree(props: HostTreeProps) {
     );
   }
 
-  const noSearchResults = query !== "" && !hosts.some(hostMatches);
+  const noFilterResults = isFiltering && !hosts.some(hostMatches);
 
   const favoriteHosts = hosts
     .filter((h) => h.is_favorite)
@@ -291,6 +328,24 @@ export default function HostTree(props: HostTreeProps) {
         placeholder="Search hosts…"
         className="mx-2 mb-2 w-[calc(100%-1rem)] rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 outline-none focus:border-teal-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
       />
+      {usedTags.length > 0 && (
+        <div className="mx-2 mb-2 flex flex-wrap gap-1">
+          {usedTags.map((tag) => (
+            <button
+              key={tag.id}
+              type="button"
+              onClick={() => toggleTagFilter(tag.id)}
+              className={`rounded-full border px-2 py-0.5 text-xs ${
+                tagFilter.has(tag.id)
+                  ? "border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-950 dark:text-teal-300"
+                  : "border-slate-300 text-slate-500 hover:border-slate-400 dark:border-slate-700 dark:text-slate-400"
+              }`}
+            >
+              {tag.label}
+            </button>
+          ))}
+        </div>
+      )}
       {groups.length > 0 && (
         <div className="mx-2 mb-2 flex gap-2 text-xs">
           <button
@@ -314,9 +369,11 @@ export default function HostTree(props: HostTreeProps) {
           {deleteError || hostDeleteError}
         </p>
       )}
-      {query ? (
-        noSearchResults ? (
-          <p className="px-2 py-4 text-sm text-slate-400">No hosts match "{search.trim()}".</p>
+      {isFiltering ? (
+        noFilterResults ? (
+          <p className="px-2 py-4 text-sm text-slate-400">
+            {query ? `No hosts match "${search.trim()}".` : "No hosts match the selected tags."}
+          </p>
         ) : (
           renderLevel(null, 0)
         )

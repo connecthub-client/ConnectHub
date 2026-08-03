@@ -8,12 +8,20 @@ use crate::error::{AppError, AppResult};
 use crate::models::group::GroupInput;
 use crate::models::host::HostInput;
 
-use super::{groups, hosts, identities};
+use super::{groups, hosts, identities, tags};
 
 // Secrets (passwords/private keys) never appear in the CSV - only enough of
 // an identity to let it be matched against one that already exists on the
 // importing machine. Re-linking credentials after import is a deliberate
 // manual step, not a gap.
+//
+// `tags` is a single cell holding every tag label joined with ";" (not ","
+// - the field itself may need commas quoted by the CSV writer, and a tag
+// label could in principle contain one; ";" avoids that ambiguity). It's
+// `#[serde(default)]` so a CSV exported before this column existed still
+// imports cleanly (missing column -> empty string -> no tags), matching how
+// the 1.1.0 jump-host column *removal* was handled as a breaking change but
+// a column *addition* here deliberately isn't.
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct HostRecord {
     label: String,
@@ -23,6 +31,8 @@ struct HostRecord {
     identity_label: String,
     identity_username: String,
     notes: String,
+    #[serde(default)]
+    tags: String,
 }
 
 fn group_path(id: Uuid, by_id: &HashMap<Uuid, (String, Option<Uuid>)>) -> String {
@@ -77,6 +87,7 @@ pub fn export_csv(conn: &Connection) -> AppResult<String> {
                 identity_label,
                 identity_username,
                 notes: host.notes.clone().unwrap_or_default(),
+                tags: host.tags.iter().map(|t| t.label.as_str()).collect::<Vec<_>>().join(";"),
             })
             .map_err(|e| AppError::Csv(e.to_string()))?;
     }
@@ -145,6 +156,14 @@ fn resolve_group_path(
     Ok(parent_id)
 }
 
+fn parse_tag_labels(raw: &str) -> Vec<String> {
+    raw.split(';').map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect()
+}
+
+fn resolve_tag_ids(conn: &Connection, labels: &[String]) -> AppResult<Vec<Uuid>> {
+    labels.iter().map(|label| tags::get_or_create(conn, label).map(|t| t.id)).collect()
+}
+
 pub fn import_csv(conn: &Connection, content: &str) -> AppResult<ImportSummary> {
     let mut reader = csv::Reader::from_reader(content.as_bytes());
     let records: Vec<HostRecord> = reader
@@ -201,6 +220,7 @@ pub fn import_csv(conn: &Connection, content: &str) -> AppResult<ImportSummary> 
         }
 
         let notes = if record.notes.trim().is_empty() { None } else { Some(record.notes.clone()) };
+        let tag_labels = parse_tag_labels(&record.tags);
 
         match existing_by_label.get(&record.label) {
             // Update in place: preserves the host's id (and anything
@@ -208,9 +228,19 @@ pub fn import_csv(conn: &Connection, content: &str) -> AppResult<ImportSummary> 
             // vpn_profile_id/color - none of which the CSV format carries -
             // rather than creating a second host with the same label, or
             // blanking those fields, every time the same export is
-            // re-imported.
+            // re-imported. Tags follow the same rule despite being a real
+            // column in this format: an empty tags cell (including one from
+            // a CSV exported before this column existed) preserves the
+            // host's current tags rather than clearing them, since there's
+            // no way to tell "explicitly no tags" apart from "this cell
+            // just wasn't set."
             Some(existing) => {
                 updated += 1;
+                let tag_ids = if tag_labels.is_empty() {
+                    existing.tags.iter().map(|t| t.id).collect()
+                } else {
+                    resolve_tag_ids(conn, &tag_labels)?
+                };
                 hosts::update(
                     conn,
                     existing.id,
@@ -225,6 +255,7 @@ pub fn import_csv(conn: &Connection, content: &str) -> AppResult<ImportSummary> 
                         icon: existing.icon.clone(),
                         notes,
                         sort_order: existing.sort_order,
+                        tag_ids,
                     },
                 )?;
             }
@@ -243,6 +274,7 @@ pub fn import_csv(conn: &Connection, content: &str) -> AppResult<ImportSummary> 
                         icon: None,
                         notes,
                         sort_order: 0,
+                        tag_ids: resolve_tag_ids(conn, &tag_labels)?,
                     },
                 )?;
             }
@@ -303,6 +335,7 @@ mod tests {
             },
         )
         .unwrap();
+        let prod = tags::get_or_create(&conn, "prod").unwrap();
         hosts::create(
             &conn,
             HostInput {
@@ -316,6 +349,7 @@ mod tests {
                 icon: None,
                 notes: Some("primary web node".into()),
                 sort_order: 0,
+                tag_ids: vec![prod.id],
             },
         )
         .unwrap();
@@ -325,8 +359,57 @@ mod tests {
         assert!(csv.contains("deploy"));
         assert!(csv.contains("root"));
         assert!(csv.contains("primary web node"));
+        assert!(csv.contains("prod"));
         // Secrets must never appear in the export.
         assert!(!csv.contains("hunter2"));
+    }
+
+    #[test]
+    fn import_roundtrips_tags_and_creates_them_as_needed() {
+        let conn = test_conn();
+        let csv = "label,hostname,port,group_path,identity_label,identity_username,notes,tags\n\
+                   web-1,10.0.0.5,22,,,,,prod;db\n";
+
+        let summary = import_csv(&conn, csv).unwrap();
+        assert_eq!(summary.imported, 1);
+
+        let host = hosts::list(&conn).unwrap().into_iter().find(|h| h.label == "web-1").unwrap();
+        let mut labels: Vec<&str> = host.tags.iter().map(|t| t.label.as_str()).collect();
+        labels.sort();
+        assert_eq!(labels, vec!["db", "prod"]);
+        assert_eq!(tags::list(&conn).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn import_without_a_tags_column_leaves_hosts_untagged() {
+        let conn = test_conn();
+        let csv = "label,hostname,port,group_path,identity_label,identity_username,notes\n\
+                   web-1,10.0.0.5,22,,,,\n";
+
+        import_csv(&conn, csv).unwrap();
+
+        let host = hosts::list(&conn).unwrap().into_iter().find(|h| h.label == "web-1").unwrap();
+        assert!(host.tags.is_empty());
+    }
+
+    #[test]
+    fn reimporting_with_an_empty_tags_cell_preserves_existing_tags() {
+        let conn = test_conn();
+        let csv = "label,hostname,port,group_path,identity_label,identity_username,notes,tags\n\
+                   web-1,10.0.0.5,22,,,,,prod\n";
+        import_csv(&conn, csv).unwrap();
+
+        // Re-import the same host via an old-format CSV with no tags
+        // column at all - must not wipe the tag just set above.
+        let old_format_csv = "label,hostname,port,group_path,identity_label,identity_username,notes\n\
+                               web-1,10.0.0.99,22,,,,\n";
+        let result = import_csv(&conn, old_format_csv).unwrap();
+        assert_eq!((result.imported, result.updated), (0, 1));
+
+        let host = hosts::list(&conn).unwrap().into_iter().find(|h| h.label == "web-1").unwrap();
+        assert_eq!(host.hostname, "10.0.0.99");
+        assert_eq!(host.tags.len(), 1);
+        assert_eq!(host.tags[0].label, "prod");
     }
 
     #[test]
@@ -481,6 +564,7 @@ mod tests {
                 icon: host.icon.clone(),
                 notes: host.notes.clone(),
                 sort_order: host.sort_order,
+                tag_ids: host.tags.iter().map(|t| t.id).collect(),
             },
         )
         .unwrap();

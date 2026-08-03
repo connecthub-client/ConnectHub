@@ -5,7 +5,9 @@ pub mod hosts;
 pub mod identities;
 pub mod snippets;
 pub mod ssh_keys;
+pub mod tags;
 pub mod vpn_profiles;
+pub mod workspaces;
 
 use rusqlite::Connection;
 
@@ -76,6 +78,43 @@ pub fn init_schema(conn: &Connection) -> AppResult<()> {
             label TEXT NOT NULL,
             body TEXT NOT NULL,
             created_at TEXT NOT NULL
+        );
+
+        -- Both tables are wholly new (not columns bolted onto an existing
+        -- table), so - unlike hosts.vpn_profile_id/is_favorite/icon below -
+        -- CREATE TABLE IF NOT EXISTS alone is enough on both fresh and
+        -- migrated installs; no add_column_if_missing backfill applies.
+        CREATE TABLE IF NOT EXISTS tags (
+            id TEXT PRIMARY KEY,
+            label TEXT NOT NULL UNIQUE
+        );
+
+        CREATE TABLE IF NOT EXISTS host_tags (
+            host_id TEXT NOT NULL REFERENCES hosts(id) ON DELETE CASCADE,
+            tag_id TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+            PRIMARY KEY (host_id, tag_id)
+        );
+
+        -- A workspace is an on-demand, named snapshot of which tabs (and
+        -- how many panes each) were open at save time - not an
+        -- auto-restored session. workspace_tabs.host_id cascades on host
+        -- delete (unlike hosts.group_id's ON DELETE SET NULL) since a tab
+        -- with no host to open doesn't mean anything - the whole row, not
+        -- just the reference, should go.
+        CREATE TABLE IF NOT EXISTS workspaces (
+            id TEXT PRIMARY KEY,
+            label TEXT NOT NULL,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS workspace_tabs (
+            id TEXT PRIMARY KEY,
+            workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+            host_id TEXT NOT NULL REFERENCES hosts(id) ON DELETE CASCADE,
+            kind TEXT NOT NULL,
+            pane_count INTEGER NOT NULL DEFAULT 1,
+            sort_order INTEGER NOT NULL DEFAULT 0
         );
 
         -- Bundled into the vault backup itself (not device-specific) so a

@@ -103,7 +103,10 @@ export default function HostContextPanel({
   const openSessions = useSessionsStore((s) => s.openSessions);
   const sessionIds = useSessionsStore((s) => s.sessionIds);
   const terminalTab = openSessions.find((s) => s.host.id === host.id && s.kind === "terminal");
-  const liveSessionId = terminalTab ? sessionIds[terminalTab.tabId] : undefined;
+  // The tab's primary (first) pane - Quick Commands writes into whichever
+  // pane was there before any splitting, same target as before this feature
+  // existed for a still-single-pane tab.
+  const liveSessionId = terminalTab ? sessionIds[terminalTab.panes[0]?.paneId] : undefined;
 
   const identity = identities.find((i) => i.id === host.identity_id);
   const vpnProfile = host.vpn_profile_id
@@ -309,6 +312,21 @@ export default function HostContextPanel({
             <dd className="text-slate-900 dark:text-slate-100">{host.port}</dd>
             <dt className="text-slate-500 dark:text-slate-400">User</dt>
             <dd className="text-slate-900 dark:text-slate-100">{identity?.username ?? "—"}</dd>
+            {host.tags.length > 0 && (
+              <>
+                <dt className="text-slate-500 dark:text-slate-400">Tags</dt>
+                <dd className="flex flex-wrap gap-1">
+                  {host.tags.map((tag) => (
+                    <span
+                      key={tag.id}
+                      className="rounded-full bg-teal-50 px-1.5 py-0.5 text-xs text-teal-700 dark:bg-teal-950 dark:text-teal-300"
+                    >
+                      {tag.label}
+                    </span>
+                  ))}
+                </dd>
+              </>
+            )}
             {vpnProfile && (
               <>
                 <dt className="text-slate-500 dark:text-slate-400">VPN profile</dt>

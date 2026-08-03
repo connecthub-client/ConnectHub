@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import AppShell from "./pages/AppShell";
-import { vaultAutoUnlock } from "./lib/tauri-bridge";
+import VaultLockOverlay from "./components/common/VaultLockOverlay";
+import { useIdleTimer } from "./components/common/useIdleTimer";
+import { vaultAutoUnlock, vaultLock } from "./lib/tauri-bridge";
 import { useSettingsStore } from "./state/settingsStore";
 import "./App.css";
 
@@ -40,6 +42,9 @@ type BootState = "loading" | "ready" | "error";
 function App() {
   const [boot, setBoot] = useState<BootState>("loading");
   const [error, setError] = useState<string | null>(null);
+  const [locked, setLocked] = useState(false);
+  const vaultAutoLockEnabled = useSettingsStore((s) => s.vaultAutoLockEnabled);
+  const vaultAutoLockMinutes = useSettingsStore((s) => s.vaultAutoLockMinutes);
 
   useThemeEffect();
 
@@ -54,6 +59,15 @@ function App() {
       }
     })();
   }, []);
+
+  useIdleTimer(boot === "ready" && vaultAutoLockEnabled && !locked, vaultAutoLockMinutes * 60_000, () => {
+    setLocked(true);
+    // Best-effort: the lock overlay already blocks all interaction
+    // regardless, but clearing the in-memory key too means any
+    // secret-decrypting command genuinely fails while locked, not just
+    // visually.
+    vaultLock().catch(() => {});
+  });
 
   if (boot === "loading") {
     return (
@@ -71,7 +85,12 @@ function App() {
     );
   }
 
-  return <AppShell />;
+  return (
+    <>
+      <AppShell />
+      {locked && <VaultLockOverlay onUnlocked={() => setLocked(false)} />}
+    </>
+  );
 }
 
 export default App;

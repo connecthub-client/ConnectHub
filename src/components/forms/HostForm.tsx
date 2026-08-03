@@ -3,8 +3,11 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { AuthMethod, Host, localReadTextFile } from "../../lib/tauri-bridge";
 import { useHostsStore } from "../../state/hostsStore";
 import { useVpnStore } from "../../state/vpnStore";
+import { FieldErrors } from "../../lib/formValidation";
 import { errorClass, inputClass, labelClass, primaryButtonClass, selectClass } from "./formStyles";
+import FieldError from "./FieldError";
 import RequiredMark from "./RequiredMark";
+import TagInput from "./TagInput";
 import { CLOUD_ICONS, HOST_ICONS, LETTER_ICONS, HostIcon } from "../common/hostIcons";
 
 interface HostFormProps {
@@ -49,6 +52,7 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
   const [color, setColor] = useState<string | null>(host?.color ?? null);
   const [icon, setIcon] = useState<string | null>(host?.icon ?? null);
   const [showLetterIcons, setShowLetterIcons] = useState(false);
+  const [tagIds, setTagIds] = useState<string[]>(host?.tags.map((t) => t.id) ?? []);
 
   const [identityMode, setIdentityMode] = useState<"new" | "existing">(
     host?.identity_id ? "existing" : "new",
@@ -75,6 +79,7 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
 
   const [notes, setNotes] = useState(host?.notes ?? "");
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
 
   async function handleBrowseKey() {
@@ -125,14 +130,17 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
     const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
     const connectAfterSave = submitter?.value === "connect";
 
+    const errors: FieldErrors = {};
+    if (!label.trim()) errors.label = "Enter a label.";
+    if (!hostname.trim()) errors.hostname = "Enter a hostname or IP.";
+    if (!port || port < 1 || port > 65535) errors.port = "Enter a port between 1 and 65535.";
+
     if (identityMode === "new" && authMethod === "private_key") {
       if (keyMode === "existing" && !sshKeyId) {
-        setError("Select an SSH key, or switch to \"Import new key\".");
-        return;
+        errors.sshKeyId = "Select an SSH key, or switch to \"Import new key\".";
       }
       if (keyMode === "import" && !importKeyPem) {
-        setError("Upload or paste a private key, or switch to \"Use saved key\".");
-        return;
+        errors.importKeyPem = "Upload or paste a private key, or switch to \"Use saved key\".";
       }
     }
     // Credential data (a password, or a selected/imported key) only ever
@@ -146,14 +154,14 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
         (authMethod === "password" && password) ||
         (authMethod === "private_key" && ((keyMode === "existing" && sshKeyId) || (keyMode === "import" && importKeyPem)));
       if (hasCredentialData) {
-        setError("Enter a username, or clear the password/key to skip creating credentials for this host.");
-        return;
+        errors.username = "Enter a username, or clear the password/key to skip creating credentials for this host.";
       }
     }
     if (vpnMode === "new" && !vpnConfig) {
-      setError("Upload or paste a .ovpn profile, or switch VPN back to \"None\".");
-      return;
+      errors.vpnConfig = "Upload or paste a .ovpn profile, or switch VPN back to \"None\".";
     }
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
 
     setSubmitting(true);
     try {
@@ -204,6 +212,7 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
         icon,
         notes: notes || null,
         sort_order: host?.sort_order ?? 0,
+        tag_ids: tagIds,
       };
       const savedHost = host ? await updateHost(host.id, input) : await createHost(input);
       if (connectAfterSave && onSaveAndConnect) {
@@ -219,7 +228,7 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
   }
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form onSubmit={handleSubmit} noValidate>
       <label className={labelClass}>
         Label
         <RequiredMark />
@@ -232,6 +241,7 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
         placeholder="e.g. prod-web-1"
         required
       />
+      <FieldError message={fieldErrors.label} />
 
       <div className="flex gap-3">
         <div className="flex-1">
@@ -245,6 +255,7 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
             className={inputClass}
             required
           />
+          <FieldError message={fieldErrors.hostname} />
         </div>
         <div className="w-24">
           <label className={labelClass}>
@@ -260,6 +271,7 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
             className={inputClass}
             required
           />
+          <FieldError message={fieldErrors.port} />
         </div>
       </div>
 
@@ -364,6 +376,9 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
         </div>
       )}
 
+      <label className={labelClass}>Tags (optional)</label>
+      <TagInput selectedTagIds={tagIds} onChange={setTagIds} />
+
       <label className={labelClass}>Credentials</label>
       {identities.length > 0 && (
         <div className="mb-4 flex rounded-lg border border-slate-300 p-1 text-sm dark:border-slate-700">
@@ -406,6 +421,7 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
             className={inputClass}
             placeholder="e.g. root"
           />
+          <FieldError message={fieldErrors.username} />
 
           <label className={labelClass}>Authentication</label>
           <div className="mb-4 flex gap-4 text-sm text-slate-700 dark:text-slate-300">
@@ -472,7 +488,9 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
                     </option>
                   ))}
                 </select>
-              ) : (
+              ) : null}
+              <FieldError message={fieldErrors.sshKeyId} />
+              {!(keyMode === "existing" && keys.length > 0) && (
                 <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
                   <label className={labelClass}>Label</label>
                   <input
@@ -500,6 +518,7 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
                     className={`${inputClass} h-28 font-mono text-xs`}
                     placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
                   />
+                  <FieldError message={fieldErrors.importKeyPem} />
 
                   <label className={labelClass}>Passphrase (if the key is encrypted)</label>
                   <input
@@ -590,6 +609,7 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
             className={`${inputClass} h-28 font-mono text-xs`}
             placeholder="Paste an .ovpn file's contents, or browse to one above"
           />
+          <FieldError message={fieldErrors.vpnConfig} />
 
           <label className="mb-3 flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
             <input

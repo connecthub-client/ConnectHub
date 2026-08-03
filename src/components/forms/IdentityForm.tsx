@@ -1,7 +1,9 @@
 import { FormEvent, useState } from "react";
 import { AuthMethod, Identity } from "../../lib/tauri-bridge";
 import { useHostsStore } from "../../state/hostsStore";
+import { FieldErrors } from "../../lib/formValidation";
 import { errorClass, inputClass, labelClass, primaryButtonClass, selectClass } from "./formStyles";
+import FieldError from "./FieldError";
 import RequiredMark from "./RequiredMark";
 
 interface IdentityFormProps {
@@ -20,11 +22,18 @@ export default function IdentityForm({ identity, onDone }: IdentityFormProps) {
   const [sshKeyId, setSshKeyId] = useState(identity?.ssh_key_id ?? "");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    const errors: FieldErrors = {};
+    if (!label.trim()) errors.label = "Enter a label.";
+    if (!username.trim()) errors.username = "Enter a username.";
+    if (authMethod === "private_key" && !sshKeyId) errors.sshKeyId = "Select an SSH key.";
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
     setSubmitting(true);
     try {
       const input = {
@@ -50,7 +59,7 @@ export default function IdentityForm({ identity, onDone }: IdentityFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form onSubmit={handleSubmit} noValidate>
       <label className={labelClass}>
         Label
         <RequiredMark />
@@ -63,6 +72,7 @@ export default function IdentityForm({ identity, onDone }: IdentityFormProps) {
         placeholder="e.g. prod deploy user"
         required
       />
+      <FieldError message={fieldErrors.label} />
 
       <label className={labelClass}>
         Username
@@ -74,6 +84,7 @@ export default function IdentityForm({ identity, onDone }: IdentityFormProps) {
         className={inputClass}
         required
       />
+      <FieldError message={fieldErrors.username} />
 
       <label className={labelClass}>Authentication method</label>
       <select
@@ -130,6 +141,7 @@ export default function IdentityForm({ identity, onDone }: IdentityFormProps) {
               </option>
             ))}
           </select>
+          <FieldError message={fieldErrors.sshKeyId} />
         </>
       )}
 

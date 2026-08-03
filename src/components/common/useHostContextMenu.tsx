@@ -61,6 +61,7 @@ export function useHostContextMenu(onConnectHost: (host: Host) => void, onEditHo
       icon: host.icon,
       notes: host.notes,
       sort_order: host.sort_order,
+      tag_ids: host.tags.map((t) => t.id),
     });
   }
 

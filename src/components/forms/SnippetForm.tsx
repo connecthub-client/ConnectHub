@@ -1,7 +1,9 @@
 import { FormEvent, useState } from "react";
 import { Snippet } from "../../lib/tauri-bridge";
 import { useSnippetsStore } from "../../state/snippetsStore";
+import { FieldErrors } from "../../lib/formValidation";
 import { errorClass, inputClass, labelClass, primaryButtonClass } from "./formStyles";
+import FieldError from "./FieldError";
 import RequiredMark from "./RequiredMark";
 
 interface SnippetFormProps {
@@ -16,11 +18,17 @@ export default function SnippetForm({ snippet, onDone }: SnippetFormProps) {
   const [label, setLabel] = useState(snippet?.label ?? "");
   const [body, setBody] = useState(snippet?.body ?? "");
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    const errors: FieldErrors = {};
+    if (!label.trim()) errors.label = "Enter a label.";
+    if (!body.trim()) errors.body = "Enter a command.";
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
     setSubmitting(true);
     try {
       const input = { label, body };
@@ -38,7 +46,7 @@ export default function SnippetForm({ snippet, onDone }: SnippetFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form onSubmit={handleSubmit} noValidate>
       <label className={labelClass}>
         Label
         <RequiredMark />
@@ -51,6 +59,7 @@ export default function SnippetForm({ snippet, onDone }: SnippetFormProps) {
         placeholder="e.g. disk usage"
         required
       />
+      <FieldError message={fieldErrors.label} />
 
       <label className={labelClass}>
         Command
@@ -63,6 +72,7 @@ export default function SnippetForm({ snippet, onDone }: SnippetFormProps) {
         placeholder="df -h"
         required
       />
+      <FieldError message={fieldErrors.body} />
 
       {error && <p className={errorClass}>{error}</p>}
 

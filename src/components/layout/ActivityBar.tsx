@@ -5,6 +5,7 @@ const ITEMS: { tab: string; icon: NavIconKey; label: string }[] = [
   { tab: "identities", icon: "identities", label: "Identities" },
   { tab: "keys", icon: "keys", label: "Keys" },
   { tab: "vpn", icon: "vpn", label: "VPN" },
+  { tab: "workspaces", icon: "workspaces", label: "Workspaces" },
 ];
 
 // Pinned to the bottom, same as VSCode's Accounts/Settings icons.

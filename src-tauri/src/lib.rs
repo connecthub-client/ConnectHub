@@ -22,6 +22,7 @@ use commands::identity_commands::{
     identity_create, identity_delete, identity_list, identity_update,
 };
 use commands::key_commands::{key_delete, key_generate, key_import, key_list};
+use commands::known_hosts_commands::{known_hosts_delete, known_hosts_list};
 use commands::local_fs_commands::{
     local_delete, local_home_dir, local_list, local_mkdir, local_read_text_file, local_rename,
     local_write_text_file,
@@ -37,11 +38,15 @@ use commands::snippet_commands::{
     snippet_create, snippet_delete, snippet_list, snippet_run_on_hosts, snippet_update,
 };
 use commands::stats_commands::host_stats;
-use commands::vault_commands::vault_auto_unlock;
+use commands::tag_commands::{tag_create, tag_delete, tag_list};
+use commands::vault_commands::{vault_auto_unlock, vault_lock};
 use commands::vpn_commands::{
     vpn_active_statuses, vpn_connect, vpn_disconnect, vpn_disconnect_all, vpn_ensure_host_route,
     vpn_profile_create, vpn_profile_delete, vpn_profile_list, vpn_profile_update,
     vpn_setup_install, vpn_setup_status, vpn_status,
+};
+use commands::workspace_commands::{
+    workspace_create, workspace_delete, workspace_list, workspace_list_tabs, workspace_rename,
 };
 use state::AppState;
 use tauri::Manager;
@@ -55,11 +60,13 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             app_version,
             app_update_installable,
             vault_auto_unlock,
+            vault_lock,
             group_list,
             group_create,
             group_update,
@@ -72,6 +79,9 @@ pub fn run() {
             host_export_csv,
             host_import_csv,
             host_stats,
+            tag_list,
+            tag_create,
+            tag_delete,
             identity_list,
             identity_create,
             identity_update,
@@ -80,6 +90,8 @@ pub fn run() {
             key_generate,
             key_import,
             key_delete,
+            known_hosts_list,
+            known_hosts_delete,
             session_connect,
             session_write,
             session_resize,
@@ -124,6 +136,11 @@ pub fn run() {
             vpn_active_statuses,
             vpn_disconnect_all,
             vpn_ensure_host_route,
+            workspace_list,
+            workspace_list_tabs,
+            workspace_create,
+            workspace_rename,
+            workspace_delete,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

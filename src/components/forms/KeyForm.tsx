@@ -2,7 +2,9 @@ import { FormEvent, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { localReadTextFile } from "../../lib/tauri-bridge";
 import { useHostsStore } from "../../state/hostsStore";
+import { FieldErrors } from "../../lib/formValidation";
 import { errorClass, inputClass, labelClass, primaryButtonClass } from "./formStyles";
+import FieldError from "./FieldError";
 import RequiredMark from "./RequiredMark";
 
 interface KeyFormProps {
@@ -18,6 +20,7 @@ export default function KeyForm({ onDone }: KeyFormProps) {
   const [privateKeyPem, setPrivateKeyPem] = useState("");
   const [passphrase, setPassphrase] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
 
   async function handleBrowse() {
@@ -42,6 +45,13 @@ export default function KeyForm({ onDone }: KeyFormProps) {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    const errors: FieldErrors = {};
+    if (!label.trim()) errors.label = "Enter a label.";
+    if (mode === "import" && !privateKeyPem.trim()) {
+      errors.privateKeyPem = "Upload or paste a private key.";
+    }
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
     setSubmitting(true);
     try {
       if (mode === "generate") {
@@ -62,7 +72,7 @@ export default function KeyForm({ onDone }: KeyFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form onSubmit={handleSubmit} noValidate>
       <div className="mb-4 flex rounded-lg border border-slate-300 p-1 text-sm dark:border-slate-700">
         <button
           type="button"
@@ -92,6 +102,7 @@ export default function KeyForm({ onDone }: KeyFormProps) {
         placeholder="e.g. laptop key"
         required
       />
+      <FieldError message={fieldErrors.label} />
 
       {mode === "generate" ? (
         <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
@@ -119,6 +130,7 @@ export default function KeyForm({ onDone }: KeyFormProps) {
             placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
             required
           />
+          <FieldError message={fieldErrors.privateKeyPem} />
 
           <label className={labelClass}>Passphrase (if the key is encrypted)</label>
           <input

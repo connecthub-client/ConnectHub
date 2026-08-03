@@ -375,6 +375,7 @@ mod tests {
                 icon: None,
                 notes: None,
                 sort_order: 0,
+                tag_ids: Vec::new(),
             },
         )
         .unwrap();

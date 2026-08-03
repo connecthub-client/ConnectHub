@@ -1,6 +1,7 @@
 use rusqlite::Connection;
 use uuid::Uuid;
 
+use crate::data::tags;
 use crate::error::{AppError, AppResult};
 use crate::models::host::{Host, HostInput};
 
@@ -19,29 +20,40 @@ fn row_to_host(row: &rusqlite::Row) -> rusqlite::Result<Host> {
         sort_order: row.get(10)?,
         last_connected_at: row.get(11)?,
         is_favorite: row.get(12)?,
+        // Not a column on this row - filled in separately below via the
+        // host_tags join, same as every caller of row_to_host.
+        tags: Vec::new(),
     })
 }
 
 const SELECT_COLUMNS: &str = "id, group_id, label, hostname, port, identity_id, vpn_profile_id, color, icon, notes, sort_order, last_connected_at, is_favorite";
 
 pub fn get(conn: &Connection, id: Uuid) -> AppResult<Host> {
-    conn.query_row(
-        &format!("SELECT {SELECT_COLUMNS} FROM hosts WHERE id = ?1"),
-        (&id,),
-        row_to_host,
-    )
-    .map_err(|e| match e {
-        rusqlite::Error::QueryReturnedNoRows => AppError::NotFound,
-        other => AppError::Db(other),
-    })
+    let mut host = conn
+        .query_row(
+            &format!("SELECT {SELECT_COLUMNS} FROM hosts WHERE id = ?1"),
+            (&id,),
+            row_to_host,
+        )
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => AppError::NotFound,
+            other => AppError::Db(other),
+        })?;
+    host.tags = tags::list_by_host(conn, id)?;
+    Ok(host)
 }
 
 pub fn list(conn: &Connection) -> AppResult<Vec<Host>> {
     let mut stmt = conn.prepare(&format!(
         "SELECT {SELECT_COLUMNS} FROM hosts ORDER BY sort_order"
     ))?;
-    let rows = stmt.query_map((), row_to_host)?;
-    Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    let mut hosts: Vec<Host> = stmt.query_map((), row_to_host)?.collect::<Result<Vec<_>, _>>()?;
+
+    let mut tags_by_host = tags::list_by_host_bulk(conn)?;
+    for host in &mut hosts {
+        host.tags = tags_by_host.remove(&host.id).unwrap_or_default();
+    }
+    Ok(hosts)
 }
 
 // Every host that shares a given VPN profile - used at connect time to
@@ -74,22 +86,12 @@ pub fn create(conn: &Connection, input: HostInput) -> AppResult<Host> {
             input.sort_order,
         ],
     )?;
+    tags::set_host_tags(conn, id, &input.tag_ids)?;
 
-    Ok(Host {
-        id,
-        group_id: input.group_id,
-        label: input.label,
-        hostname: input.hostname,
-        port: input.port,
-        identity_id: input.identity_id,
-        vpn_profile_id: input.vpn_profile_id,
-        color: input.color,
-        icon: input.icon,
-        notes: input.notes,
-        sort_order: input.sort_order,
-        last_connected_at: None,
-        is_favorite: false,
-    })
+    // Re-fetch rather than reconstruct by hand - same rationale as update()
+    // below, now also true of `tags` (populated by a join, not returned by
+    // the INSERT).
+    get(conn, id)
 }
 
 pub fn update(conn: &Connection, id: Uuid, input: HostInput) -> AppResult<Host> {
@@ -113,6 +115,7 @@ pub fn update(conn: &Connection, id: Uuid, input: HostInput) -> AppResult<Host> 
     if changed == 0 {
         return Err(AppError::NotFound);
     }
+    tags::set_host_tags(conn, id, &input.tag_ids)?;
 
     // Re-fetch rather than reconstruct by hand: `is_favorite` (and
     // `last_connected_at`) aren't part of `HostInput` - they're toggled
@@ -173,6 +176,7 @@ mod tests {
             icon: None,
             notes: None,
             sort_order: 0,
+            tag_ids: Vec::new(),
         }
     }
 
@@ -188,6 +192,40 @@ mod tests {
 
         let cleared = update(&conn, created.id, HostInput { icon: None, ..input() }).unwrap();
         assert_eq!(cleared.icon, None);
+    }
+
+    #[test]
+    fn create_and_update_roundtrip_tags() {
+        let conn = test_conn();
+        let prod = crate::data::tags::get_or_create(&conn, "prod").unwrap();
+        let db = crate::data::tags::get_or_create(&conn, "db").unwrap();
+
+        let created = create(&conn, HostInput { tag_ids: vec![prod.id], ..input() }).unwrap();
+        assert_eq!(created.tags.len(), 1);
+        assert_eq!(created.tags[0].label, "prod");
+
+        let updated =
+            update(&conn, created.id, HostInput { tag_ids: vec![prod.id, db.id], ..input() }).unwrap();
+        let mut labels: Vec<&str> = updated.tags.iter().map(|t| t.label.as_str()).collect();
+        labels.sort();
+        assert_eq!(labels, vec!["db", "prod"]);
+
+        let cleared = update(&conn, created.id, HostInput { tag_ids: vec![], ..input() }).unwrap();
+        assert!(cleared.tags.is_empty());
+    }
+
+    #[test]
+    fn list_includes_each_host_own_tags() {
+        let conn = test_conn();
+        let prod = crate::data::tags::get_or_create(&conn, "prod").unwrap();
+        let a = create(&conn, HostInput { label: "a".into(), tag_ids: vec![prod.id], ..input() }).unwrap();
+        let b = create(&conn, HostInput { label: "b".into(), ..input() }).unwrap();
+
+        let listed = list(&conn).unwrap();
+        let listed_a = listed.iter().find(|h| h.id == a.id).unwrap();
+        let listed_b = listed.iter().find(|h| h.id == b.id).unwrap();
+        assert_eq!(listed_a.tags.len(), 1);
+        assert!(listed_b.tags.is_empty());
     }
 
     #[test]

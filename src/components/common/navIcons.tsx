@@ -48,6 +48,14 @@ const NAV_ICON_PATHS: Record<string, ReactNode> = {
       <path d="M10 2 4 10h4l-1 6 7-9h-4l1-5Z" />
     </>
   ),
+  workspaces: (
+    <>
+      <rect x="2" y="2" width="6.2" height="6.2" rx="1" />
+      <rect x="9.8" y="2" width="6.2" height="6.2" rx="1" />
+      <rect x="2" y="9.8" width="6.2" height="6.2" rx="1" />
+      <rect x="9.8" y="9.8" width="6.2" height="6.2" rx="1" />
+    </>
+  ),
   google: (
     <>
       <circle cx="9" cy="9" r="7" />

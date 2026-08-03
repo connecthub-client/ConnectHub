@@ -2,16 +2,25 @@ import { useEffect, useState } from "react";
 import { check, Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { appUpdateInstallable, appVersion } from "../../lib/tauri-bridge";
+import {
+  appUpdateInstallable,
+  appVersion,
+  KnownHost,
+  knownHostsDelete,
+  knownHostsList,
+} from "../../lib/tauri-bridge";
 import {
   CursorStyle,
   KEYBINDINGS,
+  MAX_VAULT_AUTO_LOCK_MINUTES,
+  MIN_VAULT_AUTO_LOCK_MINUTES,
   TERMINAL_THEME_PRESETS,
   TerminalThemeKey,
   ThemeMode,
   useSettingsStore,
 } from "../../state/settingsStore";
 import { inputClass, labelClass, primaryButtonClass, selectClass } from "../forms/formStyles";
+import { useConfirm } from "../common/useConfirm";
 
 const THEME_MODES: ThemeMode[] = ["system", "light", "dark"];
 const CURSOR_STYLES: CursorStyle[] = ["block", "bar", "underline"];
@@ -206,6 +215,79 @@ function AboutSection() {
   );
 }
 
+function KnownHostsSection() {
+  const [hosts, setHosts] = useState<KnownHost[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { confirm, confirmDialog } = useConfirm();
+
+  function load() {
+    knownHostsList()
+      .then((list) => {
+        setHosts(list);
+        setLoaded(true);
+      })
+      .catch((e) => setError(String(e)));
+  }
+
+  useEffect(load, []);
+
+  async function handleDelete(host: KnownHost) {
+    const ok = await confirm(
+      `Remove the pinned key for ${host.hostname}:${host.port}? The next connection will trust whatever key it presents, same as connecting for the first time.`,
+      { danger: true },
+    );
+    if (!ok) return;
+    setError(null);
+    try {
+      await knownHostsDelete(host.hostname, host.port);
+      load();
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
+  return (
+    <section className="mb-6">
+      <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-200">Known Hosts</h3>
+      <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">
+        Host keys pinned on first connect (trust-on-first-use). Removing one doesn't affect the
+        host itself - the next connection just trusts whatever key it presents, same as connecting
+        to it for the very first time.
+      </p>
+      {error && <p className="mb-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {loaded && hosts.length === 0 && (
+        <p className="text-sm text-slate-400">No pinned host keys yet.</p>
+      )}
+      {hosts.length > 0 && (
+        <div className="divide-y divide-slate-200 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
+          {hosts.map((host) => (
+            <div
+              key={`${host.hostname}:${host.port}`}
+              className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
+            >
+              <div className="min-w-0">
+                <p className="truncate font-medium text-slate-800 dark:text-slate-200">
+                  {host.hostname}:{host.port}
+                </p>
+                <p className="truncate text-xs text-slate-400">{host.key_fingerprint}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleDelete(host)}
+                className="shrink-0 text-xs text-red-600 hover:underline dark:text-red-400"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {confirmDialog}
+    </section>
+  );
+}
+
 export default function SettingsPanel() {
   const theme = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
@@ -219,6 +301,12 @@ export default function SettingsPanel() {
   const setTerminalThemeKey = useSettingsStore((s) => s.setTerminalThemeKey);
   const autoReconnectEnabled = useSettingsStore((s) => s.autoReconnectEnabled);
   const toggleAutoReconnect = useSettingsStore((s) => s.toggleAutoReconnect);
+  const autoCopyOnSelectEnabled = useSettingsStore((s) => s.autoCopyOnSelectEnabled);
+  const toggleAutoCopyOnSelect = useSettingsStore((s) => s.toggleAutoCopyOnSelect);
+  const vaultAutoLockEnabled = useSettingsStore((s) => s.vaultAutoLockEnabled);
+  const toggleVaultAutoLock = useSettingsStore((s) => s.toggleVaultAutoLock);
+  const vaultAutoLockMinutes = useSettingsStore((s) => s.vaultAutoLockMinutes);
+  const setVaultAutoLockMinutes = useSettingsStore((s) => s.setVaultAutoLockMinutes);
 
   return (
     <div className="max-w-xl">
@@ -315,6 +403,77 @@ export default function SettingsPanel() {
           backoff before giving up. A manual "Reconnect" button is always available in the error
           banner either way.
         </p>
+
+        <div className="mt-4 flex items-center justify-between">
+          <span className={labelClass}>Copy on select</span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={autoCopyOnSelectEnabled}
+            aria-label="Copy on select"
+            onClick={toggleAutoCopyOnSelect}
+            title={
+              autoCopyOnSelectEnabled
+                ? "On: selecting text in a terminal immediately copies it to your clipboard"
+                : "Off: use Ctrl/Cmd+C, Ctrl/Cmd+Shift+C, or right-click Copy instead"
+            }
+            className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
+              autoCopyOnSelectEnabled ? "bg-teal-600" : "bg-slate-300 dark:bg-slate-700"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                autoCopyOnSelectEnabled ? "translate-x-4" : "translate-x-0"
+              }`}
+            />
+          </button>
+        </div>
+        <p className="mt-1 text-xs text-slate-400">
+          Selecting text in a terminal immediately copies it to your clipboard - no explicit copy
+          action needed. Right-click Copy/Paste and the Ctrl/Cmd+C, Ctrl/Cmd+Shift+C,
+          Ctrl/Cmd+Shift+V shortcuts always work regardless of this setting.
+        </p>
+      </section>
+
+      <section className="mb-6">
+        <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-200">Security</h3>
+        <div className="flex items-center justify-between">
+          <span className={labelClass}>Lock after inactivity</span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={vaultAutoLockEnabled}
+            aria-label="Lock after inactivity"
+            onClick={toggleVaultAutoLock}
+            className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
+              vaultAutoLockEnabled ? "bg-teal-600" : "bg-slate-300 dark:bg-slate-700"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                vaultAutoLockEnabled ? "translate-x-4" : "translate-x-0"
+              }`}
+            />
+          </button>
+        </div>
+        <p className="mt-1 text-xs text-slate-400">
+          ConnectHub has no master password, so there's no secret to prompt for here - this just
+          adds a deliberate "Unlock" click after a period of inactivity, on top of the always-open
+          default.
+        </p>
+        {vaultAutoLockEnabled && (
+          <div className="mt-3">
+            <label className={labelClass}>Minutes of inactivity before locking</label>
+            <input
+              type="number"
+              min={MIN_VAULT_AUTO_LOCK_MINUTES}
+              max={MAX_VAULT_AUTO_LOCK_MINUTES}
+              value={vaultAutoLockMinutes}
+              onChange={(e) => setVaultAutoLockMinutes(Number(e.currentTarget.value))}
+              className={`${inputClass} w-24`}
+            />
+          </div>
+        )}
       </section>
 
       <section className="mb-6">
@@ -330,6 +489,8 @@ export default function SettingsPanel() {
           ))}
         </div>
       </section>
+
+      <KnownHostsSection />
 
       <AboutSection />
     </div>

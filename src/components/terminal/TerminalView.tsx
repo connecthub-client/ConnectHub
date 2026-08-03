@@ -5,15 +5,17 @@ import { SearchAddon } from "@xterm/addon-search";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import "@xterm/xterm/css/xterm.css";
 import { sessionConnect, sessionDisconnect, sessionResize, sessionWrite } from "../../lib/tauri-bridge";
 import { Host } from "../../lib/tauri-bridge";
 import { TERMINAL_THEME_PRESETS, useSettingsStore } from "../../state/settingsStore";
 import { useHostsStore } from "../../state/hostsStore";
-import { SessionStatus, useSessionsStore } from "../../state/sessionsStore";
+import { MAX_PANES, SessionStatus, useSessionsStore } from "../../state/sessionsStore";
 import { parseRemoteHistory, rankRemoteHistory, useCommandHistoryStore } from "../../state/commandHistoryStore";
 import { useSnippetsStore } from "../../state/snippetsStore";
 import { friendlyError } from "../../lib/friendlyError";
+import { useTerminalContextMenu } from "./useTerminalContextMenu";
 
 // Reads whichever shell history file exists, most recent lines last, so
 // HostContextPanel's "Most used" can be seeded from real usage on the
@@ -47,9 +49,46 @@ const SECRET_PROMPT_RE = /password|passphrase/i;
 // surprising.
 const RECONNECT_BACKOFF_MS = [2000, 4000, 8000, 16000, 30000];
 
+// Coalesces settingsStore.autoCopyOnSelectEnabled's clipboard write - xterm
+// fires onSelectionChange on every character while a mouse-drag is active,
+// so writing to the clipboard on every single event would spam the plugin's
+// IPC call for no benefit once the drag settles.
+const SELECTION_COPY_DEBOUNCE_MS = 150;
+
+async function copySelectionToClipboard(term: Terminal) {
+  const text = term.getSelection();
+  if (!text) return; // never overwrite the clipboard with an empty selection
+  try {
+    await writeText(text);
+  } catch {
+    // best-effort, same as the remote-history fetch below
+  }
+}
+
+async function pasteFromClipboard(term: Terminal) {
+  try {
+    const text = await readText();
+    // Funneled through xterm's own paste() rather than relying on the
+    // native textarea `paste` DOM event, so every paste entry point (this,
+    // the context menu, the keyboard shortcuts) shares one mechanism.
+    if (text) term.paste(text);
+  } catch {
+    // clipboard empty/non-text - no-op
+  }
+  term.focus();
+}
+
 interface TerminalViewProps {
   host: Host;
   tabId: string;
+  paneId: string;
+  paneCount: number;
+  broadcastEnabled: boolean;
+  onSplit: () => void;
+  onToggleBroadcast: () => void;
+  // Closes this pane specifically - AppShell.tsx routes this to closing the
+  // whole tab instead when it's the tab's only remaining pane, so this
+  // button reads the same as "Close" always has for a single-pane tab.
   onClose: () => void;
 }
 
@@ -62,7 +101,16 @@ function base64ToBytes(base64: string): Uint8Array {
   return bytes;
 }
 
-export default function TerminalView({ host, tabId, onClose }: TerminalViewProps) {
+export default function TerminalView({
+  host,
+  tabId,
+  paneId,
+  paneCount,
+  broadcastEnabled,
+  onSplit,
+  onToggleBroadcast,
+  onClose,
+}: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -78,11 +126,21 @@ export default function TerminalView({ host, tabId, onClose }: TerminalViewProps
   // component's own header) can show live connection status too.
   function setStatus(next: SessionStatus) {
     setLocalStatus(next);
-    useSessionsStore.getState().setStatus(tabId, next);
+    useSessionsStore.getState().setStatus(paneId, next);
   }
   const [error, setError] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const { openContextMenu, menu: terminalContextMenu } = useTerminalContextMenu({
+    onCopy: () => {
+      const term = termRef.current;
+      if (term) void copySelectionToClipboard(term);
+    },
+    onPaste: () => {
+      const term = termRef.current;
+      if (term) void pasteFromClipboard(term);
+    },
+  });
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -120,12 +178,42 @@ export default function TerminalView({ host, tabId, onClose }: TerminalViewProps
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== "keydown") return true;
       const mod = e.ctrlKey || e.metaKey;
-      if (mod && e.key.toLowerCase() === "f") {
+      const key = e.key.toLowerCase();
+      if (mod && !e.shiftKey && key === "f") {
         e.preventDefault();
         setSearchOpen(true);
         // Deferred: the search bar only renders after this state update
         // commits, so the input doesn't exist yet on this tick.
         setTimeout(() => searchInputRef.current?.focus(), 0);
+        return false;
+      }
+      // Ctrl/Cmd+C: copy if there's a selection (PuTTY/GNOME Terminal
+      // convention) - otherwise fall through untouched so xterm's default
+      // handling still sends \x03 (SIGINT) to the remote process. This is
+      // the one behavior that must never break: interrupting a running
+      // remote command with no selection active.
+      if (mod && !e.shiftKey && key === "c") {
+        if (term.hasSelection()) {
+          e.preventDefault();
+          void copySelectionToClipboard(term);
+          return false;
+        }
+        return true;
+      }
+      // Ctrl/Cmd+Shift+C: explicit copy, a distinct combo that never
+      // collides with SIGINT.
+      if (mod && e.shiftKey && key === "c") {
+        e.preventDefault();
+        if (term.hasSelection()) void copySelectionToClipboard(term);
+        return false;
+      }
+      // Ctrl/Cmd+V and Ctrl/Cmd+Shift+V: both paste, funneled through the
+      // same term.paste() path as the right-click Paste action rather than
+      // xterm's native textarea paste event, so there's one consistent
+      // mechanism instead of two subtly different ones.
+      if (mod && key === "v") {
+        e.preventDefault();
+        void pasteFromClipboard(term);
         return false;
       }
       return true;
@@ -139,6 +227,19 @@ export default function TerminalView({ host, tabId, onClose }: TerminalViewProps
     let disposed = false;
     let reconnectAttempts = 0;
     let reconnectTimeout: ReturnType<typeof setTimeout> | undefined;
+    let selectionCopyTimeout: ReturnType<typeof setTimeout> | undefined;
+
+    const onSelectionChange = term.onSelectionChange(() => {
+      clearTimeout(selectionCopyTimeout);
+      selectionCopyTimeout = setTimeout(() => {
+        if (!useSettingsStore.getState().autoCopyOnSelectEnabled) return;
+        // Re-check: the selection may have been cleared (clicked elsewhere)
+        // during the debounce window - copySelectionToClipboard's own
+        // empty-string guard covers this too, but this avoids even calling
+        // it in the common case.
+        if (term.hasSelection()) void copySelectionToClipboard(term);
+      }, SELECTION_COPY_DEBOUNCE_MS);
+    });
 
     // Best-effort local-echo tracking of what the user types, so
     // HostContextPanel's "Most used"/"Recent" can reflect real terminal
@@ -208,7 +309,7 @@ export default function TerminalView({ host, tabId, onClose }: TerminalViewProps
           setStatus("connected");
           sessionResize(sessionId, term.cols, term.rows);
           useHostsStore.getState().loadAll();
-          useSessionsStore.getState().setSessionId(tabId, sessionId);
+          useSessionsStore.getState().setSessionId(paneId, sessionId);
 
           // Best-effort - a restricted account, a shell with no history
           // file, or a server that doesn't allow this one-off exec just
@@ -245,6 +346,20 @@ export default function TerminalView({ host, tabId, onClose }: TerminalViewProps
     const onData = term.onData((data) => {
       if (sessionIdRef.current) {
         sessionWrite(sessionIdRef.current, data);
+      }
+
+      // Broadcast fan-out: read the tab's current pane list/flag fresh from
+      // the store on every keystroke rather than closing over a snapshot -
+      // this effect only re-runs on host.id changing, but broadcastEnabled
+      // and sibling panes can change any time while it's connected (the
+      // toggle, or splitting/closing a pane).
+      const tabSession = useSessionsStore.getState().openSessions.find((s) => s.tabId === tabId);
+      if (tabSession?.broadcastEnabled) {
+        for (const pane of tabSession.panes) {
+          if (pane.paneId === paneId) continue;
+          const siblingSessionId = useSessionsStore.getState().sessionIds[pane.paneId];
+          if (siblingSessionId) sessionWrite(siblingSessionId, data);
+        }
       }
 
       // Skip escape sequences whole (arrow keys, function keys, bracketed
@@ -295,8 +410,10 @@ export default function TerminalView({ host, tabId, onClose }: TerminalViewProps
     return () => {
       disposed = true;
       clearTimeout(reconnectTimeout);
+      clearTimeout(selectionCopyTimeout);
       resizeObserver.disconnect();
       onData.dispose();
+      onSelectionChange.dispose();
       if (sessionIdRef.current) {
         sessionDisconnect(sessionIdRef.current);
       }
@@ -351,13 +468,46 @@ export default function TerminalView({ host, tabId, onClose }: TerminalViewProps
             {host.hostname}:{host.port}
           </span>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-lg px-2 py-1 text-sm text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800"
-        >
-          Close
-        </button>
+        <div className="flex items-center gap-1">
+          {(paneCount > 1 || broadcastEnabled) && (
+            <button
+              type="button"
+              onClick={onToggleBroadcast}
+              title={
+                broadcastEnabled
+                  ? "Broadcast is on: typing here also sends to every other pane in this tab"
+                  : "Broadcast is off: typing here only affects this pane"
+              }
+              className={`rounded-lg px-2 py-1 text-xs font-medium ${
+                broadcastEnabled
+                  ? "bg-teal-600 text-white"
+                  : "text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800"
+              }`}
+            >
+              Broadcast
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onSplit}
+            disabled={paneCount >= MAX_PANES}
+            title={
+              paneCount >= MAX_PANES
+                ? `Up to ${MAX_PANES} panes per tab`
+                : "Split: open another pane to this same host"
+            }
+            className="rounded-lg px-2 py-1 text-sm text-slate-500 hover:bg-slate-200 disabled:opacity-40 disabled:hover:bg-transparent dark:hover:bg-slate-800"
+          >
+            Split
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg px-2 py-1 text-sm text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800"
+          >
+            Close
+          </button>
+        </div>
       </div>
 
       {(status === "error" || status === "closed") && (
@@ -425,7 +575,12 @@ export default function TerminalView({ host, tabId, onClose }: TerminalViewProps
       )}
 
       <div className="relative min-h-0 flex-1 p-2" style={{ backgroundColor: themePreset.background }}>
-        <div ref={containerRef} className="h-full w-full" />
+        <div
+          ref={containerRef}
+          className="h-full w-full"
+          onContextMenu={(e) => openContextMenu(e, termRef.current?.hasSelection() ?? false)}
+        />
+        {terminalContextMenu}
         {(status === "connecting" || status === "reconnecting") && (
           <div
             className="absolute inset-0 flex flex-col items-center justify-center gap-3"

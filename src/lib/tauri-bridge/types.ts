@@ -51,6 +51,11 @@ export interface ImportKeyInput {
   passphrase: string | null;
 }
 
+export interface Tag {
+  id: string;
+  label: string;
+}
+
 export interface Host {
   id: string;
   group_id: string | null;
@@ -67,6 +72,7 @@ export interface Host {
   sort_order: number;
   last_connected_at: string | null;
   is_favorite: boolean;
+  tags: Tag[];
 }
 
 export interface HostInput {
@@ -80,6 +86,7 @@ export interface HostInput {
   icon: string | null;
   notes: string | null;
   sort_order: number;
+  tag_ids: string[];
 }
 
 export interface HostStats {
@@ -133,4 +140,37 @@ export interface VpnStatus {
 export interface VpnConnectionStatus {
   profile_id: string;
   status: VpnStatus;
+}
+
+export interface KnownHost {
+  hostname: string;
+  port: number;
+  key_fingerprint: string;
+  accepted_at: string;
+}
+
+export interface Workspace {
+  id: string;
+  label: string;
+  sort_order: number;
+  created_at: string;
+  // Not user-editable - a count of this workspace's saved tabs, computed
+  // backend-side so the Workspaces panel can show it without a second call.
+  tab_count: number;
+}
+
+export interface WorkspaceTab {
+  id: string;
+  workspace_id: string;
+  host_id: string;
+  kind: string;
+  pane_count: number;
+  sort_order: number;
+}
+
+export interface WorkspaceTabInput {
+  host_id: string;
+  kind: string;
+  pane_count: number;
+  sort_order: number;
 }

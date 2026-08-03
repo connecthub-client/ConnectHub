@@ -46,6 +46,18 @@ export default function HostCard({ host, isSelected, isOpen, onSelect, onConnect
       <span className="truncate text-xs text-slate-400">
         {host.hostname}:{host.port}
       </span>
+      {host.tags.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {host.tags.map((tag) => (
+            <span
+              key={tag.id}
+              className="rounded-full bg-teal-50 px-1.5 py-0.5 text-[10px] text-teal-700 dark:bg-teal-950 dark:text-teal-300"
+            >
+              {tag.label}
+            </span>
+          ))}
+        </div>
+      )}
     </button>
   );
 }

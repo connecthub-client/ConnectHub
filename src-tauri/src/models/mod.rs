@@ -3,4 +3,6 @@ pub mod host;
 pub mod identity;
 pub mod snippet;
 pub mod ssh_key;
+pub mod tag;
 pub mod vpn_profile;
+pub mod workspace;

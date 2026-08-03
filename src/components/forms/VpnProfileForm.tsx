@@ -2,7 +2,9 @@ import { FormEvent, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { VpnProfile, localReadTextFile } from "../../lib/tauri-bridge";
 import { useVpnStore } from "../../state/vpnStore";
+import { FieldErrors } from "../../lib/formValidation";
 import { errorClass, inputClass, labelClass, primaryButtonClass } from "./formStyles";
+import FieldError from "./FieldError";
 import RequiredMark from "./RequiredMark";
 
 interface VpnProfileFormProps {
@@ -20,6 +22,7 @@ export default function VpnProfileForm({ profile, onDone }: VpnProfileFormProps)
   const [authPassword, setAuthPassword] = useState("");
   const [avoidDefaultRoute, setAvoidDefaultRoute] = useState(profile?.avoid_default_route ?? true);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
 
   async function handleBrowse() {
@@ -45,6 +48,11 @@ export default function VpnProfileForm({ profile, onDone }: VpnProfileFormProps)
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    const errors: FieldErrors = {};
+    if (!label.trim()) errors.label = "Enter a label.";
+    if (!config.trim()) errors.config = "Upload or paste an .ovpn profile.";
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
     setSubmitting(true);
     try {
       const input = {
@@ -70,7 +78,7 @@ export default function VpnProfileForm({ profile, onDone }: VpnProfileFormProps)
   }
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form onSubmit={handleSubmit} noValidate>
       <label className={labelClass}>
         Label
         <RequiredMark />
@@ -83,6 +91,7 @@ export default function VpnProfileForm({ profile, onDone }: VpnProfileFormProps)
         placeholder="e.g. office vpn"
         required
       />
+      <FieldError message={fieldErrors.label} />
 
       <div className="mb-1 flex items-center justify-between">
         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
@@ -104,6 +113,7 @@ export default function VpnProfileForm({ profile, onDone }: VpnProfileFormProps)
         placeholder="Paste an .ovpn file's contents, or browse to one above"
         required
       />
+      <FieldError message={fieldErrors.config} />
 
       <label className="mb-4 flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
         <input
