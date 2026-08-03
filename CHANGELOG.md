@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.0.0] — 2026-08-03
+
+### Added
+
+- **Host tags**: label hosts with free-form tags (type-to-filter existing tags or create new ones inline), filter the sidebar host tree and the center Hosts grid by tag, and round-trip tags through CSV export/import.
+- **Command palette** (`Ctrl/Cmd+K`): fuzzy-search hosts by label/hostname/tag and jump to common actions (New Host, New Group, Settings, toggle theme, etc.) from anywhere in the app - connecting through it goes through the same tab-reuse/VPN-gated flow as every other entry point.
+- **Split-pane terminals**: split a session tab into up to 4 panes (the same host or different hosts), with a per-tab broadcast toggle that fans typed input out to every pane in the tab at once.
+- **Workspaces**: save the current arrangement of open tabs and panes as a named layout (Activity Bar → Workspaces) and reopen the whole thing later in one action.
+- **Known-hosts management** (Settings → Known Hosts): view and delete pinned host keys; deleting one just removes the pin, so the next connect re-triggers trust-on-first-use normally.
+- **Inline, per-field form validation**: required/invalid fields are now flagged directly under the relevant input instead of only in a bottom banner - rolled out across the Host, Group, Identity, Key, Snippet, and VPN profile forms.
+- **Vault auto-lock** (Settings → Security, off by default): after a configurable idle period, a full-screen lock overlay blocks the app until a manual "Unlock" click. ConnectHub still has no master password to enter - this adds deliberate friction on top of the always-unlocked default, not a secret.
+- **Terminal copy/paste**: `Ctrl/Cmd+C` now copies the current selection instead of always sending SIGINT to the remote process (falls through to SIGINT when nothing's selected, so interrupting a running command still works exactly as before), plus explicit `Ctrl/Cmd+Shift+C`/`Ctrl/Cmd+Shift+V` shortcuts and a right-click Copy/Paste menu.
+- **Copy on select** (Settings → Terminal, on by default): selecting text in a terminal immediately copies it to the clipboard, X11-primary-selection style - no explicit copy action needed, and toggleable if a stray selection ever clobbers something copied elsewhere.
+
 ## [1.3.1] — 2026-08-01
 
 ### Fixed
