@@ -1,5 +1,5 @@
 use russh::ChannelMsg;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
@@ -7,11 +7,17 @@ use crate::state::AppState;
 
 use super::session::connect_and_authenticate;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecOutput {
     pub stdout: String,
     pub stderr: String,
     pub exit_status: Option<u32>,
+    // Only ever true from run_capped - plain run() never caps output, so
+    // this is always false there. Lets a caller (the AI feature) tell a
+    // reader/LLM that what they're looking at was cut off rather than
+    // silently showing partial output as if it were complete.
+    #[serde(default)]
+    pub truncated: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -55,6 +61,66 @@ pub async fn run(app: &AppState, host_id: Uuid, command: String) -> AppResult<Ex
         stdout: String::from_utf8_lossy(&stdout).to_string(),
         stderr: String::from_utf8_lossy(&stderr).to_string(),
         exit_status,
+        truncated: false,
+    })
+}
+
+// Same as `run`, but stops reading once combined stdout+stderr reaches
+// `max_bytes` instead of buffering however much the command produces -
+// enforced inside the read loop as bytes arrive (so a runaway command like
+// `cat hugefile` can't exhaust memory before the cap ever applies), not by
+// buffering everything and truncating the result afterward. The AI
+// feature is the only caller today - a command an LLM chose to run, or
+// asked to run at another LLM's suggestion, has no size guarantee at all
+// otherwise.
+pub async fn run_capped(app: &AppState, host_id: Uuid, command: String, max_bytes: usize) -> AppResult<ExecOutput> {
+    let handle = connect_and_authenticate(app, host_id, None).await?;
+    let mut channel = handle
+        .channel_open_session()
+        .await
+        .map_err(|e| AppError::Ssh(e.to_string()))?;
+    channel
+        .exec(true, command)
+        .await
+        .map_err(|e| AppError::Ssh(e.to_string()))?;
+
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+    let mut exit_status = None;
+    let mut truncated = false;
+
+    loop {
+        if stdout.len() + stderr.len() >= max_bytes {
+            truncated = true;
+            break;
+        }
+        match channel.wait().await {
+            Some(ChannelMsg::Data { data }) => stdout.extend_from_slice(&data),
+            Some(ChannelMsg::ExtendedData { data, ext: 1 }) => stderr.extend_from_slice(&data),
+            Some(ChannelMsg::ExitStatus { exit_status: code }) => exit_status = Some(code),
+            Some(ChannelMsg::Close) | None => break,
+            _ => {}
+        }
+    }
+
+    // The check above only runs between messages, so one single message
+    // can still push a buffer slightly past max_bytes before the loop
+    // notices - truncate here for an exact guarantee on what's returned,
+    // on top of the loop already bounding how much was ever buffered.
+    if stdout.len() > max_bytes {
+        stdout.truncate(max_bytes);
+        truncated = true;
+    }
+    if stderr.len() > max_bytes {
+        stderr.truncate(max_bytes);
+        truncated = true;
+    }
+
+    Ok(ExecOutput {
+        stdout: String::from_utf8_lossy(&stdout).to_string(),
+        stderr: String::from_utf8_lossy(&stderr).to_string(),
+        exit_status,
+        truncated,
     })
 }
 
@@ -190,6 +256,34 @@ mod tests {
 
         assert!(output.stderr.contains("simulated failure"));
         assert_eq!(output.exit_status, Some(7));
+    }
+
+    #[tokio::test]
+    async fn run_capped_truncates_output_exceeding_the_cap() {
+        let test_server = TestServer::start().await;
+        let app = build_app_state(&test_server).await;
+        let host_id = host_id_of(&app);
+        // TestServer's fake exec echoes back whatever command doesn't match
+        // one of its special-cased forms, verbatim - a long literal string
+        // is the simplest way to produce output bigger than a small cap.
+        let long_command = "x".repeat(1000);
+
+        let output = run_capped(&app, host_id, long_command, 100).await.expect("exec failed");
+
+        assert!(output.truncated);
+        assert!(output.stdout.len() <= 100);
+    }
+
+    #[tokio::test]
+    async fn run_capped_does_not_truncate_output_under_the_cap() {
+        let test_server = TestServer::start().await;
+        let app = build_app_state(&test_server).await;
+        let host_id = host_id_of(&app);
+
+        let output = run_capped(&app, host_id, "short_output".into(), 1024).await.expect("exec failed");
+
+        assert!(!output.truncated);
+        assert_eq!(output.stdout.trim(), "short_output");
     }
 
     #[tokio::test]

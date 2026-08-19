@@ -1,3 +1,4 @@
+pub mod ai_settings;
 pub mod google_auth;
 pub mod groups;
 pub mod host_csv;
@@ -125,6 +126,16 @@ pub fn init_schema(conn: &Connection) -> AppResult<()> {
             refresh_token_nonce BLOB NOT NULL,
             refresh_token_ciphertext BLOB NOT NULL
         );
+
+        -- One row per AI provider the user has configured a bring-your-own
+        -- API key for - both can be stored at once, one at a time, or none.
+        -- Same encrypted-field pattern as google_auth above.
+        CREATE TABLE IF NOT EXISTS ai_provider_settings (
+            provider TEXT PRIMARY KEY CHECK (provider IN ('openai', 'anthropic')),
+            model TEXT,
+            api_key_nonce BLOB NOT NULL,
+            api_key_ciphertext BLOB NOT NULL
+        );
         ",
     )?;
 
@@ -154,6 +165,14 @@ pub fn init_schema(conn: &Connection) -> AppResult<()> {
 
     // Same backfill pattern for hosts predating the icon picker.
     add_column_if_missing(conn, "hosts", "icon", "TEXT")?;
+
+    // Same backfill pattern for workspace_tabs predating tmux-style
+    // independent split panes - a saved tab's exact split shape (see
+    // src/lib/paneTree.ts's SerializedPaneNode on the frontend), JSON
+    // encoded. NULL for tabs saved before this existed (or for
+    // non-terminal/SFTP tabs, which never have one); the frontend falls
+    // back to pane_count flat panes on restore in that case.
+    add_column_if_missing(conn, "workspace_tabs", "layout_json", "TEXT")?;
 
     Ok(())
 }

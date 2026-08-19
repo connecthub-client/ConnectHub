@@ -4,6 +4,7 @@ import { useHostsStore } from "../../state/hostsStore";
 import { useSnippetsStore } from "../../state/snippetsStore";
 import { useVpnStore } from "../../state/vpnStore";
 import { useSessionsStore } from "../../state/sessionsStore";
+import { collectLeaves } from "../../lib/paneTree";
 import { useSettingsStore } from "../../state/settingsStore";
 import { topUsedCommands, useCommandHistoryStore } from "../../state/commandHistoryStore";
 import { HostIcon } from "../common/hostIcons";
@@ -106,7 +107,8 @@ export default function HostContextPanel({
   // The tab's primary (first) pane - Quick Commands writes into whichever
   // pane was there before any splitting, same target as before this feature
   // existed for a still-single-pane tab.
-  const liveSessionId = terminalTab ? sessionIds[terminalTab.panes[0]?.paneId] : undefined;
+  const firstPaneId = terminalTab?.layout ? collectLeaves(terminalTab.layout)[0]?.paneId : undefined;
+  const liveSessionId = firstPaneId ? sessionIds[firstPaneId] : undefined;
 
   const identity = identities.find((i) => i.id === host.identity_id);
   const vpnProfile = host.vpn_profile_id

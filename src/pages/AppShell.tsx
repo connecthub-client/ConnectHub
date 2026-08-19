@@ -13,13 +13,14 @@ import HostCard from "../components/common/HostCard";
 import IdentitiesPanel from "../components/panels/IdentitiesPanel";
 import KeysPanel from "../components/panels/KeysPanel";
 import SnippetsDrawer from "../components/panels/SnippetsDrawer";
+import AiAssistantDrawer from "../components/panels/AiAssistantDrawer";
 import SnippetForm from "../components/forms/SnippetForm";
 import RunSnippetForm from "../components/forms/RunSnippetForm";
 import VpnPanel from "../components/panels/VpnPanel";
 import SettingsPanel from "../components/panels/SettingsPanel";
 import BackupPanel from "../components/panels/BackupPanel";
 import WorkspacesPanel from "../components/panels/WorkspacesPanel";
-import TerminalView from "../components/terminal/TerminalView";
+import PaneSplitView from "../components/terminal/PaneSplitView";
 import SftpBrowser from "../components/sftp/SftpBrowser";
 import {
   Group,
@@ -34,8 +35,9 @@ import {
   workspaceListTabs,
 } from "../lib/tauri-bridge";
 import { getGroupChildren } from "../lib/groupTree";
+import { collectLeaves, countLeaves, deserializeLayout, serializeLayout } from "../lib/paneTree";
 import { useHostsStore } from "../state/hostsStore";
-import { useSessionsStore } from "../state/sessionsStore";
+import { MAX_PANES, useSessionsStore } from "../state/sessionsStore";
 import { useTagsStore } from "../state/tagsStore";
 import { useVpnStore } from "../state/vpnStore";
 import { useWorkspacesStore } from "../state/workspacesStore";
@@ -57,18 +59,6 @@ type ModalState =
   | { kind: "run-snippet"; snippet: Snippet }
   | { kind: "vpn-profile"; profile?: VpnProfile }
   | null;
-
-// A fixed, evenly-split grid (not drag-resizable, unlike the sidebar/right
-// panel) - 2 panes sit side by side, 3 or 4 form a 2x2 grid with a 3rd pane
-// spanning the full bottom row.
-function paneGridClass(count: number): string {
-  if (count <= 1) return "";
-  return count === 2 ? "grid grid-cols-2 gap-1" : "grid grid-cols-2 grid-rows-2 gap-1";
-}
-
-function paneCellClass(count: number, index: number): string {
-  return count === 3 && index === 2 ? "col-span-2" : "";
-}
 
 export default function AppShell() {
   const loadAll = useHostsStore((s) => s.loadAll);
@@ -102,8 +92,9 @@ export default function AppShell() {
   const openSession = useSessionsStore((s) => s.openSession);
   const closeSession = useSessionsStore((s) => s.closeSession);
   const reorderSessions = useSessionsStore((s) => s.reorderSessions);
-  const addPane = useSessionsStore((s) => s.addPane);
+  const splitPane = useSessionsStore((s) => s.splitPane);
   const closePane = useSessionsStore((s) => s.closePane);
+  const setLayout = useSessionsStore((s) => s.setLayout);
   const toggleBroadcast = useSessionsStore((s) => s.toggleBroadcast);
   const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
   // Which index the dragged tab would land at if dropped right now - drawn
@@ -149,6 +140,8 @@ export default function AppShell() {
   const setLeftSidebarWidth = useSettingsStore((s) => s.setLeftSidebarWidth);
   const snippetsDrawerOpen = useSettingsStore((s) => s.snippetsDrawerOpen);
   const toggleSnippetsDrawer = useSettingsStore((s) => s.toggleSnippetsDrawer);
+  const aiPanelOpen = useSettingsStore((s) => s.aiPanelOpen);
+  const toggleAiPanel = useSettingsStore((s) => s.toggleAiPanel);
   const rightPanelVisible = useSettingsStore((s) => s.rightPanelVisible);
   const toggleRightPanel = useSettingsStore((s) => s.toggleRightPanel);
   const setRightPanelVisible = useSettingsStore((s) => s.setRightPanelVisible);
@@ -260,17 +253,18 @@ export default function AppShell() {
   // "run on hosts", Quick Commands' one-off exec fallback) can reuse it
   // too - this wrapper only adds the inline busy/error UI state specific
   // to the Connect/SFTP buttons here.
-  async function ensureVpnUp(host: Host): Promise<boolean> {
-    if (!host.vpn_profile_id) return true;
+  async function ensureVpnUp(host: Host): Promise<{ ok: boolean; message?: string }> {
+    if (!host.vpn_profile_id) return { ok: true };
     setVpnGateError(null);
     setVpnGateHostId(host.id);
     try {
       const result = await vpnEnsureUp(host);
       if (!result.ok) {
-        setVpnGateError({ hostId: host.id, message: result.message ?? "Could not connect the VPN." });
-        return false;
+        const message = result.message ?? "Could not connect the VPN.";
+        setVpnGateError({ hostId: host.id, message });
+        return { ok: false, message };
       }
-      return true;
+      return { ok: true };
     } finally {
       setVpnGateHostId(null);
     }
@@ -302,14 +296,14 @@ export default function AppShell() {
       setLeftSidebarVisible(false);
       return;
     }
-    if (!(await ensureVpnUp(host))) return;
+    if (!(await ensureVpnUp(host)).ok) return;
     const tabId = openSession(host, "terminal");
     setMainView({ type: "session", tabId });
     setLeftSidebarVisible(false);
   }
 
   async function handleOpenSftp(host: Host) {
-    if (!(await ensureVpnUp(host))) return;
+    if (!(await ensureVpnUp(host)).ok) return;
     const tabId = openSession(host, "sftp");
     setMainView({ type: "session", tabId });
     setLeftSidebarVisible(false);
@@ -331,16 +325,30 @@ export default function AppShell() {
     }
   }
 
-  // Splitting a pane connects to the same host the tab is already open to -
-  // still goes through the shared VPN gate (ensureVpnUp), since a VPN that
-  // was up when the tab first opened could have dropped since. Reads fresh
-  // from the store for the same reason as handleConnect's `existing` lookup
-  // above - handleOpenWorkspace calls this in a loop across several awaits.
-  async function handleAddPane(tabId: string) {
+  // Splitting a pane defaults to the same host it's splitting from, but the
+  // Split popover (TerminalView.tsx) lets the user pick a different one -
+  // still goes through the shared VPN gate (ensureVpnUp), gating whichever
+  // host the *new* pane actually connects to (not necessarily the tab's
+  // own host). Reads fresh from the store for the same reason as
+  // handleConnect's `existing` lookup above - handleOpenWorkspace calls
+  // this in a loop across several awaits.
+  async function handleSplitPane(
+    tabId: string,
+    paneId: string,
+    direction: "row" | "column",
+    host?: Host,
+  ): Promise<{ ok: boolean; message?: string }> {
     const session = useSessionsStore.getState().openSessions.find((s) => s.tabId === tabId);
-    if (!session) return;
-    if (!(await ensureVpnUp(session.host))) return;
-    addPane(tabId);
+    if (!session?.layout) return { ok: false, message: "This tab is no longer open." };
+    const leaf = collectLeaves(session.layout).find((l) => l.paneId === paneId);
+    const targetHost = host ?? leaf?.host;
+    if (!targetHost) return { ok: false, message: "This pane is no longer open." };
+    const gate = await ensureVpnUp(targetHost);
+    if (!gate.ok) return gate;
+    if (splitPane(tabId, paneId, direction, host) === null) {
+      return { ok: false, message: `Up to ${MAX_PANES} panes per tab.` };
+    }
+    return { ok: true };
   }
 
   // A pane's own "Close" button reads as "close the tab" when it's the
@@ -348,7 +356,7 @@ export default function AppShell() {
   // and as "close just this pane" once there's more than one.
   function handleClosePane(tabId: string, paneId: string) {
     const session = openSessions.find((s) => s.tabId === tabId);
-    if (!session || session.panes.length <= 1) {
+    if (!session?.layout || countLeaves(session.layout) <= 1) {
       handleCloseTab(tabId);
       return;
     }
@@ -364,14 +372,15 @@ export default function AppShell() {
       openSessions.map((s, i) => ({
         host_id: s.host.id,
         kind: s.kind,
-        pane_count: s.kind === "terminal" ? s.panes.length : 1,
+        pane_count: s.kind === "terminal" && s.layout ? countLeaves(s.layout) : 1,
+        layout_json: s.kind === "terminal" && s.layout ? JSON.stringify(serializeLayout(s.layout)) : null,
         sort_order: i,
       })),
     );
   }
 
   // Replays a saved workspace's tabs through the exact same handleConnect/
-  // handleOpenSftp/handleAddPane paths every other entry point uses, so VPN
+  // handleOpenSftp/handleSplitPane paths every other entry point uses, so VPN
   // gating and the duplicate-tab guard apply automatically rather than
   // needing a parallel connect flow here. A tab whose host was deleted
   // since the workspace was saved is silently skipped - the CASCADE on
@@ -390,8 +399,31 @@ export default function AppShell() {
         .getState()
         .openSessions.find((s) => s.host.id === host.id && s.kind === "terminal")?.tabId;
       if (!openedTabId) continue;
+
+      const restoredLayout = tab.layout_json
+        ? deserializeLayout(JSON.parse(tab.layout_json), new Map(hosts.map((h) => [h.id, h])))
+        : null;
+      if (restoredLayout) {
+        // Gate every distinct host referenced anywhere in the restored
+        // tree before applying it - setLayout below replaces the whole
+        // tree in one shot, bypassing handleSplitPane's own per-split
+        // gating.
+        const distinctHosts = new Map(collectLeaves(restoredLayout).map((leaf) => [leaf.host.id, leaf.host]));
+        for (const h of distinctHosts.values()) {
+          if (h.id !== host.id) await ensureVpnUp(h); // best-effort, same as every other host in this loop
+        }
+        setLayout(openedTabId, restoredLayout);
+        continue;
+      }
+
+      // No layout_json (workspace saved before this existed) - fall back
+      // to pane_count flat panes on the tab's single saved host, exactly
+      // the old behavior.
       for (let i = 1; i < tab.pane_count; i++) {
-        await handleAddPane(openedTabId);
+        const current = useSessionsStore.getState().openSessions.find((s) => s.tabId === openedTabId);
+        const firstLeaf = current?.layout ? collectLeaves(current.layout)[0] : undefined;
+        if (!firstLeaf) break;
+        await handleSplitPane(openedTabId, firstLeaf.paneId, "row");
       }
     }
   }
@@ -682,13 +714,14 @@ export default function AppShell() {
               onDragOver={(e) => {
                 if (!draggedTabId) return;
                 e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
                 setDragOverIndex(openSessions.length);
               }}
               onDrop={(e) => {
                 e.preventDefault();
                 if (!draggedTabId) return;
                 const fromIndex = openSessions.findIndex((x) => x.tabId === draggedTabId);
-                if (fromIndex !== -1) reorderSessions(fromIndex, openSessions.length - 1);
+                if (fromIndex !== -1) reorderSessions(fromIndex, openSessions.length);
                 setDraggedTabId(null);
                 setDragOverIndex(null);
               }}
@@ -700,7 +733,8 @@ export default function AppShell() {
                 // by real status for terminal sessions, otherwise fall back
                 // to plain active/inactive coloring. A split tab's dot
                 // reflects its first (primary) pane specifically.
-                const status = s.kind === "terminal" ? sessionStatuses[s.panes[0]?.paneId] : undefined;
+                const firstPaneId = s.kind === "terminal" && s.layout ? collectLeaves(s.layout)[0]?.paneId : undefined;
+                const status = firstPaneId ? sessionStatuses[firstPaneId] : undefined;
                 const statusLabel =
                   status === "connected"
                     ? "Connected"
@@ -730,7 +764,17 @@ export default function AppShell() {
                     )}
                     <div
                       draggable
-                      onDragStart={() => setDraggedTabId(s.tabId)}
+                      onDragStart={(e) => {
+                        setDraggedTabId(s.tabId);
+                        // Required by WebKitGTK to start the drag at all -
+                        // Chromium tolerates the absence of setData, WebKit
+                        // silently refuses to complete the drag session
+                        // without it. The value itself is unused by any
+                        // onDrop handler here (all lookups go through the
+                        // draggedTabId state instead).
+                        e.dataTransfer.setData("text/plain", s.tabId);
+                        e.dataTransfer.effectAllowed = "move";
+                      }}
                       onDragEnd={() => {
                         setDraggedTabId(null);
                         setDragOverIndex(null);
@@ -738,6 +782,7 @@ export default function AppShell() {
                       onDragOver={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
+                        e.dataTransfer.dropEffect = "move";
                         if (draggedTabId && draggedTabId !== s.tabId) setDragOverIndex(index);
                       }}
                       onDrop={(e) => {
@@ -923,26 +968,18 @@ export default function AppShell() {
               key={s.tabId}
               className={`absolute inset-0 ${
                 mainView.type === "session" && mainView.tabId === s.tabId ? "visible" : "invisible"
-              } ${s.kind === "terminal" && s.panes.length > 1 ? paneGridClass(s.panes.length) : ""}`}
+              }`}
             >
-              {s.kind === "terminal" ? (
-                s.panes.map((pane, i) => (
-                  <div
-                    key={pane.paneId}
-                    className={s.panes.length > 1 ? paneCellClass(s.panes.length, i) : "h-full"}
-                  >
-                    <TerminalView
-                      host={pane.host}
-                      tabId={s.tabId}
-                      paneId={pane.paneId}
-                      paneCount={s.panes.length}
-                      broadcastEnabled={s.broadcastEnabled}
-                      onSplit={() => handleAddPane(s.tabId)}
-                      onToggleBroadcast={() => toggleBroadcast(s.tabId)}
-                      onClose={() => handleClosePane(s.tabId, pane.paneId)}
-                    />
-                  </div>
-                ))
+              {s.kind === "terminal" && s.layout ? (
+                <PaneSplitView
+                  tabId={s.tabId}
+                  node={s.layout}
+                  totalPaneCount={countLeaves(s.layout)}
+                  broadcastEnabled={s.broadcastEnabled}
+                  onToggleBroadcast={() => toggleBroadcast(s.tabId)}
+                  onSplit={(paneId, direction, host) => handleSplitPane(s.tabId, paneId, direction, host)}
+                  onClosePane={(paneId) => handleClosePane(s.tabId, paneId)}
+                />
               ) : (
                 <SftpBrowser host={s.host} onClose={() => handleCloseTab(s.tabId)} />
               )}
@@ -999,6 +1036,18 @@ export default function AppShell() {
         </div>
       </div>
 
+      {/* Floats over the terminal rather than sharing the docked slot above -
+          see AiAssistantDrawer.tsx for why (doesn't compete with the
+          terminal for width, and the user needs to click into the terminal
+          while it's open without it closing). */}
+      {aiPanelOpen && (
+        <AiAssistantDrawer
+          host={contextHost}
+          onClose={toggleAiPanel}
+          onOpenSettings={() => setMainView({ type: "manage", tab: "settings" })}
+        />
+      )}
+
       <nav className="flex w-12 shrink-0 flex-col items-center gap-1 border-l border-slate-200 bg-slate-100 py-2 dark:border-slate-800 dark:bg-slate-950">
         <button
           type="button"
@@ -1021,6 +1070,19 @@ export default function AppShell() {
           }`}
         >
           <NavIcon icon="snippets" className="h-5 w-5" />
+        </button>
+        <button
+          type="button"
+          title={aiPanelOpen ? "Hide AI Assistant" : "Show AI Assistant"}
+          aria-label={aiPanelOpen ? "Hide AI Assistant" : "Show AI Assistant"}
+          onClick={toggleAiPanel}
+          className={`flex h-10 w-10 items-center justify-center rounded-lg ${
+            aiPanelOpen
+              ? "bg-teal-600 text-white"
+              : "text-slate-500 hover:bg-slate-200 dark:text-slate-400 dark:hover:bg-slate-800"
+          }`}
+        >
+          <NavIcon icon="ai" className="h-5 w-5" />
         </button>
       </nav>
 

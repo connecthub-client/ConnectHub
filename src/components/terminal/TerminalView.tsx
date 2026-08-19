@@ -12,10 +12,12 @@ import { Host } from "../../lib/tauri-bridge";
 import { TERMINAL_THEME_PRESETS, useSettingsStore } from "../../state/settingsStore";
 import { useHostsStore } from "../../state/hostsStore";
 import { MAX_PANES, SessionStatus, useSessionsStore } from "../../state/sessionsStore";
+import { collectLeaves } from "../../lib/paneTree";
 import { parseRemoteHistory, rankRemoteHistory, useCommandHistoryStore } from "../../state/commandHistoryStore";
 import { useSnippetsStore } from "../../state/snippetsStore";
 import { friendlyError } from "../../lib/friendlyError";
 import { useTerminalContextMenu } from "./useTerminalContextMenu";
+import { selectClass } from "../forms/formStyles";
 
 // Reads whichever shell history file exists, most recent lines last, so
 // HostContextPanel's "Most used" can be seeded from real usage on the
@@ -82,9 +84,11 @@ interface TerminalViewProps {
   host: Host;
   tabId: string;
   paneId: string;
+  // Total leaves across the whole tab's split tree, not just this pane's
+  // subtree - the MAX_PANES cap applies tab-wide.
   paneCount: number;
   broadcastEnabled: boolean;
-  onSplit: () => void;
+  onSplit: (direction: "row" | "column", host?: Host) => Promise<{ ok: boolean; message?: string }>;
   onToggleBroadcast: () => void;
   // Closes this pane specifically - AppShell.tsx routes this to closing the
   // whole tab instead when it's the tab's only remaining pane, so this
@@ -131,6 +135,39 @@ export default function TerminalView({
   const [error, setError] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const hosts = useHostsStore((s) => s.hosts);
+  const [splitPickerOpen, setSplitPickerOpen] = useState(false);
+  const [splitDirection, setSplitDirection] = useState<"row" | "column">("row");
+  const [splitHostId, setSplitHostId] = useState("");
+  const [splitBusy, setSplitBusy] = useState(false);
+  const [splitError, setSplitError] = useState<string | null>(null);
+  const splitPopoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!splitPickerOpen) return;
+    function close(e: MouseEvent) {
+      if (splitPopoverRef.current && !splitPopoverRef.current.contains(e.target as Node)) {
+        setSplitPickerOpen(false);
+      }
+    }
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [splitPickerOpen]);
+
+  async function handleConfirmSplit() {
+    setSplitBusy(true);
+    setSplitError(null);
+    const chosenHost = splitHostId ? hosts.find((h) => h.id === splitHostId) : undefined;
+    const result = await onSplit(splitDirection, chosenHost);
+    setSplitBusy(false);
+    if (!result.ok) {
+      setSplitError(result.message ?? "Could not split.");
+      return;
+    }
+    setSplitPickerOpen(false);
+    setSplitHostId("");
+  }
+
   const { openContextMenu, menu: terminalContextMenu } = useTerminalContextMenu({
     onCopy: () => {
       const term = termRef.current;
@@ -354,10 +391,10 @@ export default function TerminalView({
       // and sibling panes can change any time while it's connected (the
       // toggle, or splitting/closing a pane).
       const tabSession = useSessionsStore.getState().openSessions.find((s) => s.tabId === tabId);
-      if (tabSession?.broadcastEnabled) {
-        for (const pane of tabSession.panes) {
-          if (pane.paneId === paneId) continue;
-          const siblingSessionId = useSessionsStore.getState().sessionIds[pane.paneId];
+      if (tabSession?.broadcastEnabled && tabSession.layout) {
+        for (const leaf of collectLeaves(tabSession.layout)) {
+          if (leaf.paneId === paneId) continue;
+          const siblingSessionId = useSessionsStore.getState().sessionIds[leaf.paneId];
           if (siblingSessionId) sessionWrite(siblingSessionId, data);
         }
       }
@@ -487,19 +524,75 @@ export default function TerminalView({
               Broadcast
             </button>
           )}
-          <button
-            type="button"
-            onClick={onSplit}
-            disabled={paneCount >= MAX_PANES}
-            title={
-              paneCount >= MAX_PANES
-                ? `Up to ${MAX_PANES} panes per tab`
-                : "Split: open another pane to this same host"
-            }
-            className="rounded-lg px-2 py-1 text-sm text-slate-500 hover:bg-slate-200 disabled:opacity-40 disabled:hover:bg-transparent dark:hover:bg-slate-800"
-          >
-            Split
-          </button>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSplitPickerOpen((open) => !open);
+              }}
+              disabled={paneCount >= MAX_PANES}
+              title={paneCount >= MAX_PANES ? `Up to ${MAX_PANES} panes per tab` : "Split this pane"}
+              className="rounded-lg px-2 py-1 text-sm text-slate-500 hover:bg-slate-200 disabled:opacity-40 disabled:hover:bg-transparent dark:hover:bg-slate-800"
+            >
+              Split
+            </button>
+            {splitPickerOpen && (
+              <div
+                ref={splitPopoverRef}
+                onClick={(e) => e.stopPropagation()}
+                className="absolute right-0 top-full z-50 mt-1 w-56 rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-lg dark:border-slate-700 dark:bg-slate-800"
+              >
+                <div className="mb-2 flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setSplitDirection("row")}
+                    className={`flex-1 rounded-md px-2 py-1 text-xs font-medium ${
+                      splitDirection === "row"
+                        ? "bg-teal-600 text-white"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600"
+                    }`}
+                  >
+                    ⬌ Right
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSplitDirection("column")}
+                    className={`flex-1 rounded-md px-2 py-1 text-xs font-medium ${
+                      splitDirection === "column"
+                        ? "bg-teal-600 text-white"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600"
+                    }`}
+                  >
+                    ⬍ Down
+                  </button>
+                </div>
+                <select
+                  value={splitHostId}
+                  onChange={(e) => setSplitHostId(e.currentTarget.value)}
+                  className={selectClass}
+                >
+                  <option value="">Same host ({host.label})</option>
+                  {hosts
+                    .filter((h) => h.identity_id)
+                    .map((h) => (
+                      <option key={h.id} value={h.id}>
+                        {h.label}
+                      </option>
+                    ))}
+                </select>
+                {splitError && <p className="mb-2 text-xs text-red-600 dark:text-red-400">{splitError}</p>}
+                <button
+                  type="button"
+                  onClick={handleConfirmSplit}
+                  disabled={splitBusy}
+                  className="w-full rounded-md bg-teal-600 px-2 py-1.5 text-xs font-medium text-white hover:bg-teal-700 disabled:opacity-50"
+                >
+                  {splitBusy ? "Splitting…" : "Split"}
+                </button>
+              </div>
+            )}
+          </div>
           <button
             type="button"
             onClick={onClose}

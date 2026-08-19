@@ -222,11 +222,22 @@ export default function SftpBrowser({ host, onClose }: SftpBrowserProps) {
   const { confirm, confirmDialog } = useConfirm();
   const { prompt, promptDialog } = usePrompt();
 
+  // Bumped on every call so a slower, older request's resolution can be told
+  // apart from the latest one - without this, rapid navigation (e.g. a
+  // double-click firing a new refresh before a previous one resolved) could
+  // let a stale response overwrite the listing for whatever path is
+  // currently shown with entries from a path the user already navigated
+  // away from.
+  const localRequestRef = useRef(0);
+  const remoteRequestRef = useRef(0);
+
   const refreshLocal = useCallback((path: string) => {
+    const requestId = ++localRequestRef.current;
     setLocalLoading(true);
     setLocalError(null);
     localList(path)
-      .then((entries) =>
+      .then((entries) => {
+        if (requestId !== localRequestRef.current) return;
         setLocalEntries(
           entries.map((e) => ({
             name: e.name,
@@ -235,18 +246,26 @@ export default function SftpBrowser({ host, onClose }: SftpBrowserProps) {
             size: e.size,
             modified: e.modified,
           })),
-        ),
-      )
-      .catch((e) => setLocalError(String(e)))
-      .finally(() => setLocalLoading(false));
+        );
+      })
+      .catch((e) => {
+        if (requestId !== localRequestRef.current) return;
+        setLocalError(String(e));
+      })
+      .finally(() => {
+        if (requestId !== localRequestRef.current) return;
+        setLocalLoading(false);
+      });
   }, []);
 
   const refreshRemote = useCallback((path: string) => {
     if (!sftpIdRef.current) return;
+    const requestId = ++remoteRequestRef.current;
     setRemoteLoading(true);
     setRemoteError(null);
     sftpList(sftpIdRef.current, path)
-      .then((entries) =>
+      .then((entries) => {
+        if (requestId !== remoteRequestRef.current) return;
         setRemoteEntries(
           entries.map((e) => ({
             name: e.name,
@@ -255,17 +274,35 @@ export default function SftpBrowser({ host, onClose }: SftpBrowserProps) {
             size: e.size,
             modified: e.modified,
           })),
-        ),
-      )
-      .catch((e) => setRemoteError(String(e)))
-      .finally(() => setRemoteLoading(false));
+        );
+      })
+      .catch((e) => {
+        if (requestId !== remoteRequestRef.current) return;
+        setRemoteError(String(e));
+      })
+      .finally(() => {
+        if (requestId !== remoteRequestRef.current) return;
+        setRemoteLoading(false);
+      });
   }, []);
 
   useEffect(() => {
     let disposed = false;
+    // Tracked separately from sftpIdRef so the catch block below can clean
+    // up the backend session even if it was never assigned to the ref (e.g.
+    // sftpConnect resolved but the concurrent localHomeDir() call rejected,
+    // which previously left the connected session orphaned in
+    // AppState.sftp_sessions forever, with nothing left able to disconnect it).
+    let connectedId: string | null = null;
     (async () => {
       try {
-        const [id, home] = await Promise.all([sftpConnect(host.id), localHomeDir()]);
+        const [id, home] = await Promise.all([
+          sftpConnect(host.id).then((v) => {
+            connectedId = v;
+            return v;
+          }),
+          localHomeDir(),
+        ]);
         if (disposed) {
           sftpDisconnect(id);
           return;
@@ -278,6 +315,10 @@ export default function SftpBrowser({ host, onClose }: SftpBrowserProps) {
         setStatus("connected");
         useHostsStore.getState().loadAll();
       } catch (e) {
+        if (connectedId) {
+          sftpDisconnect(connectedId);
+          sftpIdRef.current = null;
+        }
         if (!disposed) {
           setStatus("error");
           setError(friendlyError(e));

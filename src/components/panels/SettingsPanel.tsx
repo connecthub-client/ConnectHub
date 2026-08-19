@@ -3,6 +3,11 @@ import { check, Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
+  AiProvider,
+  aiSettingsClear,
+  AiSettingsStatus,
+  aiSettingsSet,
+  aiSettingsStatus,
   appUpdateInstallable,
   appVersion,
   KnownHost,
@@ -288,6 +293,178 @@ function KnownHostsSection() {
   );
 }
 
+function AiAssistantSection() {
+  const [status, setStatus] = useState<AiSettingsStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [openaiKey, setOpenaiKey] = useState("");
+  const [openaiModel, setOpenaiModel] = useState("");
+  const [anthropicKey, setAnthropicKey] = useState("");
+  const [anthropicModel, setAnthropicModel] = useState("");
+  const [saving, setSaving] = useState<AiProvider | null>(null);
+  const aiActiveProvider = useSettingsStore((s) => s.aiActiveProvider);
+  const setAiActiveProvider = useSettingsStore((s) => s.setAiActiveProvider);
+
+  function load() {
+    aiSettingsStatus()
+      .then(setStatus)
+      .catch((e) => setError(String(e)));
+  }
+
+  useEffect(load, []);
+
+  async function handleSave(provider: AiProvider, apiKey: string, model: string) {
+    if (!apiKey.trim()) return;
+    setSaving(provider);
+    setError(null);
+    try {
+      await aiSettingsSet(provider, apiKey.trim(), model.trim() || undefined);
+      if (provider === "openai") {
+        setOpenaiKey("");
+        setOpenaiModel("");
+      } else {
+        setAnthropicKey("");
+        setAnthropicModel("");
+      }
+      if (!aiActiveProvider) setAiActiveProvider(provider);
+      load();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function handleClear(provider: AiProvider) {
+    setError(null);
+    try {
+      await aiSettingsClear(provider);
+      if (aiActiveProvider === provider) setAiActiveProvider(null);
+      load();
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
+  return (
+    <section className="mb-6">
+      <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-200">AI Assistant</h3>
+      <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">
+        Bring your own API key to ask an AI about a connected server and run its suggested
+        commands, or hand it a goal to work on. Keys are encrypted in the vault like every other
+        secret here - never shown again once saved.
+      </p>
+      {error && <p className="mb-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
+
+      <div className="mb-4 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-sm font-medium text-slate-800 dark:text-slate-200">OpenAI</span>
+          <span
+            className={`text-xs ${
+              status?.openai_configured ? "text-teal-600 dark:text-teal-400" : "text-slate-400"
+            }`}
+          >
+            {status?.openai_configured ? "Configured" : "Not configured"}
+          </span>
+        </div>
+        <input
+          type="password"
+          value={openaiKey}
+          onChange={(e) => setOpenaiKey(e.currentTarget.value)}
+          placeholder="sk-…"
+          autoComplete="off"
+          className={inputClass}
+        />
+        <input
+          value={openaiModel}
+          onChange={(e) => setOpenaiModel(e.currentTarget.value)}
+          placeholder="Model (default: gpt-4o-mini)"
+          className={inputClass}
+        />
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => handleSave("openai", openaiKey, openaiModel)}
+            disabled={!openaiKey.trim() || saving === "openai"}
+            className={primaryButtonClass}
+          >
+            {saving === "openai" ? "Saving…" : "Save"}
+          </button>
+          {status?.openai_configured && (
+            <button
+              type="button"
+              onClick={() => handleClear("openai")}
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="mb-4 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-sm font-medium text-slate-800 dark:text-slate-200">Anthropic</span>
+          <span
+            className={`text-xs ${
+              status?.anthropic_configured ? "text-teal-600 dark:text-teal-400" : "text-slate-400"
+            }`}
+          >
+            {status?.anthropic_configured ? "Configured" : "Not configured"}
+          </span>
+        </div>
+        <input
+          type="password"
+          value={anthropicKey}
+          onChange={(e) => setAnthropicKey(e.currentTarget.value)}
+          placeholder="sk-ant-…"
+          autoComplete="off"
+          className={inputClass}
+        />
+        <input
+          value={anthropicModel}
+          onChange={(e) => setAnthropicModel(e.currentTarget.value)}
+          placeholder="Model (default: claude-3-5-sonnet-latest)"
+          className={inputClass}
+        />
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => handleSave("anthropic", anthropicKey, anthropicModel)}
+            disabled={!anthropicKey.trim() || saving === "anthropic"}
+            className={primaryButtonClass}
+          >
+            {saving === "anthropic" ? "Saving…" : "Save"}
+          </button>
+          {status?.anthropic_configured && (
+            <button
+              type="button"
+              onClick={() => handleClear("anthropic")}
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+
+      {(status?.openai_configured || status?.anthropic_configured) && (
+        <div>
+          <label className={labelClass}>Default provider for new conversations</label>
+          <select
+            value={aiActiveProvider ?? ""}
+            onChange={(e) => setAiActiveProvider((e.currentTarget.value || null) as AiProvider | null)}
+            className={selectClass}
+          >
+            <option value="">None selected</option>
+            {status?.openai_configured && <option value="openai">OpenAI</option>}
+            {status?.anthropic_configured && <option value="anthropic">Anthropic</option>}
+          </select>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function SettingsPanel() {
   const theme = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
@@ -490,6 +667,7 @@ export default function SettingsPanel() {
         </div>
       </section>
 
+      <AiAssistantSection />
       <KnownHostsSection />
 
       <AboutSection />

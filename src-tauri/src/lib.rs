@@ -1,3 +1,4 @@
+mod ai;
 mod commands;
 mod data;
 mod error;
@@ -8,6 +9,10 @@ mod state;
 mod vault;
 mod vpn;
 
+use commands::ai_commands::{
+    ai_chat_send, ai_command_check, ai_command_exec, ai_settings_clear, ai_settings_set,
+    ai_settings_status,
+};
 use commands::app_commands::{app_update_installable, app_version};
 use commands::backup_commands::{
     google_backup_now, google_login, google_login_cancel, google_logout, google_restore,
@@ -65,6 +70,12 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             app_version,
             app_update_installable,
+            ai_settings_status,
+            ai_settings_set,
+            ai_settings_clear,
+            ai_chat_send,
+            ai_command_exec,
+            ai_command_check,
             vault_auto_unlock,
             vault_lock,
             group_list,

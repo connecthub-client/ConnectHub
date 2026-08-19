@@ -1,3 +1,4 @@
+pub mod ai_commands;
 pub mod app_commands;
 pub mod backup_commands;
 pub mod group_commands;

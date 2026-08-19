@@ -158,6 +158,14 @@ pub async fn upload(
         .map_err(|e| AppError::Ssh(e.to_string()))?;
     file.write_all(&data)
         .await
+        .map_err(|e| AppError::Ssh(e.to_string()))?;
+    // `write_all` only queues fire-and-forget WRITE requests - the server's
+    // actual acknowledgement (and any late error: disk full, quota,
+    // permission denied) is only awaited by flush/shutdown. Without this,
+    // `upload` could return `Ok` before the data ever landed on disk, and
+    // `File::drop` would silently discard the still-pending acks.
+    file.shutdown()
+        .await
         .map_err(|e| AppError::Ssh(e.to_string()))
 }
 
@@ -176,7 +184,7 @@ mod tests {
     use crate::models::host::HostInput;
     use crate::models::identity::{AuthMethod, IdentityInput};
     use crate::models::ssh_key::ImportKeyInput;
-    use crate::ssh::test_support::TestServer;
+    use crate::ssh::test_support::{TestServer, WRITE_FAILURE_MARKER};
     use crate::state::AppState;
     use crate::vault::kdf::test_key;
 
@@ -304,6 +312,99 @@ mod tests {
         let _ = std::fs::remove_file(&local_dst);
         let _ = std::fs::remove_file(&db_path);
     }
+
+    // Regression test for a bug where `upload()` reported success even when
+    // the server-side write actually failed: `write_all` only queues
+    // fire-and-forget WRITE requests and never inspects their acks, so
+    // without a trailing flush/shutdown, a rejected write was silently
+    // dropped instead of surfacing as an error. TestSftpHandler's write()
+    // fails deterministically for any path containing WRITE_FAILURE_MARKER
+    // (see test_support.rs), standing in for a real disk-full/permission/quota
+    // error - this does not require a real filesystem to be in an unusual
+    // state to trigger.
+    #[tokio::test]
+    async fn upload_surfaces_a_server_side_write_failure() {
+        let test_server = TestServer::start().await;
+
+        let db_path = std::env::temp_dir().join(format!("connecthub-test-sftp-{}.db", Uuid::new_v4()));
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        crate::data::init_schema(&conn).unwrap();
+        crate::ssh::known_hosts::init_schema(&conn).unwrap();
+
+        let vault_key = test_key();
+
+        let ssh_key = ssh_keys::import(
+            &conn,
+            &vault_key,
+            ImportKeyInput {
+                label: "hermetic sftp write-failure test key".into(),
+                private_key_pem: test_server.client_key_pem.clone(),
+                passphrase: None,
+            },
+        )
+        .unwrap();
+
+        let identity = identities::create(
+            &conn,
+            &vault_key,
+            IdentityInput {
+                label: "hermetic sftp write-failure test identity".into(),
+                username: "test".into(),
+                auth_method: AuthMethod::PrivateKey,
+                ssh_key_id: Some(ssh_key.id),
+                password: None,
+            },
+        )
+        .unwrap();
+
+        let host = hosts::create(
+            &conn,
+            HostInput {
+                group_id: None,
+                label: "loopback".into(),
+                hostname: "127.0.0.1".into(),
+                port: test_server.port,
+                identity_id: Some(identity.id),
+                vpn_profile_id: None,
+                color: None,
+                icon: None,
+                notes: None,
+                sort_order: 0,
+                tag_ids: Vec::new(),
+            },
+        )
+        .unwrap();
+
+        let app_state = AppState {
+            db: std::sync::Mutex::new(conn),
+            db_path: db_path.clone(),
+            vault_key: std::sync::Mutex::new(Some(vault_key)),
+            sessions: Arc::new(DashMap::new()),
+            sftp_sessions: Arc::new(DashMap::new()),
+            vpn_connections: Arc::new(DashMap::new()),
+            google_login_cancel: std::sync::Mutex::new(None),
+        };
+
+        let sftp_sessions = app_state.sftp_sessions.clone();
+        let sftp_id = connect(&app_state, sftp_sessions.clone(), host.id)
+            .await
+            .expect("sftp connect failed");
+
+        let local_src = tempfile_dir().join(format!("upload-src-{}.txt", Uuid::new_v4()));
+        std::fs::write(&local_src, b"this write should be rejected by the server").unwrap();
+
+        let remote_file = format!("/{WRITE_FAILURE_MARKER}.txt");
+        let result = upload(&sftp_sessions, sftp_id, local_src.to_string_lossy().to_string(), remote_file).await;
+
+        assert!(
+            result.is_err(),
+            "upload() must surface a server-side write failure instead of reporting success"
+        );
+
+        disconnect(&sftp_sessions, sftp_id);
+        let _ = std::fs::remove_file(&local_src);
+        let _ = std::fs::remove_file(&db_path);
+    }
 }
 
 #[cfg(test)]
@@ -328,7 +429,7 @@ mod live_sshd_tests {
     #[ignore]
     async fn full_sftp_roundtrip_over_real_sshd() {
         let test_key_path =
-            "/tmp/claude-1000/-home-mashhoud-NGI--workSpace-SSH-tool/cb0c64d1-0315-48de-86ae-3782252496ca/scratchpad/testkey/id_ed25519";
+            "/tmp/claude-1000/-home-mashhoud-NGI--workSpace-SSH-tool/f5428952-1771-4051-9087-3faf0b5b9c69/scratchpad/testkey/id_ed25519";
         let pem = std::fs::read_to_string(test_key_path).expect("test key not found");
         let username = std::env::var("USER").expect("USER env var not set");
 

@@ -94,6 +94,15 @@ interface SettingsState {
   // by default (the whole point is zero setup) but toggleable in case a
   // stray selection ever clobbers something the user copied elsewhere.
   autoCopyOnSelectEnabled: boolean;
+  // The AI Assistant panel - floats over the terminal (see
+  // AiAssistantDrawer.tsx) rather than sharing the docked right-panel slot,
+  // so unlike snippetsDrawerOpen this doesn't need to be mutually exclusive
+  // with anything; it can be open at the same time as Snippets/Host Details.
+  aiPanelOpen: boolean;
+  // Which configured provider a new conversation defaults to - not a
+  // secret, so it lives here rather than in the vault alongside the actual
+  // API keys (see aiStore.ts/SettingsPanel.tsx).
+  aiActiveProvider: "openai" | "anthropic" | null;
   setTheme: (theme: ThemeMode) => void;
   setTerminalFontFamily: (fontFamily: string) => void;
   setTerminalFontSize: (fontSize: number) => void;
@@ -113,6 +122,8 @@ interface SettingsState {
   toggleVaultAutoLock: () => void;
   setVaultAutoLockMinutes: (minutes: number) => void;
   toggleAutoCopyOnSelect: () => void;
+  toggleAiPanel: () => void;
+  setAiActiveProvider: (provider: "openai" | "anthropic" | null) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -135,6 +146,8 @@ export const useSettingsStore = create<SettingsState>()(
       vaultAutoLockEnabled: false,
       vaultAutoLockMinutes: DEFAULT_VAULT_AUTO_LOCK_MINUTES,
       autoCopyOnSelectEnabled: true,
+      aiPanelOpen: false,
+      aiActiveProvider: null,
 
       setTheme: (theme) => set({ theme }),
       setTerminalFontFamily: (terminalFontFamily) => set({ terminalFontFamily }),
@@ -145,6 +158,9 @@ export const useSettingsStore = create<SettingsState>()(
       setLeftSidebarVisible: (leftSidebarVisible) => set({ leftSidebarVisible }),
       setLeftSidebarWidth: (width) =>
         set({ leftSidebarWidth: clamp(width, MIN_LEFT_SIDEBAR_WIDTH, MAX_LEFT_SIDEBAR_WIDTH) }),
+      // No longer clears aiPanelOpen - the AI panel floats independently now
+      // (see AiAssistantDrawer.tsx) rather than sharing this docked slot, so
+      // it and Snippets can be open at the same time without conflict.
       toggleSnippetsDrawer: () => set({ snippetsDrawerOpen: !get().snippetsDrawerOpen }),
       toggleRightPanel: () => set({ rightPanelVisible: !get().rightPanelVisible }),
       setRightPanelVisible: (rightPanelVisible) => set({ rightPanelVisible }),
@@ -160,6 +176,10 @@ export const useSettingsStore = create<SettingsState>()(
           vaultAutoLockMinutes: clamp(minutes, MIN_VAULT_AUTO_LOCK_MINUTES, MAX_VAULT_AUTO_LOCK_MINUTES),
         }),
       toggleAutoCopyOnSelect: () => set({ autoCopyOnSelectEnabled: !get().autoCopyOnSelectEnabled }),
+      // No longer clears snippetsDrawerOpen - see toggleSnippetsDrawer's
+      // comment above.
+      toggleAiPanel: () => set({ aiPanelOpen: !get().aiPanelOpen }),
+      setAiActiveProvider: (aiActiveProvider) => set({ aiActiveProvider }),
     }),
     {
       name: "connecthub-settings",

@@ -249,7 +249,15 @@ struct TestSftpHandler {
     open_files: HashMap<String, tokio::fs::File>,
     open_dirs: HashMap<String, VecDeque<std::fs::DirEntry>>,
     next_handle: u64,
+    // Handles opened against a path containing WRITE_FAILURE_MARKER - lets
+    // tests simulate a server-side write error (disk full, quota, permission
+    // denied) without needing real filesystem conditions to trigger one.
+    failing_write_handles: std::collections::HashSet<String>,
 }
+
+// Any path containing this fails every `write` against it with
+// StatusCode::Failure - see `failing_write_handles` above.
+pub const WRITE_FAILURE_MARKER: &str = "FORCE_WRITE_FAILURE";
 
 impl TestSftpHandler {
     fn new(root: PathBuf) -> Self {
@@ -258,6 +266,7 @@ impl TestSftpHandler {
             open_files: HashMap::new(),
             open_dirs: HashMap::new(),
             next_handle: 0,
+            failing_write_handles: std::collections::HashSet::new(),
         }
     }
 
@@ -301,6 +310,9 @@ impl russh_sftp::server::Handler for TestSftpHandler {
             .await
             .map_err(|_| StatusCode::NoSuchFile)?;
         let handle = self.new_handle();
+        if filename.contains(WRITE_FAILURE_MARKER) {
+            self.failing_write_handles.insert(handle.clone());
+        }
         self.open_files.insert(handle.clone(), file);
         Ok(Handle { id, handle })
     }
@@ -308,6 +320,7 @@ impl russh_sftp::server::Handler for TestSftpHandler {
     async fn close(&mut self, id: u32, handle: String) -> Result<Status, Self::Error> {
         self.open_files.remove(&handle);
         self.open_dirs.remove(&handle);
+        self.failing_write_handles.remove(&handle);
         Ok(ok_status(id))
     }
 
@@ -324,6 +337,9 @@ impl russh_sftp::server::Handler for TestSftpHandler {
     }
 
     async fn write(&mut self, id: u32, handle: String, offset: u64, data: Vec<u8>) -> Result<Status, Self::Error> {
+        if self.failing_write_handles.contains(&handle) {
+            return Err(StatusCode::Failure);
+        }
         let file = self.open_files.get_mut(&handle).ok_or(StatusCode::Failure)?;
         file.seek(std::io::SeekFrom::Start(offset)).await.map_err(|_| StatusCode::Failure)?;
         file.write_all(&data).await.map_err(|_| StatusCode::Failure)?;

@@ -31,13 +31,14 @@ fn row_to_tab(row: &rusqlite::Row) -> rusqlite::Result<WorkspaceTab> {
         host_id: row.get(2)?,
         kind: row.get(3)?,
         pane_count: row.get(4)?,
-        sort_order: row.get(5)?,
+        layout_json: row.get(5)?,
+        sort_order: row.get(6)?,
     })
 }
 
 pub fn list_tabs(conn: &Connection, workspace_id: Uuid) -> AppResult<Vec<WorkspaceTab>> {
     let mut stmt = conn.prepare(
-        "SELECT id, workspace_id, host_id, kind, pane_count, sort_order FROM workspace_tabs
+        "SELECT id, workspace_id, host_id, kind, pane_count, layout_json, sort_order FROM workspace_tabs
          WHERE workspace_id = ?1 ORDER BY sort_order",
     )?;
     let rows = stmt.query_map((&workspace_id,), row_to_tab)?;
@@ -61,9 +62,17 @@ pub fn create(conn: &Connection, label: &str, tabs: &[WorkspaceTabInput]) -> App
     )?;
     for tab in tabs {
         conn.execute(
-            "INSERT INTO workspace_tabs (id, workspace_id, host_id, kind, pane_count, sort_order)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            (&Uuid::new_v4(), &id, &tab.host_id, &tab.kind, tab.pane_count, tab.sort_order),
+            "INSERT INTO workspace_tabs (id, workspace_id, host_id, kind, pane_count, layout_json, sort_order)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            (
+                &Uuid::new_v4(),
+                &id,
+                &tab.host_id,
+                &tab.kind,
+                tab.pane_count,
+                &tab.layout_json,
+                tab.sort_order,
+            ),
         )?;
     }
 
@@ -131,8 +140,8 @@ mod tests {
         let host_b = hosts::create(&conn, host_input("b")).unwrap();
 
         let tabs = vec![
-            WorkspaceTabInput { host_id: host_a.id, kind: "terminal".into(), pane_count: 2, sort_order: 0 },
-            WorkspaceTabInput { host_id: host_b.id, kind: "sftp".into(), pane_count: 1, sort_order: 1 },
+            WorkspaceTabInput { host_id: host_a.id, kind: "terminal".into(), pane_count: 2, layout_json: None, sort_order: 0 },
+            WorkspaceTabInput { host_id: host_b.id, kind: "sftp".into(), pane_count: 1, layout_json: None, sort_order: 1 },
         ];
         let created = create(&conn, "my layout", &tabs).unwrap();
         assert_eq!(created.tab_count, 2);
@@ -151,8 +160,8 @@ mod tests {
         let host_b = hosts::create(&conn, host_input("b")).unwrap();
 
         let tabs = vec![
-            WorkspaceTabInput { host_id: host_b.id, kind: "terminal".into(), pane_count: 1, sort_order: 1 },
-            WorkspaceTabInput { host_id: host_a.id, kind: "terminal".into(), pane_count: 3, sort_order: 0 },
+            WorkspaceTabInput { host_id: host_b.id, kind: "terminal".into(), pane_count: 1, layout_json: None, sort_order: 1 },
+            WorkspaceTabInput { host_id: host_a.id, kind: "terminal".into(), pane_count: 3, layout_json: None, sort_order: 0 },
         ];
         let created = create(&conn, "my layout", &tabs).unwrap();
 
@@ -164,10 +173,42 @@ mod tests {
     }
 
     #[test]
+    fn layout_json_roundtrips_and_is_null_when_not_provided() {
+        let conn = test_conn();
+        let host_a = hosts::create(&conn, host_input("a")).unwrap();
+        let host_b = hosts::create(&conn, host_input("b")).unwrap();
+        let layout = format!(
+            r#"{{"type":"split","direction":"row","ratio":0.5,"a":{{"type":"leaf","hostId":"{}"}},"b":{{"type":"leaf","hostId":"{}"}}}}"#,
+            host_a.id, host_b.id,
+        );
+        let tabs = vec![
+            WorkspaceTabInput {
+                host_id: host_a.id,
+                kind: "terminal".into(),
+                pane_count: 2,
+                layout_json: Some(layout.clone()),
+                sort_order: 0,
+            },
+            WorkspaceTabInput {
+                host_id: host_b.id,
+                kind: "terminal".into(),
+                pane_count: 1,
+                layout_json: None,
+                sort_order: 1,
+            },
+        ];
+        let created = create(&conn, "my layout", &tabs).unwrap();
+
+        let listed_tabs = list_tabs(&conn, created.id).unwrap();
+        assert_eq!(listed_tabs[0].layout_json, Some(layout));
+        assert_eq!(listed_tabs[1].layout_json, None);
+    }
+
+    #[test]
     fn second_workspace_appends_after_the_first_by_sort_order() {
         let conn = test_conn();
         let host = hosts::create(&conn, host_input("a")).unwrap();
-        let tabs = vec![WorkspaceTabInput { host_id: host.id, kind: "terminal".into(), pane_count: 1, sort_order: 0 }];
+        let tabs = vec![WorkspaceTabInput { host_id: host.id, kind: "terminal".into(), pane_count: 1, layout_json: None, sort_order: 0 }];
 
         let first = create(&conn, "first", &tabs).unwrap();
         let second = create(&conn, "second", &tabs).unwrap();
@@ -178,7 +219,7 @@ mod tests {
     fn rename_updates_the_label_and_preserves_tab_count() {
         let conn = test_conn();
         let host = hosts::create(&conn, host_input("a")).unwrap();
-        let tabs = vec![WorkspaceTabInput { host_id: host.id, kind: "terminal".into(), pane_count: 1, sort_order: 0 }];
+        let tabs = vec![WorkspaceTabInput { host_id: host.id, kind: "terminal".into(), pane_count: 1, layout_json: None, sort_order: 0 }];
         let created = create(&conn, "old name", &tabs).unwrap();
 
         let renamed = rename(&conn, created.id, "new name").unwrap();
@@ -197,7 +238,7 @@ mod tests {
     fn deleting_a_workspace_removes_its_tabs_via_cascade() {
         let conn = test_conn();
         let host = hosts::create(&conn, host_input("a")).unwrap();
-        let tabs = vec![WorkspaceTabInput { host_id: host.id, kind: "terminal".into(), pane_count: 1, sort_order: 0 }];
+        let tabs = vec![WorkspaceTabInput { host_id: host.id, kind: "terminal".into(), pane_count: 1, layout_json: None, sort_order: 0 }];
         let created = create(&conn, "my layout", &tabs).unwrap();
 
         delete(&conn, created.id).unwrap();
@@ -219,8 +260,8 @@ mod tests {
         let host_a = hosts::create(&conn, host_input("a")).unwrap();
         let host_b = hosts::create(&conn, host_input("b")).unwrap();
         let tabs = vec![
-            WorkspaceTabInput { host_id: host_a.id, kind: "terminal".into(), pane_count: 1, sort_order: 0 },
-            WorkspaceTabInput { host_id: host_b.id, kind: "terminal".into(), pane_count: 1, sort_order: 1 },
+            WorkspaceTabInput { host_id: host_a.id, kind: "terminal".into(), pane_count: 1, layout_json: None, sort_order: 0 },
+            WorkspaceTabInput { host_id: host_b.id, kind: "terminal".into(), pane_count: 1, layout_json: None, sort_order: 1 },
         ];
         let created = create(&conn, "my layout", &tabs).unwrap();
 

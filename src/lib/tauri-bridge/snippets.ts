@@ -15,6 +15,9 @@ export interface ExecOutput {
   stdout: string;
   stderr: string;
   exit_status: number | null;
+  // Only ever true from the AI feature's capped exec path - snippets/quick
+  // commands never cap output, so this is always false for them.
+  truncated: boolean;
 }
 
 export interface HostExecResult {

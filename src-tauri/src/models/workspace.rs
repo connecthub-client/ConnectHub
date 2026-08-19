@@ -20,6 +20,11 @@ pub struct WorkspaceTab {
     pub host_id: Uuid,
     pub kind: String,
     pub pane_count: i32,
+    // The tab's exact split shape - JSON, opaque to the backend (the
+    // frontend's src/lib/paneTree.ts owns the schema, this just stores and
+    // returns the string verbatim). None for tabs saved before this
+    // existed, or for non-terminal (SFTP) tabs, which never have one.
+    pub layout_json: Option<String>,
     pub sort_order: i32,
 }
 
@@ -31,5 +36,6 @@ pub struct WorkspaceTabInput {
     pub host_id: Uuid,
     pub kind: String,
     pub pane_count: i32,
+    pub layout_json: Option<String>,
     pub sort_order: i32,
 }

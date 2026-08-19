@@ -165,6 +165,11 @@ export interface WorkspaceTab {
   host_id: string;
   kind: string;
   pane_count: number;
+  // The tab's exact split shape (see lib/paneTree.ts's SerializedPaneNode),
+  // JSON-encoded - null for tabs saved before this existed, or for
+  // non-terminal (SFTP) tabs, which never had one. Falls back to
+  // pane_count flat panes on restore when absent.
+  layout_json: string | null;
   sort_order: number;
 }
 
@@ -172,5 +177,6 @@ export interface WorkspaceTabInput {
   host_id: string;
   kind: string;
   pane_count: number;
+  layout_json: string | null;
   sort_order: number;
 }

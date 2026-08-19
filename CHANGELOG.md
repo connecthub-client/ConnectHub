@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.1.0] — 2026-08-19
+
+### Added
+
+- **AI Assistant**: a per-host chat drawer (bring-your-own-key against OpenAI or Anthropic, configured in Settings → AI Assistant and encrypted in the vault like every other secret) that floats over the terminal so it stays open while you keep interacting with the session. It can suggest commands with syntax-highlighted, one-click Copy/Paste-in-terminal/Run code blocks, or - in an opt-in Autonomous mode gated behind a one-time disclaimer - run its own suggested commands directly and iterate on the output, up to a bounded number of steps or until manually stopped. Every command it runs goes through the same VPN gating as every other execution path in the app.
+- Splitting a session tab into panes now builds a real resizable split tree (drag any divider; each pane independently connectable to a different host via a picker) instead of a fixed row, raising the limit from 4 panes to 9; saving a Workspace now captures the exact split layout, not just which hosts were open, so reopening one restores it precisely.
+
+### Fixed
+
+- SFTP uploads could report success even when the server rejected or never fully received the write (disk full, quota, permission denied, a mid-transfer drop) - `write_all` only ever queued the write and returned before the server's acknowledgement; upload now waits for it (and surfaces the error) via an explicit flush on close.
+- The SFTP browser could briefly show stale directory contents if an older, slower directory listing resolved after a newer one (e.g. rapid navigation), and could leak a connected SFTP session on the backend if the initial local-home-directory lookup failed independently of the SFTP connection itself succeeding.
+- Dragging a session tab to land in the empty trailing space of the tab bar could drop it one position off from where the insertion indicator pointed. Separately, tab drag-and-drop silently failed to complete at all on WebKitGTK (a missing `dataTransfer.setData` call on drag start - tolerated by Chromium, required by WebKit).
+
 ## [2.0.0] — 2026-08-03
 
 ### Added
@@ -131,7 +144,9 @@ Initial public release.
 - VPN helper scripts run under narrowly-scoped polkit rules and force `--script-security 0`, so an uploaded `.ovpn` config can never execute arbitrary code as root.
 - Vault key derivation and the per-installation auto-unlock secret were hardened during development; see [ARCHITECTURE.md](ARCHITECTURE.md#vault--master-password) for the current design and its tradeoffs.
 
-[Unreleased]: https://github.com/connecthub-client/ConnectHub/compare/v1.3.1...HEAD
+[Unreleased]: https://github.com/connecthub-client/ConnectHub/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/connecthub-client/ConnectHub/compare/v2.0.0...v2.1.0
+[2.0.0]: https://github.com/connecthub-client/ConnectHub/compare/v1.3.1...v2.0.0
 [1.3.1]: https://github.com/connecthub-client/ConnectHub/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/connecthub-client/ConnectHub/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/connecthub-client/ConnectHub/compare/v1.1.2...v1.2.0
