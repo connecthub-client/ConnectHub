@@ -8,7 +8,9 @@ import {
   AiSettingsStatus,
   aiSettingsSet,
   aiSettingsStatus,
-  appUpdateInstallable,
+  appPackageUpdateInstall,
+  AppUpdateMethod,
+  appUpdateMethod,
   appVersion,
   KnownHost,
   knownHostsDelete,
@@ -44,11 +46,7 @@ type UpdateState =
 function AboutSection() {
   const [version, setVersion] = useState<string | null>(null);
   const [state, setState] = useState<UpdateState>({ phase: "idle" });
-  // Defaults true (incl. while the check below is still loading) since it's only
-  // ever meaningfully false on a Linux .deb/.rpm install, where the updater plugin
-  // can't apply a downloaded update (see app_update_installable's Rust-side doc
-  // comment) - every other platform/install always supports it.
-  const [installable, setInstallable] = useState(true);
+  const [updateMethod, setUpdateMethod] = useState<AppUpdateMethod>("native");
 
   // Best-effort - if this fails on mount (a transient IPC hiccup), leave
   // the placeholder rather than routing it into the shared update-check
@@ -64,8 +62,8 @@ function AboutSection() {
 
   useEffect(loadVersion, []);
   useEffect(() => {
-    appUpdateInstallable()
-      .then(setInstallable)
+    appUpdateMethod()
+      .then(setUpdateMethod)
       .catch(() => {});
   }, []);
 
@@ -81,23 +79,31 @@ function AboutSection() {
   }
 
   async function handleInstall(update: Update) {
+    if (updateMethod === "unsupported") {
+      await openUrl(RELEASES_URL);
+      return;
+    }
     let total: number | null = null;
     let downloaded = 0;
     setState({ phase: "downloading", update, percent: null });
     try {
-      await update.downloadAndInstall((event) => {
-        if (event.event === "Started") {
-          total = event.data.contentLength ?? null;
-          downloaded = 0;
-        } else if (event.event === "Progress") {
-          downloaded += event.data.chunkLength;
-          setState({
-            phase: "downloading",
-            update,
-            percent: total ? Math.min(100, Math.round((downloaded / total) * 100)) : null,
-          });
-        }
-      });
+      if (updateMethod === "native") {
+        await update.downloadAndInstall((event) => {
+          if (event.event === "Started") {
+            total = event.data.contentLength ?? null;
+            downloaded = 0;
+          } else if (event.event === "Progress") {
+            downloaded += event.data.chunkLength;
+            setState({
+              phase: "downloading",
+              update,
+              percent: total ? Math.min(100, Math.round((downloaded / total) * 100)) : null,
+            });
+          }
+        });
+      } else {
+        await appPackageUpdateInstall(update.version);
+      }
       setState({ phase: "ready-to-restart" });
     } catch (e) {
       setState({
@@ -151,19 +157,26 @@ function AboutSection() {
               {state.update.body}
             </p>
           )}
-          {installable ? (
+          {updateMethod !== "unsupported" ? (
+            <div>
+              {(updateMethod === "deb" || updateMethod === "rpm") && (
+                <p className="mb-2 text-xs text-teal-700 dark:text-teal-300">
+                  The signed {updateMethod.toUpperCase()} package will be verified before a system
+                  authorization prompt installs it.
+                </p>
+              )}
             <button
               type="button"
               onClick={() => void handleInstall(state.update)}
               className="rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-teal-700"
             >
-              Download and install
+              Update and restart
             </button>
+            </div>
           ) : (
             <div>
               <p className="mb-2 text-xs text-teal-700 dark:text-teal-300">
-                Automatic install isn't supported for a .deb/.rpm installation - download the
-                new version from the releases page instead.
+                This installation type cannot be updated automatically.
               </p>
               <button
                 type="button"
@@ -180,7 +193,7 @@ function AboutSection() {
       {state.phase === "downloading" && (
         <div className="rounded-lg border border-teal-300 bg-teal-50 p-3 text-sm dark:border-teal-800 dark:bg-teal-950">
           <p className="mb-2 text-teal-800 dark:text-teal-200">
-            Downloading version {state.update.version}
+            Downloading, verifying, and installing version {state.update.version}
             {state.percent !== null ? ` (${state.percent}%)` : "…"}
           </p>
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-teal-200 dark:bg-teal-900">
@@ -189,6 +202,11 @@ function AboutSection() {
               style={{ width: `${state.percent ?? 0}%` }}
             />
           </div>
+          {(updateMethod === "deb" || updateMethod === "rpm") && (
+            <p className="mt-2 text-xs text-teal-700 dark:text-teal-300">
+              Approve the system password prompt to continue.
+            </p>
+          )}
         </div>
       )}
 

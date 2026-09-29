@@ -2,12 +2,16 @@ import { useEffect, useState } from "react";
 import { check, Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { appUpdateInstallable } from "../../lib/tauri-bridge";
+import {
+  appPackageUpdateInstall,
+  AppUpdateMethod,
+  appUpdateMethod,
+} from "../../lib/tauri-bridge";
 import { friendlyUpdaterError, RELEASES_URL } from "../../lib/updater";
 import Modal from "./Modal";
 
 type PromptState =
-  | { phase: "available"; update: Update; installable: boolean }
+  | { phase: "available"; update: Update; method: AppUpdateMethod }
   | { phase: "downloading"; update: Update; percent: number | null }
   | { phase: "error"; update: Update; message: string };
 
@@ -22,8 +26,8 @@ export default function UpdatePrompt() {
       try {
         const update = await check({ timeout: 15_000 });
         if (!update) return;
-        const installable = await appUpdateInstallable().catch(() => true);
-        if (active) setState({ phase: "available", update, installable });
+        const method = await appUpdateMethod().catch((): AppUpdateMethod => "native");
+        if (active) setState({ phase: "available", update, method });
         else void update.close();
       } catch {
         // Startup checks are intentionally quiet when offline. The manual
@@ -46,7 +50,7 @@ export default function UpdatePrompt() {
 
   const install = async () => {
     if (state.phase !== "available") return;
-    if (!state.installable) {
+    if (state.method === "unsupported") {
       await openUrl(RELEASES_URL);
       dismiss();
       return;
@@ -57,19 +61,23 @@ export default function UpdatePrompt() {
     let downloaded = 0;
     setState({ phase: "downloading", update, percent: null });
     try {
-      await update.downloadAndInstall((event) => {
-        if (event.event === "Started") {
-          total = event.data.contentLength ?? null;
-          downloaded = 0;
-        } else if (event.event === "Progress") {
-          downloaded += event.data.chunkLength;
-          setState({
-            phase: "downloading",
-            update,
-            percent: total ? Math.min(100, Math.round((downloaded / total) * 100)) : null,
-          });
-        }
-      });
+      if (state.method === "native") {
+        await update.downloadAndInstall((event) => {
+          if (event.event === "Started") {
+            total = event.data.contentLength ?? null;
+            downloaded = 0;
+          } else if (event.event === "Progress") {
+            downloaded += event.data.chunkLength;
+            setState({
+              phase: "downloading",
+              update,
+              percent: total ? Math.min(100, Math.round((downloaded / total) * 100)) : null,
+            });
+          }
+        });
+      } else {
+        await appPackageUpdateInstall(update.version);
+      }
       await relaunch();
     } catch (error) {
       setState({ phase: "error", update, message: friendlyUpdaterError(error) });
@@ -97,9 +105,15 @@ export default function UpdatePrompt() {
               {state.update.body}
             </p>
           )}
-          {!state.installable && (
+          {(state.method === "deb" || state.method === "rpm") && (
             <p className="mt-4 text-xs leading-5 text-slate-500 dark:text-slate-400">
-              This package type cannot replace itself automatically. Continue to download the new installer.
+              ConnectHub will verify the signed {state.method.toUpperCase()} package, then ask for
+              administrator authorization to install it.
+            </p>
+          )}
+          {state.method === "unsupported" && (
+            <p className="mt-4 text-xs leading-5 text-slate-500 dark:text-slate-400">
+              This installation type cannot be updated automatically. Continue to the releases page.
             </p>
           )}
           <div className="mt-5 flex justify-end gap-2">
@@ -107,7 +121,7 @@ export default function UpdatePrompt() {
               Later
             </button>
             <button type="button" onClick={() => void install()} className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm shadow-indigo-600/20 hover:bg-indigo-700">
-              {state.installable ? "Update and restart" : `Download ${state.update.version}`}
+              {state.method === "unsupported" ? "Open releases page" : "Update and restart"}
             </button>
           </div>
         </>
@@ -116,13 +130,15 @@ export default function UpdatePrompt() {
       {state.phase === "downloading" && (
         <div>
           <p className="text-sm text-slate-600 dark:text-slate-300">
-            Downloading and verifying ConnectHub {state.update.version}
+            Downloading, verifying, and installing ConnectHub {state.update.version}
             {state.percent !== null ? ` — ${state.percent}%` : "…"}
           </p>
           <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
             <div className="h-full rounded-full bg-indigo-600 transition-all" style={{ width: `${state.percent ?? 8}%` }} />
           </div>
-          <p className="mt-3 text-xs text-slate-400">ConnectHub will restart when the update is installed.</p>
+          <p className="mt-3 text-xs text-slate-400">
+            Package installs may show a system password prompt. ConnectHub will restart when finished.
+          </p>
         </div>
       )}
 

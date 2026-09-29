@@ -13,7 +13,7 @@ use commands::ai_commands::{
     ai_chat_send, ai_command_check, ai_command_exec, ai_settings_clear, ai_settings_set,
     ai_settings_status,
 };
-use commands::app_commands::{app_update_installable, app_version};
+use commands::app_commands::{app_package_update_install, app_update_method, app_version};
 use commands::backup_commands::{
     google_backup_now, google_login, google_login_cancel, google_logout, google_restore,
     google_status,
@@ -69,7 +69,8 @@ pub fn run() {
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             app_version,
-            app_update_installable,
+            app_update_method,
+            app_package_update_install,
             ai_settings_status,
             ai_settings_set,
             ai_settings_clear,
