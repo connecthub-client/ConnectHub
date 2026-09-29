@@ -430,7 +430,7 @@ export default function SftpBrowser({ host, onClose }: SftpBrowserProps) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-slate-200 bg-slate-100 px-4 py-2 dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex min-h-12 items-center justify-between border-b border-slate-200 bg-white px-4 py-2 shadow-sm dark:border-slate-800 dark:bg-slate-950">
         <div className="flex items-center gap-2 text-sm">
           <span
             className={`h-2 w-2 rounded-full ${
@@ -481,13 +481,13 @@ export default function SftpBrowser({ host, onClose }: SftpBrowserProps) {
           onRefresh={() => refreshLocal(localPath)}
         />
 
-        <div className="flex w-16 shrink-0 flex-col items-center justify-center gap-2 border-x border-slate-200 dark:border-slate-800">
+        <div className="flex w-20 shrink-0 flex-col items-center justify-center gap-2 border-x border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950">
           <button
             type="button"
             disabled={!selectedLocal || transferring}
             onClick={handleUpload}
             title="Upload to remote"
-            className="rounded-lg bg-teal-600 shadow-sm px-2 py-1 text-xs font-medium text-white disabled:opacity-30"
+            className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm shadow-indigo-600/20 hover:bg-indigo-700 disabled:opacity-30"
           >
             Upload →
           </button>
@@ -496,13 +496,13 @@ export default function SftpBrowser({ host, onClose }: SftpBrowserProps) {
             disabled={!selectedRemote || transferring}
             onClick={handleDownload}
             title="Download to local"
-            className="rounded-lg bg-teal-600 shadow-sm px-2 py-1 text-xs font-medium text-white disabled:opacity-30"
+            className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm shadow-indigo-600/20 hover:bg-indigo-700 disabled:opacity-30"
           >
             ← Download
           </button>
           {transferringEntry && (
             <div className="mt-1 w-full px-1 text-center" title={transferringEntry.name}>
-              <div className="h-1 w-full animate-pulse rounded-full bg-teal-500" />
+              <div className="h-1 w-full animate-pulse rounded-full bg-indigo-500" />
               <p className="mt-1 truncate text-[10px] text-slate-500 dark:text-slate-400">
                 {transferringEntry.direction === "upload" ? "↑" : "↓"} {transferringEntry.name}
               </p>

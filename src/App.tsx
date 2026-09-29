@@ -4,6 +4,7 @@ import VaultLockOverlay from "./components/common/VaultLockOverlay";
 import { useIdleTimer } from "./components/common/useIdleTimer";
 import { vaultAutoUnlock, vaultLock } from "./lib/tauri-bridge";
 import { useSettingsStore } from "./state/settingsStore";
+import UpdatePrompt from "./components/common/UpdatePrompt";
 import "./App.css";
 
 function useThemeEffect() {
@@ -88,6 +89,7 @@ function App() {
   return (
     <>
       <AppShell />
+      <UpdatePrompt />
       {locked && <VaultLockOverlay onUnlocked={() => setLocked(false)} />}
     </>
   );

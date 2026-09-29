@@ -3,6 +3,8 @@ import { Workspace } from "../../lib/tauri-bridge";
 import { useWorkspacesStore } from "../../state/workspacesStore";
 import { useConfirm } from "../common/useConfirm";
 import { usePrompt } from "../common/usePrompt";
+import { EmptyState, listCardClass, PanelScaffold, primaryActionClass } from "../common/PanelScaffold";
+import { NavIcon } from "../common/navIcons";
 
 interface WorkspacesPanelProps {
   // Whether there's anything open right now worth saving - the panel
@@ -70,52 +72,48 @@ export default function WorkspacesPanel({ hasOpenSessions, onSaveCurrentLayout, 
   }
 
   return (
-    <div>
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">Workspaces</h2>
-        <button
+    <PanelScaffold title="Workspaces" description="Save a complete session layout and reopen your working environment in one click." action={<button
           type="button"
           onClick={handleSave}
           disabled={!hasOpenSessions}
           title={hasOpenSessions ? undefined : "Open at least one tab first"}
-          className="rounded-md bg-teal-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-teal-700 disabled:opacity-50"
+          className={primaryActionClass}
         >
           Save current layout
-        </button>
-      </div>
+        </button>}>
       {error && (
         <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
           {error}
         </p>
       )}
       {workspaces.length === 0 ? (
-        <p className="text-sm text-slate-400">
-          No saved workspaces yet. Open some hosts, then "Save current layout" to name and save
-          this arrangement for later.
-        </p>
+        <EmptyState icon={<NavIcon icon="workspaces" className="h-7 w-7" />} title="No saved workspaces" description="Open a few servers, arrange your tabs and split panes, then save the layout for later." />
       ) : (
-        <div className="divide-y divide-slate-200 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
+        <div className={`${listCardClass} divide-y divide-slate-100 dark:divide-slate-800`}>
           {workspaces.map((workspace) => (
-            <div key={workspace.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-              <div className="min-w-0">
+            <div key={workspace.id} className="flex items-center justify-between gap-4 px-5 py-4 text-sm hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/70 dark:text-indigo-300"><NavIcon icon="workspaces" className="h-5 w-5" /></div>
+                <div className="min-w-0">
                 <p className="truncate font-medium text-slate-800 dark:text-slate-200">{workspace.label}</p>
                 <p className="text-xs text-slate-400">
                   {workspace.tab_count} tab{workspace.tab_count === 1 ? "" : "s"}
                 </p>
+                </div>
               </div>
               <div className="flex shrink-0 items-center gap-3">
                 <button
                   type="button"
                   onClick={() => handleOpen(workspace)}
                   disabled={openingId === workspace.id}
-                  className="font-medium text-teal-600 hover:underline disabled:opacity-50 dark:text-teal-400"
+                  className="font-semibold text-indigo-600 hover:text-indigo-700 disabled:opacity-50 dark:text-indigo-400"
                 >
                   {openingId === workspace.id ? "Opening…" : "Open"}
                 </button>
                 <button
                   type="button"
                   onClick={() => handleRename(workspace)}
-                  className="text-slate-500 hover:text-teal-600 dark:hover:text-teal-400"
+                  className="text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400"
                 >
                   Rename
                 </button>
@@ -133,6 +131,6 @@ export default function WorkspacesPanel({ hasOpenSessions, onSaveCurrentLayout, 
       )}
       {promptDialog}
       {confirmDialog}
-    </div>
+    </PanelScaffold>
   );
 }

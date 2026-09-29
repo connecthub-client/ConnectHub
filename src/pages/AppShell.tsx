@@ -624,7 +624,7 @@ export default function AppShell() {
   }
 
   return (
-    <div className="relative flex h-full overflow-hidden bg-slate-50 dark:bg-slate-900">
+    <div className="relative flex h-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-[#080d1a] dark:text-slate-100">
       <ActivityBar
         activeTab={mainView.type === "manage" ? mainView.tab : null}
         onSelect={(tab) => handleActivitySelect(tab as ManageTab)}
@@ -637,33 +637,36 @@ export default function AppShell() {
         <aside
           style={{ width: leftSidebarVisible ? leftSidebarWidth : 0 }}
           aria-hidden={!leftSidebarVisible}
-          className={`shrink-0 overflow-hidden border-r border-slate-200 dark:border-slate-800 dark:bg-slate-950 ${
+          className={`shrink-0 overflow-hidden border-r border-slate-200/80 bg-white/80 dark:border-slate-800 dark:bg-slate-950 ${
             isDraggingLeftPanel ? "" : "transition-[width] duration-150 ease-out"
           }`}
         >
         <div className="flex h-full flex-col" style={{ width: leftSidebarWidth }}>
-          <div className="flex gap-2 border-b border-slate-200 p-2 dark:border-slate-800">
+          <div className="border-b border-slate-200 p-3 dark:border-slate-800">
+            <p className="mb-2 px-1 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Connection library</p>
+            <div className="flex gap-2">
             <button
               type="button"
               onClick={() => openModal({ kind: "host" })}
-              className="flex-1 rounded-lg bg-teal-600 shadow-sm px-2 py-1.5 text-xs font-medium text-white hover:bg-teal-700"
+              className="flex-1 rounded-xl bg-indigo-600 px-2 py-2 text-xs font-bold text-white shadow-sm shadow-indigo-600/20 hover:bg-indigo-700"
             >
               + Host
             </button>
             <button
               type="button"
               onClick={() => openModal({ kind: "group" })}
-              className="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              className="flex-1 rounded-xl border border-slate-200 bg-white px-2 py-2 text-xs font-bold text-slate-600 shadow-sm hover:border-indigo-300 hover:text-indigo-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
             >
               + Group
             </button>
+            </div>
           </div>
-          <div className="flex gap-2 border-b border-slate-200 p-2 dark:border-slate-800">
+          <div className="flex gap-2 border-b border-slate-200 px-3 py-2.5 dark:border-slate-800">
             <button
               type="button"
               onClick={handleExportCsv}
               title="Export all hosts to a CSV file"
-              className="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              className="flex-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-indigo-600 dark:text-slate-400 dark:hover:bg-slate-800"
             >
               Export CSV
             </button>
@@ -671,7 +674,7 @@ export default function AppShell() {
               type="button"
               onClick={handleImportCsv}
               title="Import hosts from a CSV file"
-              className="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              className="flex-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-indigo-600 dark:text-slate-400 dark:hover:bg-slate-800"
             >
               Import CSV
             </button>
@@ -717,7 +720,7 @@ export default function AppShell() {
 
       <main className="flex min-w-[320px] flex-1 flex-col overflow-hidden">
         {openSessions.length > 0 && (
-          <div className="flex items-stretch border-b border-slate-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-950">
+          <div className="flex min-h-12 items-stretch border-b border-slate-200 bg-white px-1 dark:border-slate-800 dark:bg-slate-950">
             {tabBarOverflowing && (
               <button
                 type="button"
@@ -730,7 +733,7 @@ export default function AppShell() {
             )}
             <div
               ref={tabBarRef}
-              className="flex flex-1 items-center gap-1 overflow-x-auto p-2"
+              className="flex flex-1 items-center gap-1.5 overflow-x-auto px-1 py-2"
               onDragOver={(e) => {
                 if (!draggedTabId) return;
                 e.preventDefault();
@@ -780,7 +783,7 @@ export default function AppShell() {
                 return (
                   <Fragment key={s.tabId}>
                     {dragOverIndex === index && draggedTabId && draggedTabId !== s.tabId && (
-                      <div className="h-6 w-0.5 shrink-0 self-center rounded bg-teal-500" />
+                      <div className="h-7 w-0.5 shrink-0 self-center rounded bg-indigo-500" />
                     )}
                     <div
                       draggable
@@ -814,10 +817,10 @@ export default function AppShell() {
                         setDraggedTabId(null);
                         setDragOverIndex(null);
                       }}
-                      className={`group flex shrink-0 items-center gap-2 rounded-t-md border-b-2 px-3 py-1.5 text-sm ${
+                      className={`group flex shrink-0 items-center gap-2 rounded-lg border px-3 py-1.5 text-sm ${
                         active
-                          ? "border-teal-500 bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-50"
-                          : "border-transparent text-slate-500 hover:bg-slate-200/60 dark:text-slate-400 dark:hover:bg-slate-900/60"
+                          ? "border-indigo-200 bg-indigo-50 text-indigo-950 shadow-sm dark:border-indigo-900 dark:bg-indigo-950/60 dark:text-indigo-100"
+                          : "border-transparent text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-900"
                       } ${draggedTabId === s.tabId ? "opacity-40" : ""}`}
                     >
                       <button
@@ -843,7 +846,7 @@ export default function AppShell() {
                 );
               })}
               {dragOverIndex === openSessions.length && draggedTabId && (
-                <div className="h-6 w-0.5 shrink-0 self-center rounded bg-teal-500" />
+                <div className="h-7 w-0.5 shrink-0 self-center rounded bg-indigo-500" />
               )}
             </div>
             {tabBarOverflowing && (
@@ -901,7 +904,7 @@ export default function AppShell() {
 
         <div className="relative flex-1 overflow-hidden">
           <div
-            className={`absolute inset-0 overflow-y-auto p-6 ${
+            className={`absolute inset-0 overflow-y-auto p-4 sm:p-6 lg:p-8 ${
               mainView.type === "manage" ? "visible" : "invisible"
             }`}
           >
@@ -1081,7 +1084,7 @@ export default function AppShell() {
       <div
         style={{
           width: dockedPanelVisible ? rightPanelWidth : 0,
-          maxWidth: "calc(100vw - 3rem)",
+          maxWidth: "calc(100vw - 4rem)",
         }}
         aria-hidden={!dockedPanelVisible}
         className={`absolute inset-y-0 right-0 z-40 shrink-0 overflow-hidden border-l border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-950 lg:static lg:z-auto lg:border-l-0 lg:shadow-none ${
@@ -1132,7 +1135,7 @@ export default function AppShell() {
         />
       )}
 
-      <nav className="flex w-12 shrink-0 flex-col items-center gap-1 border-l border-slate-200 bg-slate-100 py-2 dark:border-slate-800 dark:bg-slate-950">
+      <nav className="flex w-14 shrink-0 flex-col items-center gap-1.5 border-l border-slate-200/80 bg-slate-100/90 py-3 dark:border-slate-800 dark:bg-slate-950">
         <button
           type="button"
           title={rightPanelVisible ? "Hide details" : "Show details"}
@@ -1149,8 +1152,8 @@ export default function AppShell() {
           onClick={toggleSnippetsDrawer}
           className={`flex h-10 w-10 items-center justify-center rounded-lg ${
             snippetsDrawerOpen
-              ? "bg-teal-600 text-white"
-              : "text-slate-500 hover:bg-slate-200 dark:text-slate-400 dark:hover:bg-slate-800"
+              ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/20"
+              : "text-slate-500 hover:bg-white hover:text-indigo-600 dark:text-slate-400 dark:hover:bg-slate-800"
           }`}
         >
           <NavIcon icon="snippets" className="h-5 w-5" />
@@ -1162,8 +1165,8 @@ export default function AppShell() {
           onClick={toggleAiPanel}
           className={`flex h-10 w-10 items-center justify-center rounded-lg ${
             aiPanelOpen
-              ? "bg-teal-600 text-white"
-              : "text-slate-500 hover:bg-slate-200 dark:text-slate-400 dark:hover:bg-slate-800"
+              ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/20"
+              : "text-slate-500 hover:bg-white hover:text-indigo-600 dark:text-slate-400 dark:hover:bg-slate-800"
           }`}
         >
           <NavIcon icon="ai" className="h-5 w-5" />

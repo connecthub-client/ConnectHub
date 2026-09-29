@@ -81,12 +81,12 @@ export default function CommandPalette({ hosts, actions, onConnectHost, onClose 
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-md" onClick={onClose}>
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
-        className="mx-auto mt-24 w-full max-w-lg overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900"
+        className="mx-auto mt-24 w-[calc(100%-2rem)] max-w-xl overflow-hidden rounded-2xl border border-white/70 bg-white shadow-2xl shadow-slate-950/30 dark:border-slate-700 dark:bg-slate-900"
         onClick={(e) => e.stopPropagation()}
       >
         <input
@@ -95,7 +95,7 @@ export default function CommandPalette({ hosts, actions, onConnectHost, onClose 
           onChange={(e) => setQuery(e.currentTarget.value)}
           onKeyDown={handleKeyDown}
           placeholder="Search hosts or run a command…"
-          className="w-full border-b border-slate-200 bg-transparent px-4 py-3 text-sm text-slate-900 outline-none dark:border-slate-800 dark:text-slate-100"
+          className="w-full border-b border-slate-200 bg-transparent px-5 py-4 text-base text-slate-900 outline-none placeholder:text-slate-400 dark:border-slate-800 dark:text-slate-100"
         />
         <div className="max-h-96 overflow-y-auto p-2">
           {items.length === 0 && <p className="px-3 py-6 text-center text-sm text-slate-400">No matches.</p>}
@@ -108,9 +108,9 @@ export default function CommandPalette({ hosts, actions, onConnectHost, onClose 
                   type="button"
                   onMouseEnter={() => setSelected(i)}
                   onClick={() => runItem({ kind: "host", host })}
-                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm ${
+                  className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm ${
                     selected === i
-                      ? "bg-teal-50 text-teal-700 dark:bg-teal-950 dark:text-teal-300"
+                      ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
                       : "text-slate-700 dark:text-slate-300"
                   }`}
                 >
@@ -131,9 +131,9 @@ export default function CommandPalette({ hosts, actions, onConnectHost, onClose 
                     type="button"
                     onMouseEnter={() => setSelected(index)}
                     onClick={() => runItem({ kind: "action", action })}
-                    className={`flex w-full items-center rounded-lg px-3 py-2 text-left text-sm ${
+                    className={`flex w-full items-center rounded-xl px-3 py-2.5 text-left text-sm ${
                       selected === index
-                        ? "bg-teal-50 text-teal-700 dark:bg-teal-950 dark:text-teal-300"
+                        ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
                         : "text-slate-700 dark:text-slate-300"
                     }`}
                   >

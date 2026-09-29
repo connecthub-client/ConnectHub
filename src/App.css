@@ -18,11 +18,28 @@ body,
 
 body {
   font-family: var(--font-sans);
+  margin: 0;
+  background: #f8fafc;
+  color: #0f172a;
   /* Inter ships with tuned optical sizing; these two match its own
      recommended defaults and noticeably sharpen small UI text over the
      browser default. */
   font-feature-settings: "cv11", "ss01";
   -webkit-font-smoothing: antialiased;
+}
+
+.dark body {
+  background: #080d1a;
+  color: #e2e8f0;
+}
+
+::selection {
+  background: rgb(99 102 241 / 0.28);
+}
+
+:focus-visible {
+  outline: 2px solid rgb(99 102 241 / 0.75);
+  outline-offset: 2px;
 }
 
 /* Smooth, consistent hover/focus/active transitions app-wide without having

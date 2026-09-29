@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { VpnProfile, VpnState } from "../../lib/tauri-bridge";
 import { useVpnStore } from "../../state/vpnStore";
 import { useConfirm } from "../common/useConfirm";
+import { EmptyState, listCardClass, PanelScaffold, primaryActionClass, secondaryActionClass } from "../common/PanelScaffold";
+import { NavIcon } from "../common/navIcons";
 
 interface VpnPanelProps {
   onNew: () => void;
@@ -108,17 +110,14 @@ export default function VpnPanel({ onNew, onEdit }: VpnPanelProps) {
   }
 
   return (
-    <div>
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">VPN</h2>
-        <div className="flex gap-2">
+    <PanelScaffold title="VPN profiles" description="Securely reach private networks before opening SSH and SFTP sessions." action={<div className="flex gap-2">
           {anyActive && (
             <button
               type="button"
               onClick={handleDisconnectAll}
               disabled={disconnectingAll}
               title="Stuck or forgotten VPN connections? Disconnect everything at once."
-              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              className={secondaryActionClass}
             >
               {disconnectingAll ? "Disconnecting…" : "Disconnect all"}
             </button>
@@ -126,15 +125,14 @@ export default function VpnPanel({ onNew, onEdit }: VpnPanelProps) {
           <button
             type="button"
             onClick={onNew}
-            className="rounded-lg bg-teal-600 shadow-sm px-3 py-1.5 text-sm font-medium text-white hover:bg-teal-700"
+            className={primaryActionClass}
           >
-            New VPN profile
+            + New VPN profile
           </button>
-        </div>
-      </div>
+        </div>}>
 
       {!setupInstalled && (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
+        <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
           <p className="mb-2">
             Connecting a VPN needs a one-time privilege setup: it installs a polkit rule scoped
             to launching openvpn, so you aren't prompted for a password on every connect. This
@@ -155,17 +153,16 @@ export default function VpnPanel({ onNew, onEdit }: VpnPanelProps) {
       {actionError && <p className="mb-4 text-sm text-red-600 dark:text-red-400">{actionError}</p>}
 
       {profiles.length === 0 ? (
-        <p className="text-sm text-slate-400">
-          No VPN profiles yet. Add a .ovpn profile to reach hosts on a private network, then
-          assign it to any host from that host&apos;s edit form.
-        </p>
+        <EmptyState icon={<NavIcon icon="vpn" className="h-7 w-7" />} title="No VPN profiles" description="Add an .ovpn profile, then assign it to any server that lives on a private network." action={<button type="button" onClick={onNew} className={primaryActionClass}>Add VPN profile</button>} />
       ) : (
-        <div className="divide-y divide-slate-200 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
+        <div className={`${listCardClass} divide-y divide-slate-100 dark:divide-slate-800`}>
           {profiles.map((profile) => {
             const status = statuses[profile.id];
             return (
-              <div key={profile.id} className="flex items-center justify-between px-4 py-2.5">
-                <div>
+              <div key={profile.id} className="flex items-center justify-between gap-4 px-5 py-4 hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-300"><NavIcon icon="vpn" className="h-5 w-5" /></div>
+                  <div>
                   <p className="flex items-center gap-2 text-sm font-medium text-slate-900 dark:text-slate-100">
                     <span className={`h-1.5 w-1.5 rounded-full ${statusDotClass(status?.state)}`} />
                     {profile.label}
@@ -175,20 +172,21 @@ export default function VpnPanel({ onNew, onEdit }: VpnPanelProps) {
                     {status?.state === "error" && status.message ? `: ${status.message}` : ""}
                     {profile.avoid_default_route ? " · Split-tunnel" : " · Full-tunnel"}
                   </p>
+                  </div>
                 </div>
-                <div className="flex gap-3 text-sm">
+                <div className="flex gap-3 text-sm font-semibold">
                   <button
                     type="button"
                     onClick={() => handleToggle(profile)}
                     disabled={busyId === profile.id || !setupInstalled}
-                    className="text-slate-500 hover:text-teal-600 disabled:opacity-50"
+                    className="text-slate-500 hover:text-indigo-600 disabled:opacity-50"
                   >
                     {status?.state === "connected" ? "Disconnect" : "Connect"}
                   </button>
                   <button
                     type="button"
                     onClick={() => onEdit(profile)}
-                    className="text-slate-500 hover:text-teal-600"
+                    className="text-slate-500 hover:text-indigo-600"
                   >
                     Edit
                   </button>
@@ -215,6 +213,6 @@ export default function VpnPanel({ onNew, onEdit }: VpnPanelProps) {
         </div>
       )}
       {confirmDialog}
-    </div>
+    </PanelScaffold>
   );
 }
