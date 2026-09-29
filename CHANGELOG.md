@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.2.2] — 2026-09-29
+
+### Changed
+
+- Server cards now use a compact horizontal 2.5:1 layout so more saved hosts remain visible without sacrificing the direct Connect, Edit, and Delete actions.
+- The interface now uses a cohesive Navy, Orange, and Teal color palette across light and dark themes.
+- Host grid sizing and surrounding workspace spacing have been refined to make better use of the center panel on wide and narrow windows.
+
 ## [2.2.1] — 2026-09-29
 
 ### Added
