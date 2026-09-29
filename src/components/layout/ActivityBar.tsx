@@ -36,14 +36,16 @@ function ActivityButton({
       title={item.label}
       aria-label={item.label}
       onClick={() => onSelect(item.tab)}
-      className={`group relative flex h-11 w-11 items-center justify-center rounded-xl ${
+      className={`group relative flex h-9 w-9 items-center justify-center rounded-lg ${
         active
-          ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/25"
-          : "text-slate-500 hover:bg-white hover:text-indigo-600 hover:shadow-sm dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-indigo-300"
+          ? "bg-teal-600 text-white shadow-sm shadow-teal-950/20"
+          : "text-slate-500 hover:bg-white hover:text-teal-700 hover:shadow-sm dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-teal-300"
       }`}
     >
-      {active && <span className="absolute -left-2.5 h-6 w-1 rounded-r-full bg-orange-500" />}
-      <NavIcon icon={item.icon} className="h-5 w-5" />
+      {active && (
+        <span className="absolute -left-1.5 h-5 w-0.5 rounded-r-full bg-teal-400" />
+      )}
+      <NavIcon icon={item.icon} className="h-[18px] w-[18px]" />
     </button>
   );
 }
@@ -59,8 +61,11 @@ export default function ActivityBar({
   onToggleSidebar,
 }: ActivityBarProps) {
   return (
-    <nav className="flex w-16 shrink-0 flex-col items-center gap-1.5 border-r border-slate-200/80 bg-slate-100/90 py-3 dark:border-slate-800 dark:bg-slate-950">
-      <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-xs font-black tracking-tight text-white shadow-lg shadow-indigo-600/25" title="ConnectHub">
+    <nav className="flex w-[52px] shrink-0 flex-col items-center gap-1 border-r border-slate-200 bg-slate-100/90 py-2 dark:border-slate-800 dark:bg-slate-950">
+      <div
+        className="mb-1.5 flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-teal-500 to-teal-700 text-[11px] font-black tracking-tight text-white shadow-sm"
+        title="ConnectHub"
+      >
         CH
       </div>
       <button
@@ -68,16 +73,29 @@ export default function ActivityBar({
         onClick={onToggleSidebar}
         title={leftSidebarVisible ? "Hide sidebar" : "Show sidebar"}
         aria-label={leftSidebarVisible ? "Hide sidebar" : "Show sidebar"}
-        className="mb-1 flex h-8 w-11 items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-indigo-600 dark:hover:bg-slate-800 dark:hover:text-indigo-400"
+        className="mb-1 flex h-8 w-9 items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-teal-700 dark:hover:bg-slate-800 dark:hover:text-teal-300"
       >
-        <NavIcon icon={sidebarToggleIcon("left", leftSidebarVisible)} className="h-4 w-4" />
+        <NavIcon
+          icon={sidebarToggleIcon("left", leftSidebarVisible)}
+          className="h-4 w-4"
+        />
       </button>
       {ITEMS.map((item) => (
-        <ActivityButton key={item.tab} item={item} active={activeTab === item.tab} onSelect={onSelect} />
+        <ActivityButton
+          key={item.tab}
+          item={item}
+          active={activeTab === item.tab}
+          onSelect={onSelect}
+        />
       ))}
       <div className="mt-auto flex flex-col items-center gap-1">
         {BOTTOM_ITEMS.map((item) => (
-          <ActivityButton key={item.tab} item={item} active={activeTab === item.tab} onSelect={onSelect} />
+          <ActivityButton
+            key={item.tab}
+            item={item}
+            active={activeTab === item.tab}
+            onSelect={onSelect}
+          />
         ))}
       </div>
     </nav>

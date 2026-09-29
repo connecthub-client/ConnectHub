@@ -4,11 +4,22 @@ import { AuthMethod, Host, localReadTextFile } from "../../lib/tauri-bridge";
 import { useHostsStore } from "../../state/hostsStore";
 import { useVpnStore } from "../../state/vpnStore";
 import { FieldErrors } from "../../lib/formValidation";
-import { errorClass, inputClass, labelClass, primaryButtonClass, selectClass } from "./formStyles";
+import {
+  errorClass,
+  inputClass,
+  labelClass,
+  primaryButtonClass,
+  selectClass,
+} from "./formStyles";
 import FieldError from "./FieldError";
 import RequiredMark from "./RequiredMark";
 import TagInput from "./TagInput";
-import { CLOUD_ICONS, HOST_ICONS, LETTER_ICONS, HostIcon } from "../common/hostIcons";
+import {
+  CLOUD_ICONS,
+  HOST_ICONS,
+  LETTER_ICONS,
+  HostIcon,
+} from "../common/hostIcons";
 
 interface HostFormProps {
   host?: Host;
@@ -44,17 +55,28 @@ function FormSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="mb-4">
-        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">{title}</h3>
-        {description && <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">{description}</p>}
+        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+          {title}
+        </h3>
+        {description && (
+          <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
+            {description}
+          </p>
+        )}
       </div>
       {children}
     </section>
   );
 }
 
-export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnect }: HostFormProps) {
+export default function HostForm({
+  host,
+  defaultGroupId,
+  onDone,
+  onSaveAndConnect,
+}: HostFormProps) {
   const groups = useHostsStore((s) => s.groups);
   const identities = useHostsStore((s) => s.identities);
   const keys = useHostsStore((s) => s.keys);
@@ -68,11 +90,15 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
   const [label, setLabel] = useState(host?.label ?? "");
   const [hostname, setHostname] = useState(host?.hostname ?? "");
   const [port, setPort] = useState(host?.port ?? 22);
-  const [groupId, setGroupId] = useState(host?.group_id ?? defaultGroupId ?? "");
+  const [groupId, setGroupId] = useState(
+    host?.group_id ?? defaultGroupId ?? "",
+  );
   const [color, setColor] = useState<string | null>(host?.color ?? null);
   const [icon, setIcon] = useState<string | null>(host?.icon ?? null);
   const [showLetterIcons, setShowLetterIcons] = useState(false);
-  const [tagIds, setTagIds] = useState<string[]>(host?.tags.map((t) => t.id) ?? []);
+  const [tagIds, setTagIds] = useState<string[]>(
+    host?.tags.map((t) => t.id) ?? [],
+  );
 
   const [identityMode, setIdentityMode] = useState<"new" | "existing">(
     host?.identity_id ? "existing" : "new",
@@ -82,7 +108,9 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
   const [authMethod, setAuthMethod] = useState<InlineAuthMethod>("password");
   const [password, setPassword] = useState("");
   const [sshKeyId, setSshKeyId] = useState("");
-  const [keyMode, setKeyMode] = useState<"existing" | "import">(keys.length > 0 ? "existing" : "import");
+  const [keyMode, setKeyMode] = useState<"existing" | "import">(
+    keys.length > 0 ? "existing" : "import",
+  );
   const [importKeyLabel, setImportKeyLabel] = useState("");
   const [importKeyPem, setImportKeyPem] = useState("");
   const [importKeyPassphrase, setImportKeyPassphrase] = useState("");
@@ -147,20 +175,23 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
     // Which of the two submit buttons was actually clicked - SubmitEvent's
     // `submitter` (widely supported, including WebKitGTK) is the standard
     // way to distinguish this when a form has more than one submit button.
-    const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+    const submitter = (e.nativeEvent as SubmitEvent)
+      .submitter as HTMLButtonElement | null;
     const connectAfterSave = submitter?.value === "connect";
 
     const errors: FieldErrors = {};
     if (!label.trim()) errors.label = "Enter a label.";
     if (!hostname.trim()) errors.hostname = "Enter a hostname or IP.";
-    if (!port || port < 1 || port > 65535) errors.port = "Enter a port between 1 and 65535.";
+    if (!port || port < 1 || port > 65535)
+      errors.port = "Enter a port between 1 and 65535.";
 
     if (identityMode === "new" && authMethod === "private_key") {
       if (keyMode === "existing" && !sshKeyId) {
-        errors.sshKeyId = "Select an SSH key, or switch to \"Import new key\".";
+        errors.sshKeyId = 'Select an SSH key, or switch to "Import new key".';
       }
       if (keyMode === "import" && !importKeyPem) {
-        errors.importKeyPem = "Upload or paste a private key, or switch to \"Use saved key\".";
+        errors.importKeyPem =
+          'Upload or paste a private key, or switch to "Use saved key".';
       }
     }
     // Credential data (a password, or a selected/imported key) only ever
@@ -172,20 +203,25 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
     if (identityMode === "new" && !username) {
       const hasCredentialData =
         (authMethod === "password" && password) ||
-        (authMethod === "private_key" && ((keyMode === "existing" && sshKeyId) || (keyMode === "import" && importKeyPem)));
+        (authMethod === "private_key" &&
+          ((keyMode === "existing" && sshKeyId) ||
+            (keyMode === "import" && importKeyPem)));
       if (hasCredentialData) {
-        errors.username = "Enter a username, or clear the password/key to skip creating credentials for this host.";
+        errors.username =
+          "Enter a username, or clear the password/key to skip creating credentials for this host.";
       }
     }
     if (vpnMode === "new" && !vpnConfig) {
-      errors.vpnConfig = "Upload or paste a .ovpn profile, or switch VPN back to \"None\".";
+      errors.vpnConfig =
+        'Upload or paste a .ovpn profile, or switch VPN back to "None".';
     }
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) return;
 
     setSubmitting(true);
     try {
-      let resolvedIdentityId = identityMode === "existing" ? identityId || null : null;
+      let resolvedIdentityId =
+        identityMode === "existing" ? identityId || null : null;
 
       if (identityMode === "new" && username) {
         let resolvedSshKeyId = sshKeyId;
@@ -208,7 +244,8 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
         resolvedIdentityId = identity.id;
       }
 
-      let resolvedVpnProfileId = vpnMode === "existing" ? vpnProfileId || null : null;
+      let resolvedVpnProfileId =
+        vpnMode === "existing" ? vpnProfileId || null : null;
 
       if (vpnMode === "new") {
         const profile = await createVpnProfile({
@@ -234,7 +271,9 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
         sort_order: host?.sort_order ?? 0,
         tag_ids: tagIds,
       };
-      const savedHost = host ? await updateHost(host.id, input) : await createHost(input);
+      const savedHost = host
+        ? await updateHost(host.id, input)
+        : await createHost(input);
       if (connectAfterSave && onSaveAndConnect) {
         onSaveAndConnect(savedHost);
       } else {
@@ -249,148 +288,132 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-4 pb-2">
-      <div className="rounded-2xl bg-indigo-50 p-4 dark:bg-indigo-950/40">
-        <p className="text-sm font-semibold text-indigo-950 dark:text-indigo-100">
-          {host ? "Update this server's connection settings." : "Enter the details you use to log in over SSH."}
+      <div className="rounded-xl bg-teal-50 p-4 dark:bg-teal-950/40">
+        <p className="text-sm font-semibold text-teal-950 dark:text-teal-100">
+          {host
+            ? "Update this server's connection settings."
+            : "Enter the details you use to log in over SSH."}
         </p>
-        <p className="mt-1 text-xs leading-5 text-indigo-700 dark:text-indigo-300">
-          Passwords, private keys, and passphrases are encrypted before they are stored.
+        <p className="mt-1 text-xs leading-5 text-teal-700 dark:text-teal-300">
+          Passwords, private keys, and passphrases are encrypted before they are
+          stored.
         </p>
       </div>
 
-      <FormSection title="Server details" description="Name the server and enter its network address.">
-      <label className={labelClass}>
-        Server name
-        <RequiredMark />
-      </label>
-      <input
-        value={label}
-        onChange={(e) => setLabel(e.currentTarget.value)}
-        className={inputClass}
-        placeholder="e.g. prod-api-01"
-        required
-      />
-      <FieldError message={fieldErrors.label} />
-
-      <div className="flex gap-3">
-        <div className="flex-1">
-          <label className={labelClass}>
-            Hostname / IP
-            <RequiredMark />
-          </label>
-          <input
-            value={hostname}
-            onChange={(e) => setHostname(e.currentTarget.value)}
-            className={inputClass}
-            placeholder="203.0.113.10 or server.example.com"
-            required
-          />
-          <FieldError message={fieldErrors.hostname} />
-        </div>
-        <div className="w-24">
-          <label className={labelClass}>
-            Port
-            <RequiredMark />
-          </label>
-          <input
-            type="number"
-            min={1}
-            max={65535}
-            value={port}
-            onChange={(e) => setPort(Number(e.currentTarget.value))}
-            className={inputClass}
-            required
-          />
-          <FieldError message={fieldErrors.port} />
-        </div>
-      </div>
-
-      <label className={labelClass}>Group</label>
-      <select
-        value={groupId}
-        onChange={(e) => setGroupId(e.currentTarget.value)}
-        className={selectClass}
+      <FormSection
+        title="Server details"
+        description="Name the server and enter its network address."
       >
-        <option value="">Ungrouped</option>
-        {groups.map((g) => (
-          <option key={g.id} value={g.id}>
-            {g.name}
-          </option>
-        ))}
-      </select>
+        <label className={labelClass}>
+          Server name
+          <RequiredMark />
+        </label>
+        <input
+          value={label}
+          onChange={(e) => setLabel(e.currentTarget.value)}
+          className={inputClass}
+          placeholder="e.g. prod-api-01"
+          required
+        />
+        <FieldError message={fieldErrors.label} />
+
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <label className={labelClass}>
+              Hostname / IP
+              <RequiredMark />
+            </label>
+            <input
+              value={hostname}
+              onChange={(e) => setHostname(e.currentTarget.value)}
+              className={inputClass}
+              placeholder="203.0.113.10 or server.example.com"
+              required
+            />
+            <FieldError message={fieldErrors.hostname} />
+          </div>
+          <div className="w-24">
+            <label className={labelClass}>
+              Port
+              <RequiredMark />
+            </label>
+            <input
+              type="number"
+              min={1}
+              max={65535}
+              value={port}
+              onChange={(e) => setPort(Number(e.currentTarget.value))}
+              className={inputClass}
+              required
+            />
+            <FieldError message={fieldErrors.port} />
+          </div>
+        </div>
+
+        <label className={labelClass}>Group</label>
+        <select
+          value={groupId}
+          onChange={(e) => setGroupId(e.currentTarget.value)}
+          className={selectClass}
+        >
+          <option value="">Ungrouped</option>
+          {groups.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.name}
+            </option>
+          ))}
+        </select>
       </FormSection>
 
-      <FormSection title="Appearance and organization" description="Make this server easy to recognize and find.">
-      <label className={labelClass}>Color (optional)</label>
-      <div className="mb-4 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => setColor(null)}
-          title="No color"
-          className={`flex h-6 w-6 items-center justify-center rounded-full border text-xs ${
-            color === null
-              ? "border-indigo-500 text-indigo-600 dark:text-indigo-400"
-              : "border-slate-300 text-slate-400 dark:border-slate-700"
-          }`}
-        >
-          ✕
-        </button>
-        {COLOR_PRESETS.map((c) => (
+      <FormSection
+        title="Appearance and organization"
+        description="Make this server easy to recognize and find."
+      >
+        <label className={labelClass}>Color (optional)</label>
+        <div className="mb-4 flex items-center gap-2">
           <button
-            key={c}
             type="button"
-            onClick={() => setColor(c)}
-            title={c}
-            className="h-6 w-6 rounded-full"
-            style={{
-              backgroundColor: c,
-              outline: color === c ? `2px solid ${c}` : "none",
-              outlineOffset: "2px",
-            }}
-          />
-        ))}
-      </div>
-
-      <label className={labelClass}>Icon (optional)</label>
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={() => setIcon(null)}
-          title="No icon"
-          className={`flex h-7 w-7 items-center justify-center rounded-lg border text-xs ${
-            icon === null
-              ? "border-indigo-500 text-indigo-600 dark:text-indigo-400"
-              : "border-slate-300 text-slate-400 hover:border-slate-400 dark:border-slate-700"
-          }`}
-        >
-          ✕
-        </button>
-        {[...HOST_ICONS, ...CLOUD_ICONS].map((i) => (
-          <button
-            key={i.key}
-            type="button"
-            onClick={() => setIcon(i.key)}
-            title={i.label}
-            className={`flex h-7 w-7 items-center justify-center rounded-lg border ${
-              icon === i.key
-                ? "border-indigo-500 text-indigo-600 dark:text-indigo-400"
-                : "border-slate-300 text-slate-500 hover:border-slate-400 dark:border-slate-700 dark:text-slate-400"
+            onClick={() => setColor(null)}
+            title="No color"
+            className={`flex h-6 w-6 items-center justify-center rounded-full border text-xs ${
+              color === null
+                ? "border-teal-500 text-teal-600 dark:text-teal-400"
+                : "border-slate-300 text-slate-400 dark:border-slate-700"
             }`}
           >
-            <HostIcon icon={i.key} className="h-4 w-4" />
+            ✕
           </button>
-        ))}
-        <button
-          type="button"
-          onClick={() => setShowLetterIcons((v) => !v)}
-          className="flex h-7 items-center justify-center rounded-lg border border-dashed border-slate-300 px-2 text-xs text-slate-500 hover:border-slate-400 dark:border-slate-700 dark:text-slate-400"
-        >
-          {showLetterIcons ? "Less" : "More"}
-        </button>
-      </div>
-      {showLetterIcons && (
-        <div className="mb-2 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 p-2 dark:border-slate-800">
-          {LETTER_ICONS.map((i) => (
+          {COLOR_PRESETS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setColor(c)}
+              title={c}
+              className="h-6 w-6 rounded-full"
+              style={{
+                backgroundColor: c,
+                outline: color === c ? `2px solid ${c}` : "none",
+                outlineOffset: "2px",
+              }}
+            />
+          ))}
+        </div>
+
+        <label className={labelClass}>Icon (optional)</label>
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIcon(null)}
+            title="No icon"
+            className={`flex h-7 w-7 items-center justify-center rounded-lg border text-xs ${
+              icon === null
+                ? "border-teal-500 text-teal-600 dark:text-teal-400"
+                : "border-slate-300 text-slate-400 hover:border-slate-400 dark:border-slate-700"
+            }`}
+          >
+            ✕
+          </button>
+          {[...HOST_ICONS, ...CLOUD_ICONS].map((i) => (
             <button
               key={i.key}
               type="button"
@@ -398,307 +421,353 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
               title={i.label}
               className={`flex h-7 w-7 items-center justify-center rounded-lg border ${
                 icon === i.key
-                  ? "border-indigo-500"
-                  : "border-slate-300 hover:border-slate-400 dark:border-slate-700"
+                  ? "border-teal-500 text-teal-600 dark:text-teal-400"
+                  : "border-slate-300 text-slate-500 hover:border-slate-400 dark:border-slate-700 dark:text-slate-400"
               }`}
             >
               <HostIcon icon={i.key} className="h-4 w-4" />
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => setShowLetterIcons((v) => !v)}
+            className="flex h-7 items-center justify-center rounded-lg border border-dashed border-slate-300 px-2 text-xs text-slate-500 hover:border-slate-400 dark:border-slate-700 dark:text-slate-400"
+          >
+            {showLetterIcons ? "Less" : "More"}
+          </button>
         </div>
-      )}
+        {showLetterIcons && (
+          <div className="mb-2 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 p-2 dark:border-slate-800">
+            {LETTER_ICONS.map((i) => (
+              <button
+                key={i.key}
+                type="button"
+                onClick={() => setIcon(i.key)}
+                title={i.label}
+                className={`flex h-7 w-7 items-center justify-center rounded-lg border ${
+                  icon === i.key
+                    ? "border-teal-500"
+                    : "border-slate-300 hover:border-slate-400 dark:border-slate-700"
+                }`}
+              >
+                <HostIcon icon={i.key} className="h-4 w-4" />
+              </button>
+            ))}
+          </div>
+        )}
 
-      <label className={labelClass}>Tags (optional)</label>
-      <TagInput selectedTagIds={tagIds} onChange={setTagIds} />
+        <label className={labelClass}>Tags (optional)</label>
+        <TagInput selectedTagIds={tagIds} onChange={setTagIds} />
       </FormSection>
 
-      <FormSection title="SSH credentials" description="Use new credentials for this server or attach a saved identity.">
-      {identities.length > 0 && (
+      <FormSection
+        title="SSH credentials"
+        description="Use new credentials for this server or attach a saved identity."
+      >
+        {identities.length > 0 && (
+          <div className="mb-4 flex rounded-lg border border-slate-300 p-1 text-sm dark:border-slate-700">
+            <button
+              type="button"
+              onClick={() => setIdentityMode("new")}
+              className={`flex-1 rounded-md px-3 py-1.5 ${identityMode === "new" ? "bg-teal-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
+            >
+              New credentials
+            </button>
+            <button
+              type="button"
+              onClick={() => setIdentityMode("existing")}
+              className={`flex-1 rounded-md px-3 py-1.5 ${identityMode === "existing" ? "bg-teal-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
+            >
+              Use saved identity
+            </button>
+          </div>
+        )}
+
+        {identityMode === "existing" ? (
+          <select
+            value={identityId}
+            onChange={(e) => setIdentityId(e.currentTarget.value)}
+            className={selectClass}
+          >
+            <option value="">(none)</option>
+            {identities.map((i) => (
+              <option key={i.id} value={i.id}>
+                {i.label} ({i.username})
+              </option>
+            ))}
+          </select>
+        ) : (
+          <div className="mb-4 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+            <label className={labelClass}>Username</label>
+            <input
+              value={username}
+              onChange={(e) => setUsername(e.currentTarget.value)}
+              className={inputClass}
+              placeholder="e.g. root"
+            />
+            <FieldError message={fieldErrors.username} />
+
+            <label className={labelClass}>Authentication</label>
+            <div className="mb-4 flex gap-4 text-sm text-slate-700 dark:text-slate-300">
+              <label className="flex items-center gap-1.5">
+                <input
+                  type="radio"
+                  checked={authMethod === "password"}
+                  onChange={() => setAuthMethod("password")}
+                  className="accent-teal-600"
+                />
+                Password
+              </label>
+              <label className="flex items-center gap-1.5">
+                <input
+                  type="radio"
+                  checked={authMethod === "private_key"}
+                  onChange={() => setAuthMethod("private_key")}
+                  className="accent-teal-600"
+                />
+                Private key
+              </label>
+            </div>
+
+            {authMethod === "password" ? (
+              <input
+                type="password"
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => setPassword(e.currentTarget.value)}
+                className={inputClass}
+                placeholder="Password"
+              />
+            ) : (
+              <>
+                {keys.length > 0 && (
+                  <div className="mb-3 flex rounded-lg border border-slate-300 p-1 text-sm dark:border-slate-700">
+                    <button
+                      type="button"
+                      onClick={() => setKeyMode("existing")}
+                      className={`flex-1 rounded-md px-2 py-1.5 ${keyMode === "existing" ? "bg-teal-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
+                    >
+                      Use saved key
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setKeyMode("import")}
+                      className={`flex-1 rounded-md px-2 py-1.5 ${keyMode === "import" ? "bg-teal-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
+                    >
+                      Import new key
+                    </button>
+                  </div>
+                )}
+
+                {keyMode === "existing" && keys.length > 0 ? (
+                  <select
+                    value={sshKeyId}
+                    onChange={(e) => setSshKeyId(e.currentTarget.value)}
+                    className={selectClass}
+                  >
+                    <option value="">Select a key…</option>
+                    {keys.map((k) => (
+                      <option key={k.id} value={k.id}>
+                        {k.label} ({k.key_type})
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+                <FieldError message={fieldErrors.sshKeyId} />
+                {!(keyMode === "existing" && keys.length > 0) && (
+                  <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                    <label className={labelClass}>Label</label>
+                    <input
+                      value={importKeyLabel}
+                      onChange={(e) => setImportKeyLabel(e.currentTarget.value)}
+                      className={inputClass}
+                      placeholder="e.g. laptop key"
+                    />
+
+                    <div className="mb-1 flex items-center justify-between">
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                        Private key (OpenSSH or PEM format)
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleBrowseKey}
+                        className="text-xs text-teal-600 hover:underline dark:text-teal-400"
+                      >
+                        Browse…
+                      </button>
+                    </div>
+                    <textarea
+                      value={importKeyPem}
+                      onChange={(e) => setImportKeyPem(e.currentTarget.value)}
+                      className={`${inputClass} h-28 font-mono text-xs`}
+                      placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
+                    />
+                    <FieldError message={fieldErrors.importKeyPem} />
+
+                    <label className={labelClass}>
+                      Passphrase (if the key is encrypted)
+                    </label>
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      value={importKeyPassphrase}
+                      onChange={(e) =>
+                        setImportKeyPassphrase(e.currentTarget.value)
+                      }
+                      className={inputClass}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </FormSection>
+
+      <FormSection
+        title="VPN (optional)"
+        description="Connect a VPN automatically before opening this server."
+      >
+        <p className="mb-3 text-xs text-slate-400">
+          If this host is only reachable over a VPN, assign a profile here -
+          connecting will bring the VPN up first automatically.
+        </p>
         <div className="mb-4 flex rounded-lg border border-slate-300 p-1 text-sm dark:border-slate-700">
           <button
             type="button"
-            onClick={() => setIdentityMode("new")}
-            className={`flex-1 rounded-md px-3 py-1.5 ${identityMode === "new" ? "bg-indigo-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
+            onClick={() => setVpnMode("none")}
+            className={`flex-1 rounded-md px-2 py-1.5 ${vpnMode === "none" ? "bg-teal-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
           >
-            New credentials
+            None
           </button>
           <button
             type="button"
-            onClick={() => setIdentityMode("existing")}
-            className={`flex-1 rounded-md px-3 py-1.5 ${identityMode === "existing" ? "bg-indigo-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
+            onClick={() => setVpnMode("new")}
+            className={`flex-1 rounded-md px-2 py-1.5 ${vpnMode === "new" ? "bg-teal-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
           >
-            Use saved identity
+            Upload profile
           </button>
+          {vpnProfiles.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setVpnMode("existing")}
+              className={`flex-1 rounded-md px-2 py-1.5 ${vpnMode === "existing" ? "bg-teal-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
+            >
+              Use saved profile
+            </button>
+          )}
         </div>
-      )}
 
-      {identityMode === "existing" ? (
-        <select
-          value={identityId}
-          onChange={(e) => setIdentityId(e.currentTarget.value)}
-          className={selectClass}
-        >
-          <option value="">(none)</option>
-          {identities.map((i) => (
-            <option key={i.id} value={i.id}>
-              {i.label} ({i.username})
-            </option>
-          ))}
-        </select>
-      ) : (
-        <div className="mb-4 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-          <label className={labelClass}>Username</label>
-          <input
-            value={username}
-            onChange={(e) => setUsername(e.currentTarget.value)}
-            className={inputClass}
-            placeholder="e.g. root"
-          />
-          <FieldError message={fieldErrors.username} />
+        {vpnMode === "existing" && (
+          <select
+            value={vpnProfileId}
+            onChange={(e) => setVpnProfileId(e.currentTarget.value)}
+            className={selectClass}
+          >
+            <option value="">(none)</option>
+            {vpnProfiles.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        )}
 
-          <label className={labelClass}>Authentication</label>
-          <div className="mb-4 flex gap-4 text-sm text-slate-700 dark:text-slate-300">
-            <label className="flex items-center gap-1.5">
+        {vpnMode === "new" && (
+          <div className="mb-4 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+            <label className={labelClass}>Label</label>
+            <input
+              value={vpnLabel}
+              onChange={(e) => setVpnLabel(e.currentTarget.value)}
+              className={inputClass}
+              placeholder="e.g. office vpn"
+            />
+
+            <div className="mb-1 flex items-center justify-between">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                OpenVPN config (.ovpn)
+              </label>
+              <button
+                type="button"
+                onClick={handleBrowseVpn}
+                className="text-xs text-teal-600 hover:underline dark:text-teal-400"
+              >
+                Browse…
+              </button>
+            </div>
+            <textarea
+              value={vpnConfig}
+              onChange={(e) => setVpnConfig(e.currentTarget.value)}
+              className={`${inputClass} h-28 font-mono text-xs`}
+              placeholder="Paste an .ovpn file's contents, or browse to one above"
+            />
+            <FieldError message={fieldErrors.vpnConfig} />
+
+            <label className="mb-3 flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
               <input
-                type="radio"
-                checked={authMethod === "password"}
-                onChange={() => setAuthMethod("password")}
-                className="accent-indigo-600"
+                type="checkbox"
+                checked={vpnAvoidDefaultRoute}
+                onChange={(e) =>
+                  setVpnAvoidDefaultRoute(e.currentTarget.checked)
+                }
+                className="mt-0.5 accent-teal-600"
               />
-              Password
+              <span>
+                Don&apos;t let this VPN take over my default internet route
+                <span className="block text-xs text-slate-400">
+                  This host stays reachable through it either way. Only limits
+                  this profile's effect on your other, unrelated traffic -
+                  recommended unless it's meant to route your whole connection.
+                </span>
+              </span>
             </label>
-            <label className="flex items-center gap-1.5">
-              <input
-                type="radio"
-                checked={authMethod === "private_key"}
-                onChange={() => setAuthMethod("private_key")}
-                className="accent-indigo-600"
-              />
-              Private key
-            </label>
-          </div>
 
-          {authMethod === "password" ? (
+            <p className="mb-3 -mt-2 text-xs text-slate-400">
+              Only needed if this profile prompts for a separate
+              username/password at login - most profiles with an embedded client
+              certificate don't.
+            </p>
+            <label className={labelClass}>Username (optional)</label>
+            <input
+              value={vpnAuthUsername}
+              onChange={(e) => setVpnAuthUsername(e.currentTarget.value)}
+              className={inputClass}
+            />
+
+            <label className={labelClass}>Password (optional)</label>
             <input
               type="password"
               autoComplete="new-password"
-              value={password}
-              onChange={(e) => setPassword(e.currentTarget.value)}
+              value={vpnAuthPassword}
+              onChange={(e) => setVpnAuthPassword(e.currentTarget.value)}
               className={inputClass}
-              placeholder="Password"
             />
-          ) : (
-            <>
-              {keys.length > 0 && (
-                <div className="mb-3 flex rounded-lg border border-slate-300 p-1 text-sm dark:border-slate-700">
-                  <button
-                    type="button"
-                    onClick={() => setKeyMode("existing")}
-                    className={`flex-1 rounded-md px-2 py-1.5 ${keyMode === "existing" ? "bg-indigo-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
-                  >
-                    Use saved key
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setKeyMode("import")}
-                    className={`flex-1 rounded-md px-2 py-1.5 ${keyMode === "import" ? "bg-indigo-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
-                  >
-                    Import new key
-                  </button>
-                </div>
-              )}
-
-              {keyMode === "existing" && keys.length > 0 ? (
-                <select
-                  value={sshKeyId}
-                  onChange={(e) => setSshKeyId(e.currentTarget.value)}
-                  className={selectClass}
-                >
-                  <option value="">Select a key…</option>
-                  {keys.map((k) => (
-                    <option key={k.id} value={k.id}>
-                      {k.label} ({k.key_type})
-                    </option>
-                  ))}
-                </select>
-              ) : null}
-              <FieldError message={fieldErrors.sshKeyId} />
-              {!(keyMode === "existing" && keys.length > 0) && (
-                <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                  <label className={labelClass}>Label</label>
-                  <input
-                    value={importKeyLabel}
-                    onChange={(e) => setImportKeyLabel(e.currentTarget.value)}
-                    className={inputClass}
-                    placeholder="e.g. laptop key"
-                  />
-
-                  <div className="mb-1 flex items-center justify-between">
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                      Private key (OpenSSH or PEM format)
-                    </label>
-                    <button
-                      type="button"
-                      onClick={handleBrowseKey}
-                      className="text-xs text-indigo-600 hover:underline dark:text-indigo-400"
-                    >
-                      Browse…
-                    </button>
-                  </div>
-                  <textarea
-                    value={importKeyPem}
-                    onChange={(e) => setImportKeyPem(e.currentTarget.value)}
-                    className={`${inputClass} h-28 font-mono text-xs`}
-                    placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
-                  />
-                  <FieldError message={fieldErrors.importKeyPem} />
-
-                  <label className={labelClass}>Passphrase (if the key is encrypted)</label>
-                  <input
-                    type="password"
-                    autoComplete="new-password"
-                    value={importKeyPassphrase}
-                    onChange={(e) => setImportKeyPassphrase(e.currentTarget.value)}
-                    className={inputClass}
-                  />
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
-      </FormSection>
-
-      <FormSection title="VPN (optional)" description="Connect a VPN automatically before opening this server.">
-      <p className="mb-3 text-xs text-slate-400">
-        If this host is only reachable over a VPN, assign a profile here - connecting will bring
-        the VPN up first automatically.
-      </p>
-      <div className="mb-4 flex rounded-lg border border-slate-300 p-1 text-sm dark:border-slate-700">
-        <button
-          type="button"
-          onClick={() => setVpnMode("none")}
-          className={`flex-1 rounded-md px-2 py-1.5 ${vpnMode === "none" ? "bg-indigo-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
-        >
-          None
-        </button>
-        <button
-          type="button"
-          onClick={() => setVpnMode("new")}
-          className={`flex-1 rounded-md px-2 py-1.5 ${vpnMode === "new" ? "bg-indigo-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
-        >
-          Upload profile
-        </button>
-        {vpnProfiles.length > 0 && (
-          <button
-            type="button"
-            onClick={() => setVpnMode("existing")}
-            className={`flex-1 rounded-md px-2 py-1.5 ${vpnMode === "existing" ? "bg-indigo-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
-          >
-            Use saved profile
-          </button>
-        )}
-      </div>
-
-      {vpnMode === "existing" && (
-        <select
-          value={vpnProfileId}
-          onChange={(e) => setVpnProfileId(e.currentTarget.value)}
-          className={selectClass}
-        >
-          <option value="">(none)</option>
-          {vpnProfiles.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.label}
-            </option>
-          ))}
-        </select>
-      )}
-
-      {vpnMode === "new" && (
-        <div className="mb-4 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-          <label className={labelClass}>Label</label>
-          <input
-            value={vpnLabel}
-            onChange={(e) => setVpnLabel(e.currentTarget.value)}
-            className={inputClass}
-            placeholder="e.g. office vpn"
-          />
-
-          <div className="mb-1 flex items-center justify-between">
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-              OpenVPN config (.ovpn)
-            </label>
-            <button
-              type="button"
-              onClick={handleBrowseVpn}
-              className="text-xs text-indigo-600 hover:underline dark:text-indigo-400"
-            >
-              Browse…
-            </button>
           </div>
-          <textarea
-            value={vpnConfig}
-            onChange={(e) => setVpnConfig(e.currentTarget.value)}
-            className={`${inputClass} h-28 font-mono text-xs`}
-            placeholder="Paste an .ovpn file's contents, or browse to one above"
-          />
-          <FieldError message={fieldErrors.vpnConfig} />
-
-          <label className="mb-3 flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
-            <input
-              type="checkbox"
-              checked={vpnAvoidDefaultRoute}
-              onChange={(e) => setVpnAvoidDefaultRoute(e.currentTarget.checked)}
-              className="mt-0.5 accent-indigo-600"
-            />
-            <span>
-              Don&apos;t let this VPN take over my default internet route
-              <span className="block text-xs text-slate-400">
-                This host stays reachable through it either way. Only limits this profile's
-                effect on your other, unrelated traffic - recommended unless it's meant to route
-                your whole connection.
-              </span>
-            </span>
-          </label>
-
-          <p className="mb-3 -mt-2 text-xs text-slate-400">
-            Only needed if this profile prompts for a separate username/password at login - most
-            profiles with an embedded client certificate don't.
-          </p>
-          <label className={labelClass}>Username (optional)</label>
-          <input
-            value={vpnAuthUsername}
-            onChange={(e) => setVpnAuthUsername(e.currentTarget.value)}
-            className={inputClass}
-          />
-
-          <label className={labelClass}>Password (optional)</label>
-          <input
-            type="password"
-            autoComplete="new-password"
-            value={vpnAuthPassword}
-            onChange={(e) => setVpnAuthPassword(e.currentTarget.value)}
-            className={inputClass}
-          />
-        </div>
-      )}
+        )}
       </FormSection>
 
-      <FormSection title="Notes" description="Keep environment details or reminders with this server.">
-      <label className={labelClass}>Notes (optional)</label>
-      <textarea
-        value={notes}
-        onChange={(e) => setNotes(e.currentTarget.value)}
-        className={`${inputClass} h-20`}
-        placeholder="Environment, owner, maintenance notes…"
-      />
+      <FormSection
+        title="Notes"
+        description="Keep environment details or reminders with this server."
+      >
+        <label className={labelClass}>Notes (optional)</label>
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.currentTarget.value)}
+          className={`${inputClass} h-20`}
+          placeholder="Environment, owner, maintenance notes…"
+        />
       </FormSection>
 
       {error && <p className={errorClass}>{error}</p>}
 
       <div className="flex flex-col-reverse gap-2 sm:flex-row">
-        <button type="submit" value="save" disabled={submitting} className={`${primaryButtonClass} flex-1 rounded-xl bg-indigo-600 py-2.5 hover:bg-indigo-700`}>
+        <button
+          type="submit"
+          value="save"
+          disabled={submitting}
+          className={`${primaryButtonClass} flex-1 rounded-lg bg-teal-600 py-2.5 hover:bg-teal-700`}
+        >
           {submitting ? "Saving…" : host ? "Save changes" : "Create host"}
         </button>
         {onSaveAndConnect && (
@@ -706,7 +775,7 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
             type="submit"
             value="connect"
             disabled={submitting}
-            className="flex-1 rounded-xl border border-indigo-300 bg-white px-3 py-2.5 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-50 disabled:opacity-50 dark:border-indigo-800 dark:bg-slate-900 dark:text-indigo-300 dark:hover:bg-indigo-950"
+            className="flex-1 rounded-xl border border-teal-300 bg-white px-3 py-2.5 text-sm font-semibold text-teal-700 transition hover:bg-teal-50 disabled:opacity-50 dark:border-teal-800 dark:bg-slate-900 dark:text-teal-300 dark:hover:bg-teal-950"
           >
             {submitting ? "Saving…" : "Save & Connect"}
           </button>

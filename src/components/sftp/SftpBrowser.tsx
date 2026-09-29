@@ -21,6 +21,8 @@ import { useHostsStore } from "../../state/hostsStore";
 import { useConfirm } from "../common/useConfirm";
 import { usePrompt } from "../common/usePrompt";
 import { friendlyError } from "../../lib/friendlyError";
+import { NavIcon } from "../common/navIcons";
+import { IconButton, LoadingSpinner } from "../common/ui";
 
 interface SftpBrowserProps {
   host: Host;
@@ -96,24 +98,19 @@ function FilePane({
     <div className="flex h-full min-w-0 flex-1 flex-col border-slate-200 dark:border-slate-800">
       <div className="border-b border-slate-200 p-2 dark:border-slate-800">
         <div className="mb-1 flex items-center justify-between">
-          <span className="text-xs font-semibold uppercase text-slate-500">{title}</span>
+          <span className="text-xs font-semibold uppercase text-slate-500">
+            {title}
+          </span>
           <div className="flex gap-1">
-            <button
-              type="button"
+            <IconButton
               onClick={() => onNavigate(parentPath(path))}
-              className="rounded px-1.5 py-0.5 text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
               title="Up one level"
             >
-              ↑
-            </button>
-            <button
-              type="button"
-              onClick={onRefresh}
-              className="rounded px-1.5 py-0.5 text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
-              title="Refresh"
-            >
-              ⟳
-            </button>
+              <span aria-hidden="true">↑</span>
+            </IconButton>
+            <IconButton onClick={onRefresh} title="Refresh">
+              <NavIcon icon="refresh" className="h-3.5 w-3.5" />
+            </IconButton>
             <button
               type="button"
               onClick={onNewFolder}
@@ -132,8 +129,17 @@ function FilePane({
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {loading && <p className="p-3 text-sm text-slate-400">Loading…</p>}
-        {error && <p className="p-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
+        {loading && (
+          <p
+            role="status"
+            className="flex items-center gap-2 p-3 text-sm text-slate-400"
+          >
+            <LoadingSpinner /> Loading…
+          </p>
+        )}
+        {error && (
+          <p className="p-3 text-sm text-red-600 dark:text-red-400">{error}</p>
+        )}
         {!loading &&
           !error &&
           entries.map((entry) => (
@@ -148,7 +154,10 @@ function FilePane({
               }`}
             >
               <div className="flex min-w-0 items-center gap-2">
-                <span>{entry.isDir ? "📁" : "📄"}</span>
+                <NavIcon
+                  icon={entry.isDir ? "folder" : "file"}
+                  className={`h-4 w-4 shrink-0 ${entry.isDir ? "text-teal-600 dark:text-teal-400" : "text-slate-400"}`}
+                />
                 <span className="truncate text-slate-800 dark:text-slate-200">
                   {entry.name}
                 </span>
@@ -193,7 +202,9 @@ function FilePane({
 
 export default function SftpBrowser({ host, onClose }: SftpBrowserProps) {
   const sftpIdRef = useRef<string | null>(null);
-  const [status, setStatus] = useState<"connecting" | "connected" | "error">("connecting");
+  const [status, setStatus] = useState<"connecting" | "connected" | "error">(
+    "connecting",
+  );
   const [error, setError] = useState<string | null>(null);
 
   const [localPath, setLocalPath] = useState("");
@@ -215,9 +226,10 @@ export default function SftpBrowser({ host, onClose }: SftpBrowserProps) {
   // resolve only once the whole file has moved), so this is an
   // indeterminate "something is happening, to this file" indicator rather
   // than a real percentage.
-  const [transferringEntry, setTransferringEntry] = useState<{ name: string; direction: "upload" | "download" } | null>(
-    null,
-  );
+  const [transferringEntry, setTransferringEntry] = useState<{
+    name: string;
+    direction: "upload" | "download";
+  } | null>(null);
 
   const { confirm, confirmDialog } = useConfirm();
   const { prompt, promptDialog } = usePrompt();
@@ -348,7 +360,11 @@ export default function SftpBrowser({ host, onClose }: SftpBrowserProps) {
     setTransferringEntry({ name: entry.name, direction: "upload" });
     setTransferError(null);
     try {
-      await sftpUpload(sftpIdRef.current, entry.path, joinPath(remotePath, entry.name));
+      await sftpUpload(
+        sftpIdRef.current,
+        entry.path,
+        joinPath(remotePath, entry.name),
+      );
       refreshRemote(remotePath);
     } catch (e) {
       setTransferError(String(e));
@@ -366,7 +382,11 @@ export default function SftpBrowser({ host, onClose }: SftpBrowserProps) {
     setTransferringEntry({ name: entry.name, direction: "download" });
     setTransferError(null);
     try {
-      await sftpDownload(sftpIdRef.current, entry.path, joinPath(localPath, entry.name));
+      await sftpDownload(
+        sftpIdRef.current,
+        entry.path,
+        joinPath(localPath, entry.name),
+      );
       refreshLocal(localPath);
     } catch (e) {
       setTransferError(String(e));
@@ -411,7 +431,10 @@ export default function SftpBrowser({ host, onClose }: SftpBrowserProps) {
   }
 
   async function handleLocalDelete(entry: BrowserEntry) {
-    const ok = await confirm(`Delete ${entry.isDir ? "folder" : "file"} "${entry.name}"?`, { danger: true });
+    const ok = await confirm(
+      `Delete ${entry.isDir ? "folder" : "file"} "${entry.name}"?`,
+      { danger: true },
+    );
     if (!ok) return;
     localDelete(entry.path, entry.isDir)
       .then(() => refreshLocal(localPath))
@@ -420,7 +443,10 @@ export default function SftpBrowser({ host, onClose }: SftpBrowserProps) {
 
   async function handleRemoteDelete(entry: BrowserEntry) {
     if (!sftpIdRef.current) return;
-    const ok = await confirm(`Delete ${entry.isDir ? "folder" : "file"} "${entry.name}"?`, { danger: true });
+    const ok = await confirm(
+      `Delete ${entry.isDir ? "folder" : "file"} "${entry.name}"?`,
+      { danger: true },
+    );
     if (!ok) return;
     const op = entry.isDir ? sftpRemoveDir : sftpRemoveFile;
     op(sftpIdRef.current, entry.path)
@@ -430,7 +456,7 @@ export default function SftpBrowser({ host, onClose }: SftpBrowserProps) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex min-h-12 items-center justify-between border-b border-slate-200 bg-white px-4 py-2 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+      <div className="flex min-h-10 items-center justify-between border-b border-slate-200 bg-white px-4 py-2 shadow-sm dark:border-slate-800 dark:bg-slate-950">
         <div className="flex items-center gap-2 text-sm">
           <span
             className={`h-2 w-2 rounded-full ${
@@ -487,7 +513,7 @@ export default function SftpBrowser({ host, onClose }: SftpBrowserProps) {
             disabled={!selectedLocal || transferring}
             onClick={handleUpload}
             title="Upload to remote"
-            className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm shadow-indigo-600/20 hover:bg-indigo-700 disabled:opacity-30"
+            className="rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm shadow-slate-950/10 hover:bg-teal-700 disabled:opacity-30"
           >
             Upload →
           </button>
@@ -496,15 +522,19 @@ export default function SftpBrowser({ host, onClose }: SftpBrowserProps) {
             disabled={!selectedRemote || transferring}
             onClick={handleDownload}
             title="Download to local"
-            className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm shadow-indigo-600/20 hover:bg-indigo-700 disabled:opacity-30"
+            className="rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm shadow-slate-950/10 hover:bg-teal-700 disabled:opacity-30"
           >
             ← Download
           </button>
           {transferringEntry && (
-            <div className="mt-1 w-full px-1 text-center" title={transferringEntry.name}>
-              <div className="h-1 w-full animate-pulse rounded-full bg-indigo-500" />
+            <div
+              className="mt-1 w-full px-1 text-center"
+              title={transferringEntry.name}
+            >
+              <div className="h-1 w-full animate-pulse rounded-full bg-teal-500" />
               <p className="mt-1 truncate text-[10px] text-slate-500 dark:text-slate-400">
-                {transferringEntry.direction === "upload" ? "↑" : "↓"} {transferringEntry.name}
+                {transferringEntry.direction === "upload" ? "↑" : "↓"}{" "}
+                {transferringEntry.name}
               </p>
             </div>
           )}

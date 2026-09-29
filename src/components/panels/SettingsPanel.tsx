@@ -26,7 +26,12 @@ import {
   ThemeMode,
   useSettingsStore,
 } from "../../state/settingsStore";
-import { inputClass, labelClass, primaryButtonClass, selectClass } from "../forms/formStyles";
+import {
+  inputClass,
+  labelClass,
+  primaryButtonClass,
+  selectClass,
+} from "../forms/formStyles";
 import { useConfirm } from "../common/useConfirm";
 import { PanelScaffold } from "../common/PanelScaffold";
 import { friendlyUpdaterError, RELEASES_URL } from "../../lib/updater";
@@ -97,7 +102,9 @@ function AboutSection() {
             setState({
               phase: "downloading",
               update,
-              percent: total ? Math.min(100, Math.round((downloaded / total) * 100)) : null,
+              percent: total
+                ? Math.min(100, Math.round((downloaded / total) * 100))
+                : null,
             });
           }
         });
@@ -123,9 +130,12 @@ function AboutSection() {
 
   return (
     <section className="mb-6">
-      <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-200">About</h3>
+      <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-200">
+        About
+      </h3>
       <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">
-        ConnectHub {version ? <span className="font-medium">v{version}</span> : "…"}
+        ConnectHub{" "}
+        {version ? <span className="font-medium">v{version}</span> : "…"}
       </p>
 
       {(state.phase === "idle" ||
@@ -150,7 +160,8 @@ function AboutSection() {
       {state.phase === "found" && (
         <div className="rounded-lg border border-teal-300 bg-teal-50 p-3 text-sm dark:border-teal-800 dark:bg-teal-950">
           <p className="mb-1 font-medium text-teal-800 dark:text-teal-200">
-            Version {state.update.version} is available (you have {state.update.currentVersion}).
+            Version {state.update.version} is available (you have{" "}
+            {state.update.currentVersion}).
           </p>
           {state.update.body && (
             <p className="mb-2 whitespace-pre-wrap text-xs text-teal-700 dark:text-teal-300">
@@ -161,17 +172,17 @@ function AboutSection() {
             <div>
               {(updateMethod === "deb" || updateMethod === "rpm") && (
                 <p className="mb-2 text-xs text-teal-700 dark:text-teal-300">
-                  The signed {updateMethod.toUpperCase()} package will be verified before a system
-                  authorization prompt installs it.
+                  The signed {updateMethod.toUpperCase()} package will be
+                  verified before a system authorization prompt installs it.
                 </p>
               )}
-            <button
-              type="button"
-              onClick={() => void handleInstall(state.update)}
-              className="rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-teal-700"
-            >
-              Update and restart
-            </button>
+              <button
+                type="button"
+                onClick={() => void handleInstall(state.update)}
+                className="rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-teal-700"
+              >
+                Update and restart
+              </button>
             </div>
           ) : (
             <div>
@@ -193,7 +204,8 @@ function AboutSection() {
       {state.phase === "downloading" && (
         <div className="rounded-lg border border-teal-300 bg-teal-50 p-3 text-sm dark:border-teal-800 dark:bg-teal-950">
           <p className="mb-2 text-teal-800 dark:text-teal-200">
-            Downloading, verifying, and installing version {state.update.version}
+            Downloading, verifying, and installing version{" "}
+            {state.update.version}
             {state.percent !== null ? ` (${state.percent}%)` : "…"}
           </p>
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-teal-200 dark:bg-teal-900">
@@ -226,7 +238,9 @@ function AboutSection() {
       )}
 
       {state.phase === "error" && (
-        <p className="mt-3 text-sm text-red-600 dark:text-red-400">{state.message}</p>
+        <p className="mt-3 text-sm text-red-600 dark:text-red-400">
+          {state.message}
+        </p>
       )}
     </section>
   );
@@ -266,13 +280,18 @@ function KnownHostsSection() {
 
   return (
     <section className="mb-6">
-      <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-200">Known Hosts</h3>
+      <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-200">
+        Known Hosts
+      </h3>
       <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">
-        Host keys pinned on first connect (trust-on-first-use). Removing one doesn't affect the
-        host itself - the next connection just trusts whatever key it presents, same as connecting
-        to it for the very first time.
+        Host keys pinned on first connect (trust-on-first-use). Removing one
+        doesn't affect the host itself - the next connection just trusts
+        whatever key it presents, same as connecting to it for the very first
+        time.
       </p>
-      {error && <p className="mb-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {error && (
+        <p className="mb-3 text-sm text-red-600 dark:text-red-400">{error}</p>
+      )}
       {loaded && hosts.length === 0 && (
         <p className="text-sm text-slate-400">No pinned host keys yet.</p>
       )}
@@ -287,7 +306,9 @@ function KnownHostsSection() {
                 <p className="truncate font-medium text-slate-800 dark:text-slate-200">
                   {host.hostname}:{host.port}
                 </p>
-                <p className="truncate text-xs text-slate-400">{host.key_fingerprint}</p>
+                <p className="truncate text-xs text-slate-400">
+                  {host.key_fingerprint}
+                </p>
               </div>
               <button
                 type="button"
@@ -324,7 +345,11 @@ function AiAssistantSection() {
 
   useEffect(load, []);
 
-  async function handleSave(provider: AiProvider, apiKey: string, model: string) {
+  async function handleSave(
+    provider: AiProvider,
+    apiKey: string,
+    model: string,
+  ) {
     if (!apiKey.trim()) return;
     setSaving(provider);
     setError(null);
@@ -359,20 +384,28 @@ function AiAssistantSection() {
 
   return (
     <section className="mb-6">
-      <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-200">AI Assistant</h3>
+      <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-200">
+        AI Assistant
+      </h3>
       <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">
-        Bring your own API key to ask an AI about a connected server and run its suggested
-        commands, or hand it a goal to work on. Keys are encrypted in the vault like every other
-        secret here - never shown again once saved.
+        Bring your own API key to ask an AI about a connected server and run its
+        suggested commands, or hand it a goal to work on. Keys are encrypted in
+        the vault like every other secret here - never shown again once saved.
       </p>
-      {error && <p className="mb-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {error && (
+        <p className="mb-3 text-sm text-red-600 dark:text-red-400">{error}</p>
+      )}
 
       <div className="mb-4 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
         <div className="mb-2 flex items-center justify-between">
-          <span className="text-sm font-medium text-slate-800 dark:text-slate-200">OpenAI</span>
+          <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
+            OpenAI
+          </span>
           <span
             className={`text-xs ${
-              status?.openai_configured ? "text-teal-600 dark:text-teal-400" : "text-slate-400"
+              status?.openai_configured
+                ? "text-teal-600 dark:text-teal-400"
+                : "text-slate-400"
             }`}
           >
             {status?.openai_configured ? "Configured" : "Not configured"}
@@ -415,10 +448,14 @@ function AiAssistantSection() {
 
       <div className="mb-4 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
         <div className="mb-2 flex items-center justify-between">
-          <span className="text-sm font-medium text-slate-800 dark:text-slate-200">Anthropic</span>
+          <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
+            Anthropic
+          </span>
           <span
             className={`text-xs ${
-              status?.anthropic_configured ? "text-teal-600 dark:text-teal-400" : "text-slate-400"
+              status?.anthropic_configured
+                ? "text-teal-600 dark:text-teal-400"
+                : "text-slate-400"
             }`}
           >
             {status?.anthropic_configured ? "Configured" : "Not configured"}
@@ -441,7 +478,9 @@ function AiAssistantSection() {
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={() => handleSave("anthropic", anthropicKey, anthropicModel)}
+            onClick={() =>
+              handleSave("anthropic", anthropicKey, anthropicModel)
+            }
             disabled={!anthropicKey.trim() || saving === "anthropic"}
             className={primaryButtonClass}
           >
@@ -461,15 +500,25 @@ function AiAssistantSection() {
 
       {(status?.openai_configured || status?.anthropic_configured) && (
         <div>
-          <label className={labelClass}>Default provider for new conversations</label>
+          <label className={labelClass}>
+            Default provider for new conversations
+          </label>
           <select
             value={aiActiveProvider ?? ""}
-            onChange={(e) => setAiActiveProvider((e.currentTarget.value || null) as AiProvider | null)}
+            onChange={(e) =>
+              setAiActiveProvider(
+                (e.currentTarget.value || null) as AiProvider | null,
+              )
+            }
             className={selectClass}
           >
             <option value="">None selected</option>
-            {status?.openai_configured && <option value="openai">OpenAI</option>}
-            {status?.anthropic_configured && <option value="anthropic">Anthropic</option>}
+            {status?.openai_configured && (
+              <option value="openai">OpenAI</option>
+            )}
+            {status?.anthropic_configured && (
+              <option value="anthropic">Anthropic</option>
+            )}
           </select>
         </div>
       )}
@@ -481,207 +530,254 @@ export default function SettingsPanel() {
   const theme = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
   const terminalFontFamily = useSettingsStore((s) => s.terminalFontFamily);
-  const setTerminalFontFamily = useSettingsStore((s) => s.setTerminalFontFamily);
+  const setTerminalFontFamily = useSettingsStore(
+    (s) => s.setTerminalFontFamily,
+  );
   const terminalFontSize = useSettingsStore((s) => s.terminalFontSize);
   const setTerminalFontSize = useSettingsStore((s) => s.setTerminalFontSize);
   const terminalCursorStyle = useSettingsStore((s) => s.terminalCursorStyle);
-  const setTerminalCursorStyle = useSettingsStore((s) => s.setTerminalCursorStyle);
+  const setTerminalCursorStyle = useSettingsStore(
+    (s) => s.setTerminalCursorStyle,
+  );
   const terminalThemeKey = useSettingsStore((s) => s.terminalThemeKey);
   const setTerminalThemeKey = useSettingsStore((s) => s.setTerminalThemeKey);
   const autoReconnectEnabled = useSettingsStore((s) => s.autoReconnectEnabled);
   const toggleAutoReconnect = useSettingsStore((s) => s.toggleAutoReconnect);
-  const autoCopyOnSelectEnabled = useSettingsStore((s) => s.autoCopyOnSelectEnabled);
-  const toggleAutoCopyOnSelect = useSettingsStore((s) => s.toggleAutoCopyOnSelect);
+  const autoCopyOnSelectEnabled = useSettingsStore(
+    (s) => s.autoCopyOnSelectEnabled,
+  );
+  const toggleAutoCopyOnSelect = useSettingsStore(
+    (s) => s.toggleAutoCopyOnSelect,
+  );
   const vaultAutoLockEnabled = useSettingsStore((s) => s.vaultAutoLockEnabled);
   const toggleVaultAutoLock = useSettingsStore((s) => s.toggleVaultAutoLock);
   const vaultAutoLockMinutes = useSettingsStore((s) => s.vaultAutoLockMinutes);
-  const setVaultAutoLockMinutes = useSettingsStore((s) => s.setVaultAutoLockMinutes);
+  const setVaultAutoLockMinutes = useSettingsStore(
+    (s) => s.setVaultAutoLockMinutes,
+  );
 
   return (
-    <PanelScaffold title="Settings" description="Personalize your terminal, security, integrations, and application behavior.">
-      <div className="grid max-w-3xl gap-4 [&>section]:mb-0 [&>section]:rounded-2xl [&>section]:border [&>section]:border-slate-200 [&>section]:bg-white [&>section]:p-5 [&>section]:shadow-sm dark:[&>section]:border-slate-800 dark:[&>section]:bg-slate-900">
-      <section>
-        <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-200">Appearance</h3>
-        <label className={labelClass}>Theme</label>
-        <select
-          value={theme}
-          onChange={(e) => setTheme(e.target.value as ThemeMode)}
-          className={selectClass}
-        >
-          {THEME_MODES.map((t) => (
-            <option key={t} value={t}>
-              {t === "system" ? "Match system" : t === "light" ? "Light" : "Dark"}
-            </option>
-          ))}
-        </select>
-      </section>
+    <PanelScaffold
+      title="Settings"
+      description="Personalize your terminal, security, integrations, and application behavior."
+    >
+      <div className="columns-1 gap-3 xl:columns-2 [&>section]:mb-3 [&>section]:break-inside-avoid [&>section]:rounded-xl [&>section]:border [&>section]:border-slate-200 [&>section]:bg-white [&>section]:p-4 [&>section]:shadow-sm dark:[&>section]:border-slate-800 dark:[&>section]:bg-slate-900">
+        <section>
+          <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-200">
+            Appearance
+          </h3>
+          <label className={labelClass}>Theme</label>
+          <select
+            value={theme}
+            onChange={(e) => setTheme(e.target.value as ThemeMode)}
+            className={selectClass}
+          >
+            {THEME_MODES.map((t) => (
+              <option key={t} value={t}>
+                {t === "system"
+                  ? "Match system"
+                  : t === "light"
+                    ? "Light"
+                    : "Dark"}
+              </option>
+            ))}
+          </select>
+        </section>
 
-      <section>
-        <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-200">Terminal</h3>
+        <section>
+          <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-200">
+            Terminal
+          </h3>
 
-        <label className={labelClass}>Font family</label>
-        <input
-          value={terminalFontFamily}
-          onChange={(e) => setTerminalFontFamily(e.target.value)}
-          className={`${inputClass} font-mono`}
-        />
+          <label className={labelClass}>Font family</label>
+          <input
+            value={terminalFontFamily}
+            onChange={(e) => setTerminalFontFamily(e.target.value)}
+            className={`${inputClass} font-mono`}
+          />
 
-        <label className={labelClass}>Font size ({terminalFontSize}px)</label>
-        <input
-          type="range"
-          min={10}
-          max={24}
-          value={terminalFontSize}
-          onChange={(e) => setTerminalFontSize(Number(e.target.value))}
-          className="mb-4 w-full accent-indigo-600"
-        />
+          <label className={labelClass}>Font size ({terminalFontSize}px)</label>
+          <input
+            type="range"
+            min={10}
+            max={24}
+            value={terminalFontSize}
+            onChange={(e) => setTerminalFontSize(Number(e.target.value))}
+            className="mb-4 w-full accent-teal-600"
+          />
 
-        <label className={labelClass}>Cursor style</label>
-        <select
-          value={terminalCursorStyle}
-          onChange={(e) => setTerminalCursorStyle(e.target.value as CursorStyle)}
-          className={selectClass}
-        >
-          {CURSOR_STYLES.map((c) => (
-            <option key={c} value={c}>
-              {c[0].toUpperCase() + c.slice(1)}
-            </option>
-          ))}
-        </select>
-
-        <label className={labelClass}>Color theme</label>
-        <select
-          value={terminalThemeKey}
-          onChange={(e) => setTerminalThemeKey(e.target.value as TerminalThemeKey)}
-          className={selectClass}
-        >
-          {(Object.keys(TERMINAL_THEME_PRESETS) as TerminalThemeKey[]).map((key) => (
-            <option key={key} value={key}>
-              {TERMINAL_THEME_PRESETS[key].label}
-            </option>
-          ))}
-        </select>
-
-        <div className="mt-4 flex items-center justify-between">
-          <span className={labelClass}>Auto-reconnect dropped sessions</span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={autoReconnectEnabled}
-            aria-label="Auto-reconnect dropped sessions"
-            onClick={toggleAutoReconnect}
-            title={
-              autoReconnectEnabled
-                ? "On: a dropped terminal session retries automatically a few times before giving up"
-                : "Off: a dropped terminal session shows an error with a manual Reconnect button"
+          <label className={labelClass}>Cursor style</label>
+          <select
+            value={terminalCursorStyle}
+            onChange={(e) =>
+              setTerminalCursorStyle(e.target.value as CursorStyle)
             }
-            className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-              autoReconnectEnabled ? "bg-indigo-600" : "bg-slate-300 dark:bg-slate-700"
-            }`}
+            className={selectClass}
           >
-            <span
-              className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                autoReconnectEnabled ? "translate-x-4" : "translate-x-0"
-              }`}
-            />
-          </button>
-        </div>
-        <p className="mt-1 text-xs text-slate-400">
-          When a terminal session drops (idle timeout, network blip), retry a few times with
-          backoff before giving up. A manual "Reconnect" button is always available in the error
-          banner either way.
-        </p>
+            {CURSOR_STYLES.map((c) => (
+              <option key={c} value={c}>
+                {c[0].toUpperCase() + c.slice(1)}
+              </option>
+            ))}
+          </select>
 
-        <div className="mt-4 flex items-center justify-between">
-          <span className={labelClass}>Copy on select</span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={autoCopyOnSelectEnabled}
-            aria-label="Copy on select"
-            onClick={toggleAutoCopyOnSelect}
-            title={
-              autoCopyOnSelectEnabled
-                ? "On: selecting text in a terminal immediately copies it to your clipboard"
-                : "Off: use Ctrl/Cmd+C, Ctrl/Cmd+Shift+C, or right-click Copy instead"
+          <label className={labelClass}>Color theme</label>
+          <select
+            value={terminalThemeKey}
+            onChange={(e) =>
+              setTerminalThemeKey(e.target.value as TerminalThemeKey)
             }
-            className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-              autoCopyOnSelectEnabled ? "bg-indigo-600" : "bg-slate-300 dark:bg-slate-700"
-            }`}
+            className={selectClass}
           >
-            <span
-              className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                autoCopyOnSelectEnabled ? "translate-x-4" : "translate-x-0"
-              }`}
-            />
-          </button>
-        </div>
-        <p className="mt-1 text-xs text-slate-400">
-          Selecting text in a terminal immediately copies it to your clipboard - no explicit copy
-          action needed. Right-click Copy/Paste and the Ctrl/Cmd+C, Ctrl/Cmd+Shift+C,
-          Ctrl/Cmd+Shift+V shortcuts always work regardless of this setting.
-        </p>
-      </section>
+            {(Object.keys(TERMINAL_THEME_PRESETS) as TerminalThemeKey[]).map(
+              (key) => (
+                <option key={key} value={key}>
+                  {TERMINAL_THEME_PRESETS[key].label}
+                </option>
+              ),
+            )}
+          </select>
 
-      <section>
-        <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-200">Security</h3>
-        <div className="flex items-center justify-between">
-          <span className={labelClass}>Lock after inactivity</span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={vaultAutoLockEnabled}
-            aria-label="Lock after inactivity"
-            onClick={toggleVaultAutoLock}
-            className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-              vaultAutoLockEnabled ? "bg-indigo-600" : "bg-slate-300 dark:bg-slate-700"
-            }`}
-          >
-            <span
-              className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                vaultAutoLockEnabled ? "translate-x-4" : "translate-x-0"
+          <div className="mt-4 flex items-center justify-between">
+            <span className={labelClass}>Auto-reconnect dropped sessions</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={autoReconnectEnabled}
+              aria-label="Auto-reconnect dropped sessions"
+              onClick={toggleAutoReconnect}
+              title={
+                autoReconnectEnabled
+                  ? "On: a dropped terminal session retries automatically a few times before giving up"
+                  : "Off: a dropped terminal session shows an error with a manual Reconnect button"
+              }
+              className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
+                autoReconnectEnabled
+                  ? "bg-teal-600"
+                  : "bg-slate-300 dark:bg-slate-700"
               }`}
-            />
-          </button>
-        </div>
-        <p className="mt-1 text-xs text-slate-400">
-          ConnectHub has no master password, so there's no secret to prompt for here - this just
-          adds a deliberate "Unlock" click after a period of inactivity, on top of the always-open
-          default.
-        </p>
-        {vaultAutoLockEnabled && (
-          <div className="mt-3">
-            <label className={labelClass}>Minutes of inactivity before locking</label>
-            <input
-              type="number"
-              min={MIN_VAULT_AUTO_LOCK_MINUTES}
-              max={MAX_VAULT_AUTO_LOCK_MINUTES}
-              value={vaultAutoLockMinutes}
-              onChange={(e) => setVaultAutoLockMinutes(Number(e.currentTarget.value))}
-              className={`${inputClass} w-24`}
-            />
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                  autoReconnectEnabled ? "translate-x-4" : "translate-x-0"
+                }`}
+              />
+            </button>
           </div>
-        )}
-      </section>
+          <p className="mt-1 text-xs text-slate-400">
+            When a terminal session drops (idle timeout, network blip), retry a
+            few times with backoff before giving up. A manual "Reconnect" button
+            is always available in the error banner either way.
+          </p>
 
-      <section>
-        <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-200">Keybindings</h3>
-        <div className="divide-y divide-slate-200 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
-          {KEYBINDINGS.map((k) => (
-            <div key={k.keys} className="flex items-center justify-between px-3 py-2 text-sm">
-              <span className="text-slate-600 dark:text-slate-300">{k.action}</span>
-              <kbd className="rounded border border-slate-300 bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                {k.keys}
-              </kbd>
+          <div className="mt-4 flex items-center justify-between">
+            <span className={labelClass}>Copy on select</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={autoCopyOnSelectEnabled}
+              aria-label="Copy on select"
+              onClick={toggleAutoCopyOnSelect}
+              title={
+                autoCopyOnSelectEnabled
+                  ? "On: selecting text in a terminal immediately copies it to your clipboard"
+                  : "Off: use Ctrl/Cmd+C, Ctrl/Cmd+Shift+C, or right-click Copy instead"
+              }
+              className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
+                autoCopyOnSelectEnabled
+                  ? "bg-teal-600"
+                  : "bg-slate-300 dark:bg-slate-700"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                  autoCopyOnSelectEnabled ? "translate-x-4" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </div>
+          <p className="mt-1 text-xs text-slate-400">
+            Selecting text in a terminal immediately copies it to your clipboard
+            - no explicit copy action needed. Right-click Copy/Paste and the
+            Ctrl/Cmd+C, Ctrl/Cmd+Shift+C, Ctrl/Cmd+Shift+V shortcuts always work
+            regardless of this setting.
+          </p>
+        </section>
+
+        <section>
+          <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-200">
+            Security
+          </h3>
+          <div className="flex items-center justify-between">
+            <span className={labelClass}>Lock after inactivity</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={vaultAutoLockEnabled}
+              aria-label="Lock after inactivity"
+              onClick={toggleVaultAutoLock}
+              className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
+                vaultAutoLockEnabled
+                  ? "bg-teal-600"
+                  : "bg-slate-300 dark:bg-slate-700"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                  vaultAutoLockEnabled ? "translate-x-4" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </div>
+          <p className="mt-1 text-xs text-slate-400">
+            ConnectHub has no master password, so there's no secret to prompt
+            for here - this just adds a deliberate "Unlock" click after a period
+            of inactivity, on top of the always-open default.
+          </p>
+          {vaultAutoLockEnabled && (
+            <div className="mt-3">
+              <label className={labelClass}>
+                Minutes of inactivity before locking
+              </label>
+              <input
+                type="number"
+                min={MIN_VAULT_AUTO_LOCK_MINUTES}
+                max={MAX_VAULT_AUTO_LOCK_MINUTES}
+                value={vaultAutoLockMinutes}
+                onChange={(e) =>
+                  setVaultAutoLockMinutes(Number(e.currentTarget.value))
+                }
+                className={`${inputClass} w-24`}
+              />
             </div>
-          ))}
-        </div>
-      </section>
+          )}
+        </section>
 
-      <AiAssistantSection />
-      <KnownHostsSection />
+        <section>
+          <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-200">
+            Keybindings
+          </h3>
+          <div className="divide-y divide-slate-200 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
+            {KEYBINDINGS.map((k) => (
+              <div
+                key={k.keys}
+                className="flex items-center justify-between px-3 py-2 text-sm"
+              >
+                <span className="text-slate-600 dark:text-slate-300">
+                  {k.action}
+                </span>
+                <kbd className="rounded border border-slate-300 bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                  {k.keys}
+                </kbd>
+              </div>
+            ))}
+          </div>
+        </section>
 
-      <AboutSection />
+        <AiAssistantSection />
+        <KnownHostsSection />
+
+        <AboutSection />
       </div>
     </PanelScaffold>
   );

@@ -1,4 +1,5 @@
 import { ReactNode, useEffect, useId, useRef } from "react";
+import { NavIcon } from "./navIcons";
 
 interface ModalProps {
   title: string;
@@ -11,12 +12,17 @@ const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 function getFocusableElements(container: HTMLElement): HTMLElement[] {
-  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
-    (el) => el.offsetParent !== null,
-  );
+  return Array.from(
+    container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+  ).filter((el) => el.offsetParent !== null);
 }
 
-export default function Modal({ title, onClose, children, dismissible = true }: ModalProps) {
+export default function Modal({
+  title,
+  onClose,
+  children,
+  dismissible = true,
+}: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const onCloseRef = useRef(onClose);
@@ -68,18 +74,25 @@ export default function Modal({ title, onClose, children, dismissible = true }: 
   }, []);
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/60 p-4 backdrop-blur-md">
-      <div className="fixed inset-0" onClick={dismissible ? onClose : undefined} aria-hidden="true" />
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/65 p-3 backdrop-blur-sm">
+      <div
+        className="fixed inset-0"
+        onClick={dismissible ? onClose : undefined}
+        aria-hidden="true"
+      />
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="relative z-10 mx-auto my-8 w-full max-w-md overflow-hidden rounded-2xl border border-white/70 bg-white p-6 shadow-2xl shadow-slate-950/25 outline-none dark:border-slate-700 dark:bg-slate-900"
+        className="relative z-10 mx-auto my-6 w-full max-w-md overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-2xl shadow-slate-950/25 outline-none dark:border-slate-700 dark:bg-slate-900"
       >
-        <div className="mb-4 flex items-center justify-between">
-          <h2 id={titleId} className="text-xl font-extrabold tracking-tight text-slate-950 dark:text-white">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2
+            id={titleId}
+            className="text-lg font-bold tracking-tight text-slate-950 dark:text-white"
+          >
             {title}
           </h2>
           {dismissible && (
@@ -89,7 +102,7 @@ export default function Modal({ title, onClose, children, dismissible = true }: 
               aria-label="Close dialog"
               className="flex h-8 w-8 items-center justify-center rounded-lg text-sm text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-white"
             >
-              ✕
+              <NavIcon icon="close" className="h-4 w-4" />
             </button>
           )}
         </div>

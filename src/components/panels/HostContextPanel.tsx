@@ -1,12 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Host, HostExecResult, HostStats, hostStats, sessionWrite } from "../../lib/tauri-bridge";
+import {
+  Host,
+  HostExecResult,
+  HostStats,
+  hostStats,
+  sessionWrite,
+} from "../../lib/tauri-bridge";
 import { useHostsStore } from "../../state/hostsStore";
 import { useSnippetsStore } from "../../state/snippetsStore";
 import { useVpnStore } from "../../state/vpnStore";
 import { useSessionsStore } from "../../state/sessionsStore";
 import { collectLeaves } from "../../lib/paneTree";
 import { useSettingsStore } from "../../state/settingsStore";
-import { topUsedCommands, useCommandHistoryStore } from "../../state/commandHistoryStore";
+import {
+  topUsedCommands,
+  useCommandHistoryStore,
+} from "../../state/commandHistoryStore";
 import { HostIcon } from "../common/hostIcons";
 
 const MOST_USED_LIMIT = 10;
@@ -15,7 +24,8 @@ const STATS_POLL_MS = 5000;
 
 function formatRate(bytesPerSec: number): string {
   if (bytesPerSec < 1024) return `${Math.round(bytesPerSec)} B/s`;
-  if (bytesPerSec < 1024 * 1024) return `${(bytesPerSec / 1024).toFixed(1)} KB/s`;
+  if (bytesPerSec < 1024 * 1024)
+    return `${(bytesPerSec / 1024).toFixed(1)} KB/s`;
   return `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MB/s`;
 }
 
@@ -39,10 +49,15 @@ function StatBar({
     <div>
       <div className="mb-1 flex items-center justify-between text-xs">
         <span className="text-slate-500 dark:text-slate-400">{label}</span>
-        <span className="text-slate-900 dark:text-slate-100">{displayValue}</span>
+        <span className="text-slate-900 dark:text-slate-100">
+          {displayValue}
+        </span>
       </div>
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-        <div className="h-full rounded-full bg-indigo-500" style={{ width: `${pct}%` }} />
+        <div
+          className="h-full rounded-full bg-teal-500"
+          style={{ width: `${pct}%` }}
+        />
       </div>
     </div>
   );
@@ -77,15 +92,22 @@ export default function HostContextPanel({
   const vpnStatuses = useVpnStore((s) => s.statuses);
   const refreshVpnActive = useVpnStore((s) => s.refreshActive);
   const ensureVpnUp = useVpnStore((s) => s.ensureVpnUp);
-  const performancePanelVisible = useSettingsStore((s) => s.performancePanelVisible);
-  const togglePerformancePanel = useSettingsStore((s) => s.togglePerformancePanel);
+  const performancePanelVisible = useSettingsStore(
+    (s) => s.performancePanelVisible,
+  );
+  const togglePerformancePanel = useSettingsStore(
+    (s) => s.togglePerformancePanel,
+  );
   const hostDetailsVisible = useSettingsStore((s) => s.hostDetailsVisible);
   const toggleHostDetails = useSettingsStore((s) => s.toggleHostDetails);
   const quickCommandAutoRun = useSettingsStore((s) => s.quickCommandAutoRun);
-  const toggleQuickCommandAutoRun = useSettingsStore((s) => s.toggleQuickCommandAutoRun);
+  const toggleQuickCommandAutoRun = useSettingsStore(
+    (s) => s.toggleQuickCommandAutoRun,
+  );
   const commandHistory = useCommandHistoryStore((s) => s.byHost[host.id]);
   const recordCommandRun = useCommandHistoryStore((s) => s.record);
-  const remoteTopUsed = useCommandHistoryStore((s) => s.remoteTopUsed[host.id]) ?? [];
+  const remoteTopUsed =
+    useCommandHistoryStore((s) => s.remoteTopUsed[host.id]) ?? [];
   const localTopUsed = useMemo(
     () => topUsedCommands(commandHistory ?? [], MOST_USED_LIMIT),
     [commandHistory],
@@ -98,30 +120,42 @@ export default function HostContextPanel({
   // history file, non-bash/zsh shell).
   const topUsed =
     remoteTopUsed.length > 0
-      ? remoteTopUsed.map((r) => ({ label: r.command, body: r.command, count: r.count }))
+      ? remoteTopUsed.map((r) => ({
+          label: r.command,
+          body: r.command,
+          count: r.count,
+        }))
       : localTopUsed;
 
   const openSessions = useSessionsStore((s) => s.openSessions);
   const sessionIds = useSessionsStore((s) => s.sessionIds);
-  const terminalTab = openSessions.find((s) => s.host.id === host.id && s.kind === "terminal");
+  const terminalTab = openSessions.find(
+    (s) => s.host.id === host.id && s.kind === "terminal",
+  );
   // The tab's primary (first) pane - Quick Commands writes into whichever
   // pane was there before any splitting, same target as before this feature
   // existed for a still-single-pane tab.
-  const firstPaneId = terminalTab?.layout ? collectLeaves(terminalTab.layout)[0]?.paneId : undefined;
+  const firstPaneId = terminalTab?.layout
+    ? collectLeaves(terminalTab.layout)[0]?.paneId
+    : undefined;
   const liveSessionId = firstPaneId ? sessionIds[firstPaneId] : undefined;
 
   const identity = identities.find((i) => i.id === host.identity_id);
   const vpnProfile = host.vpn_profile_id
     ? vpnProfiles.find((p) => p.id === host.vpn_profile_id)
     : undefined;
-  const vpnStatus = host.vpn_profile_id ? vpnStatuses[host.vpn_profile_id] : undefined;
+  const vpnStatus = host.vpn_profile_id
+    ? vpnStatuses[host.vpn_profile_id]
+    : undefined;
   const vpnConnected = vpnStatus?.state === "connected";
-  const vpnTransitioning = vpnStatus?.state === "connecting" || vpnStatus?.state === "disconnecting";
+  const vpnTransitioning =
+    vpnStatus?.state === "connecting" || vpnStatus?.state === "disconnecting";
 
   const [runningId, setRunningId] = useState<string | null>(null);
-  const [lastResult, setLastResult] = useState<{ label: string; result: HostExecResult } | null>(
-    null,
-  );
+  const [lastResult, setLastResult] = useState<{
+    label: string;
+    result: HostExecResult;
+  } | null>(null);
 
   useEffect(() => {
     if (!vpnTransitioning) return;
@@ -131,8 +165,12 @@ export default function HostContextPanel({
 
   const [stats, setStats] = useState<HostStats | null>(null);
   const [statsUnavailable, setStatsUnavailable] = useState(false);
-  const prevSampleRef = useRef<{ rx: number; tx: number; time: number } | null>(null);
-  const [netRates, setNetRates] = useState<{ rx: number; tx: number } | null>(null);
+  const prevSampleRef = useRef<{ rx: number; tx: number; time: number } | null>(
+    null,
+  );
+  const [netRates, setNetRates] = useState<{ rx: number; tx: number } | null>(
+    null,
+  );
 
   // Only polls while a session is actually open on this host - each poll
   // opens its own short-lived SSH connection (see ssh::stats::fetch), so
@@ -160,7 +198,11 @@ export default function HostContextPanel({
             });
           }
         }
-        prevSampleRef.current = { rx: result.rx_bytes, tx: result.tx_bytes, time: now };
+        prevSampleRef.current = {
+          rx: result.rx_bytes,
+          tx: result.tx_bytes,
+          time: now,
+        };
         setStats(result);
         setStatsUnavailable(false);
       } catch {
@@ -180,7 +222,11 @@ export default function HostContextPanel({
   // used" entry (which may no longer correspond to an existing snippet) -
   // either way it's just what runningId compares against to show "Running…"
   // on the right button.
-  async function handleQuickCommand(runKey: string, label: string, body: string) {
+  async function handleQuickCommand(
+    runKey: string,
+    label: string,
+    body: string,
+  ) {
     // With a live terminal open, write straight into it - like actually
     // typing the command - rather than the one-off exec channel below,
     // since the whole point is to interact with the session you're already
@@ -190,13 +236,21 @@ export default function HostContextPanel({
       setRunningId(runKey);
       setLastResult(null);
       try {
-        await sessionWrite(liveSessionId, quickCommandAutoRun ? `${body}\r` : body);
+        await sessionWrite(
+          liveSessionId,
+          quickCommandAutoRun ? `${body}\r` : body,
+        );
         // Only record here when we know for certain it was submitted
         // (Auto-Run) - otherwise TerminalView's own keystroke capture will
         // record it once the user actually presses Enter, and recording it
         // twice would double-count it in "Recent"/local ranking.
         if (quickCommandAutoRun) {
-          recordCommandRun(host.id, { label, body, exitStatus: null, error: null });
+          recordCommandRun(host.id, {
+            label,
+            body,
+            exitStatus: null,
+            error: null,
+          });
         }
       } finally {
         setRunningId(null);
@@ -237,8 +291,8 @@ export default function HostContextPanel({
   }
 
   return (
-    <aside className="flex w-80 shrink-0 flex-col overflow-y-auto border-l border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950">
-      <div className="border-b border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
+    <aside className="flex h-full w-full shrink-0 flex-col overflow-y-auto bg-slate-50 dark:bg-slate-950">
+      <div className="border-b border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-950">
         <div className="flex items-center gap-2">
           {host.icon && (
             <HostIcon
@@ -247,7 +301,7 @@ export default function HostContextPanel({
               style={{ color: host.color ?? undefined }}
             />
           )}
-          <h2 className="truncate text-base font-extrabold tracking-tight text-slate-900 dark:text-slate-50">
+          <h2 className="truncate text-base font-bold tracking-tight text-slate-900 dark:text-slate-50">
             {host.label}
           </h2>
         </div>
@@ -256,7 +310,7 @@ export default function HostContextPanel({
         </p>
       </div>
 
-      <div className="flex gap-2 p-4">
+      <div className="flex gap-2 p-3">
         <button
           type="button"
           onClick={onConnect}
@@ -268,7 +322,7 @@ export default function HostContextPanel({
                 ? "Already connected"
                 : undefined
           }
-          className="flex-1 rounded-xl bg-indigo-600 px-2 py-2 text-xs font-bold text-white shadow-sm shadow-indigo-600/20 hover:bg-indigo-700 disabled:opacity-40"
+          className="flex-1 rounded-lg bg-teal-600 px-2 py-2 text-xs font-bold text-white shadow-sm shadow-slate-950/10 hover:bg-teal-700 disabled:opacity-40"
         >
           Connect
         </button>
@@ -276,7 +330,11 @@ export default function HostContextPanel({
           type="button"
           onClick={onOpenSftp}
           disabled={!host.identity_id || guardBusy}
-          title={host.identity_id ? undefined : "Assign an identity to this host first"}
+          title={
+            host.identity_id
+              ? undefined
+              : "Assign an identity to this host first"
+          }
           className="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
         >
           SFTP
@@ -288,260 +346,294 @@ export default function HostContextPanel({
         </p>
       )}
       {vpnError && (
-        <p className="-mt-2 px-4 pb-4 text-xs text-red-600 dark:text-red-400">{vpnError}</p>
+        <p className="-mt-2 px-4 pb-4 text-xs text-red-600 dark:text-red-400">
+          {vpnError}
+        </p>
       )}
 
-      <div className="flex-1 space-y-3 p-3">
-      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Host Details
-          </h3>
-          <button
-            type="button"
-            onClick={toggleHostDetails}
-            title={hostDetailsVisible ? "Hide host details" : "Show host details"}
-            className="text-xs text-slate-400 hover:text-indigo-600"
-          >
-            {hostDetailsVisible ? "Hide" : "Show"}
-          </button>
-        </div>
-        {hostDetailsVisible && (
-          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm">
-            <dt className="text-slate-500 dark:text-slate-400">Address</dt>
-            <dd className="text-slate-900 dark:text-slate-100">{host.hostname}</dd>
-            <dt className="text-slate-500 dark:text-slate-400">Port</dt>
-            <dd className="text-slate-900 dark:text-slate-100">{host.port}</dd>
-            <dt className="text-slate-500 dark:text-slate-400">User</dt>
-            <dd className="text-slate-900 dark:text-slate-100">{identity?.username ?? "—"}</dd>
-            {host.tags.length > 0 && (
-              <>
-                <dt className="text-slate-500 dark:text-slate-400">Tags</dt>
-                <dd className="flex flex-wrap gap-1">
-                  {host.tags.map((tag) => (
-                    <span
-                      key={tag.id}
-                      className="rounded-full bg-indigo-50 px-1.5 py-0.5 text-xs text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
-                    >
-                      {tag.label}
-                    </span>
-                  ))}
-                </dd>
-              </>
-            )}
-            {vpnProfile && (
-              <>
-                <dt className="text-slate-500 dark:text-slate-400">VPN profile</dt>
-                <dd className="flex items-center gap-1.5 text-slate-900 dark:text-slate-100">
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full ${
-                      vpnConnected
-                        ? "bg-emerald-500"
-                        : vpnTransitioning
-                          ? "bg-amber-500"
-                          : "bg-slate-400 dark:bg-slate-600"
-                    }`}
-                  />
-                  {vpnProfile.label}
-                </dd>
-              </>
-            )}
-            <dt className="text-slate-500 dark:text-slate-400">Session</dt>
-            <dd className="flex items-center gap-1.5">
-              <span
-                className={`h-2 w-2 rounded-full ${sessionOpen ? "bg-emerald-500" : "bg-slate-400 dark:bg-slate-600"}`}
-              />
-              <span className="text-slate-900 dark:text-slate-100">
-                {sessionOpen ? "Connected" : "Not connected"}
-              </span>
-            </dd>
-            <dt className="text-slate-500 dark:text-slate-400">Key</dt>
-            <dd className="text-slate-900 dark:text-slate-100">
-              {identity?.auth_method === "private_key"
-                ? "Private key"
-                : identity?.auth_method === "agent"
-                  ? "SSH agent"
-                  : identity?.auth_method === "password"
-                    ? "Password"
-                    : "—"}
-            </dd>
-            <dt className="text-slate-500 dark:text-slate-400">Last connected</dt>
-            <dd className="text-slate-900 dark:text-slate-100">
-              {host.last_connected_at ? new Date(host.last_connected_at).toLocaleString() : "never"}
-            </dd>
-          </dl>
-        )}
-      </section>
-
-      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Performance
-          </h3>
-          <button
-            type="button"
-            onClick={togglePerformancePanel}
-            title={performancePanelVisible ? "Hide performance" : "Show performance"}
-            className="text-xs text-slate-400 hover:text-indigo-600"
-          >
-            {performancePanelVisible ? "Hide" : "Show"}
-          </button>
-        </div>
-        {performancePanelVisible &&
-          (!sessionOpen ? (
-            <p className="text-xs text-slate-400">
-              Connect to see live CPU, memory, and network usage.
-            </p>
-          ) : stats ? (
-            <div className="space-y-3">
-              <StatBar
-                label="CPU"
-                value={stats.cpu_percent}
-                max={100}
-                displayValue={`${Math.round(stats.cpu_percent)}%`}
-              />
-              <StatBar
-                label="RAM"
-                value={stats.mem_used_mb}
-                max={stats.mem_total_mb || 1}
-                displayValue={`${formatMb(stats.mem_used_mb)} / ${formatMb(stats.mem_total_mb)}`}
-              />
-              {stats.swap_total_mb > 0 && (
-                <StatBar
-                  label="Swap"
-                  value={stats.swap_used_mb}
-                  max={stats.swap_total_mb || 1}
-                  displayValue={`${formatMb(stats.swap_used_mb)} / ${formatMb(stats.swap_total_mb)}`}
-                />
+      <div className="flex-1 space-y-2 p-2">
+        <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Host Details
+            </h3>
+            <button
+              type="button"
+              onClick={toggleHostDetails}
+              title={
+                hostDetailsVisible ? "Hide host details" : "Show host details"
+              }
+              className="text-xs text-slate-400 hover:text-teal-600"
+            >
+              {hostDetailsVisible ? "Hide" : "Show"}
+            </button>
+          </div>
+          {hostDetailsVisible && (
+            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm">
+              <dt className="text-slate-500 dark:text-slate-400">Address</dt>
+              <dd className="text-slate-900 dark:text-slate-100">
+                {host.hostname}
+              </dd>
+              <dt className="text-slate-500 dark:text-slate-400">Port</dt>
+              <dd className="text-slate-900 dark:text-slate-100">
+                {host.port}
+              </dd>
+              <dt className="text-slate-500 dark:text-slate-400">User</dt>
+              <dd className="text-slate-900 dark:text-slate-100">
+                {identity?.username ?? "—"}
+              </dd>
+              {host.tags.length > 0 && (
+                <>
+                  <dt className="text-slate-500 dark:text-slate-400">Tags</dt>
+                  <dd className="flex flex-wrap gap-1">
+                    {host.tags.map((tag) => (
+                      <span
+                        key={tag.id}
+                        className="rounded-full bg-teal-50 px-1.5 py-0.5 text-xs text-teal-700 dark:bg-teal-950 dark:text-teal-300"
+                      >
+                        {tag.label}
+                      </span>
+                    ))}
+                  </dd>
+                </>
               )}
-              <StatBar
-                label="Disk"
-                value={stats.disk_used_mb}
-                max={stats.disk_total_mb || 1}
-                displayValue={`${formatMb(stats.disk_used_mb)} / ${formatMb(stats.disk_total_mb)}`}
-              />
-              <StatBar
-                label="Net"
-                value={netRates ? netRates.rx + netRates.tx : 0}
-                max={5 * 1024 * 1024}
-                displayValue={netRates ? `↓${formatRate(netRates.rx)} ↑${formatRate(netRates.tx)}` : "—"}
-              />
-            </div>
-          ) : statsUnavailable ? (
-            <p className="text-xs text-slate-400">Performance stats aren't available for this host.</p>
-          ) : (
-            <p className="text-xs text-slate-400">Loading…</p>
-          ))}
-      </section>
-
-      {host.notes && (
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Comments
-          </h3>
-          <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-300">
-            {host.notes}
-          </p>
+              {vpnProfile && (
+                <>
+                  <dt className="text-slate-500 dark:text-slate-400">
+                    VPN profile
+                  </dt>
+                  <dd className="flex items-center gap-1.5 text-slate-900 dark:text-slate-100">
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${
+                        vpnConnected
+                          ? "bg-emerald-500"
+                          : vpnTransitioning
+                            ? "bg-amber-500"
+                            : "bg-slate-400 dark:bg-slate-600"
+                      }`}
+                    />
+                    {vpnProfile.label}
+                  </dd>
+                </>
+              )}
+              <dt className="text-slate-500 dark:text-slate-400">Session</dt>
+              <dd className="flex items-center gap-1.5">
+                <span
+                  className={`h-2 w-2 rounded-full ${sessionOpen ? "bg-emerald-500" : "bg-slate-400 dark:bg-slate-600"}`}
+                />
+                <span className="text-slate-900 dark:text-slate-100">
+                  {sessionOpen ? "Connected" : "Not connected"}
+                </span>
+              </dd>
+              <dt className="text-slate-500 dark:text-slate-400">Key</dt>
+              <dd className="text-slate-900 dark:text-slate-100">
+                {identity?.auth_method === "private_key"
+                  ? "Private key"
+                  : identity?.auth_method === "agent"
+                    ? "SSH agent"
+                    : identity?.auth_method === "password"
+                      ? "Password"
+                      : "—"}
+              </dd>
+              <dt className="text-slate-500 dark:text-slate-400">
+                Last connected
+              </dt>
+              <dd className="text-slate-900 dark:text-slate-100">
+                {host.last_connected_at
+                  ? new Date(host.last_connected_at).toLocaleString()
+                  : "never"}
+              </dd>
+            </dl>
+          )}
         </section>
-      )}
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Quick commands
-          </h3>
-        </div>
+        <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Performance
+            </h3>
+            <button
+              type="button"
+              onClick={togglePerformancePanel}
+              title={
+                performancePanelVisible
+                  ? "Hide performance"
+                  : "Show performance"
+              }
+              className="text-xs text-slate-400 hover:text-teal-600"
+            >
+              {performancePanelVisible ? "Hide" : "Show"}
+            </button>
+          </div>
+          {performancePanelVisible &&
+            (!sessionOpen ? (
+              <p className="text-xs text-slate-400">
+                Connect to see live CPU, memory, and network usage.
+              </p>
+            ) : stats ? (
+              <div className="space-y-3">
+                <StatBar
+                  label="CPU"
+                  value={stats.cpu_percent}
+                  max={100}
+                  displayValue={`${Math.round(stats.cpu_percent)}%`}
+                />
+                <StatBar
+                  label="RAM"
+                  value={stats.mem_used_mb}
+                  max={stats.mem_total_mb || 1}
+                  displayValue={`${formatMb(stats.mem_used_mb)} / ${formatMb(stats.mem_total_mb)}`}
+                />
+                {stats.swap_total_mb > 0 && (
+                  <StatBar
+                    label="Swap"
+                    value={stats.swap_used_mb}
+                    max={stats.swap_total_mb || 1}
+                    displayValue={`${formatMb(stats.swap_used_mb)} / ${formatMb(stats.swap_total_mb)}`}
+                  />
+                )}
+                <StatBar
+                  label="Disk"
+                  value={stats.disk_used_mb}
+                  max={stats.disk_total_mb || 1}
+                  displayValue={`${formatMb(stats.disk_used_mb)} / ${formatMb(stats.disk_total_mb)}`}
+                />
+                <StatBar
+                  label="Net"
+                  value={netRates ? netRates.rx + netRates.tx : 0}
+                  max={5 * 1024 * 1024}
+                  displayValue={
+                    netRates
+                      ? `↓${formatRate(netRates.rx)} ↑${formatRate(netRates.tx)}`
+                      : "—"
+                  }
+                />
+              </div>
+            ) : statsUnavailable ? (
+              <p className="text-xs text-slate-400">
+                Performance stats aren't available for this host.
+              </p>
+            ) : (
+              <p className="text-xs text-slate-400">Loading…</p>
+            ))}
+        </section>
 
-        <div className="mb-3 flex items-center justify-between">
-          <span className="text-xs text-slate-500 dark:text-slate-400">
-            Auto-Run
-          </span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={quickCommandAutoRun}
-            aria-label="Auto-Run"
-            onClick={toggleQuickCommandAutoRun}
-            title={
-              quickCommandAutoRun
-                ? "On: clicking a command runs it immediately"
-                : "Off: clicking a command inserts it for review before you press Enter"
-            }
-            className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-              quickCommandAutoRun ? "bg-teal-600" : "bg-slate-300 dark:bg-slate-700"
-            }`}
-          >
-            <span
-              className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                quickCommandAutoRun ? "translate-x-4" : "translate-x-0"
+        {host.notes && (
+          <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Comments
+            </h3>
+            <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-300">
+              {host.notes}
+            </p>
+          </section>
+        )}
+
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Quick commands
+            </h3>
+          </div>
+
+          <div className="mb-3 flex items-center justify-between">
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              Auto-Run
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={quickCommandAutoRun}
+              aria-label="Auto-Run"
+              onClick={toggleQuickCommandAutoRun}
+              title={
+                quickCommandAutoRun
+                  ? "On: clicking a command runs it immediately"
+                  : "Off: clicking a command inserts it for review before you press Enter"
+              }
+              className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
+                quickCommandAutoRun
+                  ? "bg-teal-600"
+                  : "bg-slate-300 dark:bg-slate-700"
               }`}
-            />
-          </button>
-        </div>
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                  quickCommandAutoRun ? "translate-x-4" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </div>
 
-        {topUsed.length > 0 && (
-          <div className="mb-3">
-            <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Most used
-            </h4>
+          {topUsed.length > 0 && (
+            <div className="mb-3">
+              <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Most used
+              </h4>
+              <div className="space-y-1.5">
+                {topUsed.map((u) => (
+                  <button
+                    key={u.label}
+                    type="button"
+                    disabled={!host.identity_id || runningId === u.label}
+                    onClick={() => handleQuickCommand(u.label, u.label, u.body)}
+                    title={u.body}
+                    className="flex w-full items-center justify-between rounded-lg border border-slate-300 px-3 py-1.5 text-left text-sm text-slate-700 hover:border-teal-500 hover:text-teal-700 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:border-teal-500 dark:hover:text-teal-400"
+                  >
+                    <span className="truncate">
+                      {runningId === u.label ? "Running…" : u.label}
+                    </span>
+                    <span className="shrink-0 pl-2 text-xs text-slate-400">
+                      ×{u.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {snippets.length > 0 && (
             <div className="space-y-1.5">
-              {topUsed.map((u) => (
+              {snippets.map((s) => (
                 <button
-                  key={u.label}
+                  key={s.id}
                   type="button"
-                  disabled={!host.identity_id || runningId === u.label}
-                  onClick={() => handleQuickCommand(u.label, u.label, u.body)}
-                  title={u.body}
-                  className="flex w-full items-center justify-between rounded-lg border border-slate-300 px-3 py-1.5 text-left text-sm text-slate-700 hover:border-teal-500 hover:text-teal-700 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:border-teal-500 dark:hover:text-teal-400"
+                  disabled={!host.identity_id || runningId === s.id}
+                  onClick={() => handleQuickCommand(s.id, s.label, s.body)}
+                  title={s.body}
+                  className="block w-full rounded-lg border border-slate-300 px-3 py-1.5 text-left text-sm text-slate-700 hover:border-teal-500 hover:text-teal-700 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:border-teal-500 dark:hover:text-teal-400"
                 >
-                  <span className="truncate">{runningId === u.label ? "Running…" : u.label}</span>
-                  <span className="shrink-0 pl-2 text-xs text-slate-400">×{u.count}</span>
+                  {runningId === s.id ? "Running…" : s.label}
                 </button>
               ))}
             </div>
-          </div>
-        )}
+          )}
 
-        {snippets.length > 0 && (
-          <div className="space-y-1.5">
-            {snippets.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                disabled={!host.identity_id || runningId === s.id}
-                onClick={() => handleQuickCommand(s.id, s.label, s.body)}
-                title={s.body}
-                className="block w-full rounded-lg border border-slate-300 px-3 py-1.5 text-left text-sm text-slate-700 hover:border-teal-500 hover:text-teal-700 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:border-teal-500 dark:hover:text-teal-400"
-              >
-                {runningId === s.id ? "Running…" : s.label}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {lastResult && (
-          <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs dark:border-slate-700 dark:bg-slate-800">
-            <p className="mb-1 font-medium text-slate-900 dark:text-slate-100">
-              {lastResult.label}
-              {lastResult.result.output &&
-                ` (exit ${lastResult.result.output.exit_status ?? "?"})`}
-            </p>
-            {lastResult.result.error && (
-              <p className="text-red-600 dark:text-red-400">{lastResult.result.error}</p>
-            )}
-            {lastResult.result.output?.stdout && (
-              <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap text-slate-700 dark:text-slate-300">
-                {lastResult.result.output.stdout}
-              </pre>
-            )}
-            {lastResult.result.output?.stderr && (
-              <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap text-red-600 dark:text-red-400">
-                {lastResult.result.output.stderr}
-              </pre>
-            )}
-          </div>
-        )}
-      </section>
+          {lastResult && (
+            <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs dark:border-slate-700 dark:bg-slate-800">
+              <p className="mb-1 font-medium text-slate-900 dark:text-slate-100">
+                {lastResult.label}
+                {lastResult.result.output &&
+                  ` (exit ${lastResult.result.output.exit_status ?? "?"})`}
+              </p>
+              {lastResult.result.error && (
+                <p className="text-red-600 dark:text-red-400">
+                  {lastResult.result.error}
+                </p>
+              )}
+              {lastResult.result.output?.stdout && (
+                <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap text-slate-700 dark:text-slate-300">
+                  {lastResult.result.output.stdout}
+                </pre>
+              )}
+              {lastResult.result.output?.stderr && (
+                <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap text-red-600 dark:text-red-400">
+                  {lastResult.result.output.stderr}
+                </pre>
+              )}
+            </div>
+          )}
+        </section>
       </div>
     </aside>
   );

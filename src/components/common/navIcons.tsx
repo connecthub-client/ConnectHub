@@ -78,12 +78,33 @@ const NAV_ICON_PATHS: Record<string, ReactNode> = {
   ),
   chevronLeft: <path d="M11 4 6 9l5 5" />,
   chevronRight: <path d="M7 4l5 5-5 5" />,
-  folder: <path d="M2.5 5a1 1 0 0 1 1-1h3.2l1.3 1.6h6.5a1 1 0 0 1 1 1v6.4a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1V5Z" />,
+  chevronDown: <path d="m4 7 5 5 5-5" />,
+  close: <path d="m4.5 4.5 9 9m0-9-9 9" />,
+  folder: (
+    <path d="M2.5 5a1 1 0 0 1 1-1h3.2l1.3 1.6h6.5a1 1 0 0 1 1 1v6.4a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1V5Z" />
+  ),
+  file: (
+    <>
+      <path d="M4 2.5h6l4 4v9H4v-13Z" />
+      <path d="M10 2.5v4h4" />
+    </>
+  ),
+  refresh: (
+    <>
+      <path d="M14 6V2.8l-2 2A6 6 0 1 0 15 10" />
+    </>
+  ),
 };
 
 export type NavIconKey = keyof typeof NAV_ICON_PATHS;
 
-export function NavIcon({ icon, className }: { icon: NavIconKey; className?: string }) {
+export function NavIcon({
+  icon,
+  className,
+}: {
+  icon: NavIconKey;
+  className?: string;
+}) {
   return (
     <svg {...ICON_PROPS} className={className} aria-hidden="true">
       {NAV_ICON_PATHS[icon]}
@@ -97,7 +118,10 @@ export function NavIcon({ icon, className }: { icon: NavIconKey; className?: str
 // from). Both edges follow this one rule - expressed here once rather than
 // as two independently hand-written ternaries, which is what actually
 // drifted before, not the direction logic itself.
-export function sidebarToggleIcon(side: "left" | "right", visible: boolean): NavIconKey {
+export function sidebarToggleIcon(
+  side: "left" | "right",
+  visible: boolean,
+): NavIconKey {
   const pointsLeft = side === "left" ? visible : !visible;
   return pointsLeft ? "chevronLeft" : "chevronRight";
 }

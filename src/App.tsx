@@ -5,6 +5,8 @@ import { useIdleTimer } from "./components/common/useIdleTimer";
 import { vaultAutoUnlock, vaultLock } from "./lib/tauri-bridge";
 import { useSettingsStore } from "./state/settingsStore";
 import UpdatePrompt from "./components/common/UpdatePrompt";
+import { NotificationsProvider } from "./components/common/Notifications";
+import { LoadingSpinner, Notice } from "./components/common/ui";
 import "./App.css";
 
 function useThemeEffect() {
@@ -61,37 +63,49 @@ function App() {
     })();
   }, []);
 
-  useIdleTimer(boot === "ready" && vaultAutoLockEnabled && !locked, vaultAutoLockMinutes * 60_000, () => {
-    setLocked(true);
-    // Best-effort: the lock overlay already blocks all interaction
-    // regardless, but clearing the in-memory key too means any
-    // secret-decrypting command genuinely fails while locked, not just
-    // visually.
-    vaultLock().catch(() => {});
-  });
+  useIdleTimer(
+    boot === "ready" && vaultAutoLockEnabled && !locked,
+    vaultAutoLockMinutes * 60_000,
+    () => {
+      setLocked(true);
+      // Best-effort: the lock overlay already blocks all interaction
+      // regardless, but clearing the in-memory key too means any
+      // secret-decrypting command genuinely fails while locked, not just
+      // visually.
+      vaultLock().catch(() => {});
+    },
+  );
 
   if (boot === "loading") {
     return (
-      <div className="flex h-full items-center justify-center bg-slate-100 dark:bg-slate-900">
-        <p className="text-slate-500 dark:text-slate-400">Loading…</p>
+      <div className="flex h-full items-center justify-center bg-slate-50 dark:bg-slate-950">
+        <div
+          role="status"
+          className="flex items-center gap-3 text-sm font-medium text-slate-500 dark:text-slate-400"
+        >
+          <LoadingSpinner className="h-5 w-5 text-teal-600" />
+          Starting ConnectHub…
+        </div>
       </div>
     );
   }
 
   if (boot === "error") {
     return (
-      <div className="flex h-full items-center justify-center bg-slate-100 dark:bg-slate-900">
-        <p className="text-red-600 dark:text-red-400">{error}</p>
+      <div className="flex h-full items-center justify-center bg-slate-50 p-6 dark:bg-slate-950">
+        <Notice intent="error" className="max-w-lg">
+          {error}
+        </Notice>
       </div>
     );
   }
 
   return (
-    <>
+    <NotificationsProvider>
       <AppShell />
       <UpdatePrompt />
       {locked && <VaultLockOverlay onUnlocked={() => setLocked(false)} />}
-    </>
+    </NotificationsProvider>
   );
 }
 

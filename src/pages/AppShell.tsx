@@ -2,13 +2,17 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import ActivityBar from "../components/layout/ActivityBar";
 import { NavIcon, sidebarToggleIcon } from "../components/common/navIcons";
-import CommandPalette, { PaletteAction } from "../components/common/CommandPalette";
+import CommandPalette, {
+  PaletteAction,
+} from "../components/common/CommandPalette";
 import ResizeHandle from "../components/common/ResizeHandle";
 import { useHostContextMenu } from "../components/common/useHostContextMenu";
 import HostTree from "../components/sidebar/HostTree";
 import Modal from "../components/common/Modal";
 import HostContextPanel from "../components/panels/HostContextPanel";
-import InlineFormPanel, { isInlineFormModal } from "../components/panels/InlineFormPanel";
+import InlineFormPanel, {
+  isInlineFormModal,
+} from "../components/panels/InlineFormPanel";
 import HostCard from "../components/common/HostCard";
 import IdentitiesPanel from "../components/panels/IdentitiesPanel";
 import KeysPanel from "../components/panels/KeysPanel";
@@ -35,7 +39,12 @@ import {
   workspaceListTabs,
 } from "../lib/tauri-bridge";
 import { getGroupChildren } from "../lib/groupTree";
-import { collectLeaves, countLeaves, deserializeLayout, serializeLayout } from "../lib/paneTree";
+import {
+  collectLeaves,
+  countLeaves,
+  deserializeLayout,
+  serializeLayout,
+} from "../lib/paneTree";
 import { useHostsStore } from "../state/hostsStore";
 import { MAX_PANES, useSessionsStore } from "../state/sessionsStore";
 import { useTagsStore } from "../state/tagsStore";
@@ -46,9 +55,22 @@ import {
   DEFAULT_RIGHT_PANEL_WIDTH,
   useSettingsStore,
 } from "../state/settingsStore";
+import { useNotifications } from "../components/common/Notifications";
+import { Button, LoadingSpinner, Notice } from "../components/common/ui";
 
-type ManageTab = "hosts" | "identities" | "keys" | "vpn" | "workspaces" | "backup" | "settings";
-type MainView = { type: "manage"; tab: ManageTab } | { type: "session"; tabId: string };
+type ManageTab =
+  | "hosts"
+  | "identities"
+  | "keys"
+  | "vpn"
+  | "workspaces"
+  | "backup"
+  | "settings";
+type MainView =
+  { type: "manage"; tab: ManageTab } | { type: "session"; tabId: string };
+
+const SHELL_RAILS_WIDTH = 104;
+const MIN_CENTER_WORKSPACE_WIDTH = 620;
 
 type ModalState =
   | { kind: "group"; group?: Group; parentId?: string | null }
@@ -61,6 +83,7 @@ type ModalState =
   | null;
 
 export default function AppShell() {
+  const notify = useNotifications();
   const loadAll = useHostsStore((s) => s.loadAll);
   const loaded = useHostsStore((s) => s.loaded);
   const hosts = useHostsStore((s) => s.hosts);
@@ -68,7 +91,9 @@ export default function AppShell() {
   const identities = useHostsStore((s) => s.identities);
   const exportHostsCsv = useHostsStore((s) => s.exportHostsCsv);
   const importHostsCsv = useHostsStore((s) => s.importHostsCsv);
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
+    new Set(),
+  );
   const [hostsGridSearch, setHostsGridSearch] = useState("");
   // The same Connect/Duplicate/Edit/Delete menu HostTree.tsx's sidebar rows
   // already have, offered here too so right-click behaves identically
@@ -115,7 +140,8 @@ export default function AppShell() {
       setTabBarOverflowing(false);
       return;
     }
-    const check = () => setTabBarOverflowing(el.scrollWidth > el.clientWidth + 1);
+    const check = () =>
+      setTabBarOverflowing(el.scrollWidth > el.clientWidth + 1);
     check();
     const observer = new ResizeObserver(check);
     observer.observe(el);
@@ -138,7 +164,9 @@ export default function AppShell() {
 
   const leftSidebarVisible = useSettingsStore((s) => s.leftSidebarVisible);
   const toggleLeftSidebar = useSettingsStore((s) => s.toggleLeftSidebar);
-  const setLeftSidebarVisible = useSettingsStore((s) => s.setLeftSidebarVisible);
+  const setLeftSidebarVisible = useSettingsStore(
+    (s) => s.setLeftSidebarVisible,
+  );
   const leftSidebarWidth = useSettingsStore((s) => s.leftSidebarWidth);
   const setLeftSidebarWidth = useSettingsStore((s) => s.setLeftSidebarWidth);
   const snippetsDrawerOpen = useSettingsStore((s) => s.snippetsDrawerOpen);
@@ -152,10 +180,52 @@ export default function AppShell() {
   const setRightPanelWidth = useSettingsStore((s) => s.setRightPanelWidth);
   const [isDraggingLeftPanel, setIsDraggingLeftPanel] = useState(false);
   const [isDraggingRightPanel, setIsDraggingRightPanel] = useState(false);
-
   const [selectedHostId, setSelectedHostId] = useState<string | null>(null);
-  const [mainView, setMainView] = useState<MainView>({ type: "manage", tab: "hosts" });
+  const [mainView, setMainView] = useState<MainView>({
+    type: "manage",
+    tab: "hosts",
+  });
   const [modal, setModal] = useState<ModalState>(null);
+  const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
+  const [activeOverlay, setActiveOverlay] = useState<"left" | "right" | null>(
+    null,
+  );
+  const leftPanelOverlays =
+    viewportWidth <
+    Math.max(
+      900,
+      leftSidebarWidth + SHELL_RAILS_WIDTH + MIN_CENTER_WORKSPACE_WIDTH,
+    );
+  const rightPanelOverlays =
+    viewportWidth <
+    Math.max(
+      1280,
+      leftSidebarWidth +
+        rightPanelWidth +
+        SHELL_RAILS_WIDTH +
+        MIN_CENTER_WORKSPACE_WIDTH,
+    );
+
+  useEffect(() => {
+    const update = () => setViewportWidth(window.innerWidth);
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+
+  useEffect(() => {
+    if (!rightPanelOverlays) setActiveOverlay(null);
+    else if (isInlineFormModal(modal)) setActiveOverlay("right");
+  }, [rightPanelOverlays, modal]);
+
+  useEffect(() => {
+    if (!activeOverlay) return;
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setActiveOverlay(null);
+    };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [activeOverlay]);
+
   // Host/Group/Identity/Key/VpnProfile forms render inline in the right
   // panel (InlineFormPanel), so opening one of those also makes sure the
   // panel is actually visible - Snippet/RunSnippet modals don't need this,
@@ -165,19 +235,31 @@ export default function AppShell() {
     setModal(state);
     if (isInlineFormModal(state)) {
       setRightPanelVisible(true);
+      if (rightPanelOverlays) setActiveOverlay("right");
     }
+  }
+
+  function closeInlineForm() {
+    setModal(null);
+    if (rightPanelOverlays) setActiveOverlay(null);
   }
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [importResult, setImportResult] = useState<ImportSummary | null>(null);
   const [csvError, setCsvError] = useState<string | null>(null);
   const [vpnGateHostId, setVpnGateHostId] = useState<string | null>(null);
-  const [vpnGateError, setVpnGateError] = useState<{ hostId: string; message: string } | null>(null);
+  const [vpnGateError, setVpnGateError] = useState<{
+    hostId: string;
+    message: string;
+  } | null>(null);
 
   useEffect(() => {
-    Promise.all([loadAll(), loadVpnAll(), loadTagsAll(), loadWorkspacesAll()]).catch((e) =>
-      setLoadError(String(e)),
-    );
+    Promise.all([
+      loadAll(),
+      loadVpnAll(),
+      loadTagsAll(),
+      loadWorkspacesAll(),
+    ]).catch((e) => setLoadError(String(e)));
   }, [loadAll, loadVpnAll, loadTagsAll, loadWorkspacesAll]);
 
   useEffect(() => {
@@ -212,9 +294,12 @@ export default function AppShell() {
       if (e.key === "Tab" && openSessions.length > 0) {
         e.preventDefault();
         const currentIndex =
-          mainView.type === "session" ? openSessions.findIndex((s) => s.tabId === mainView.tabId) : -1;
+          mainView.type === "session"
+            ? openSessions.findIndex((s) => s.tabId === mainView.tabId)
+            : -1;
         const delta = e.shiftKey ? -1 : 1;
-        const nextIndex = (currentIndex + delta + openSessions.length) % openSessions.length;
+        const nextIndex =
+          (currentIndex + delta + openSessions.length) % openSessions.length;
         setMainView({ type: "session", tabId: openSessions[nextIndex].tabId });
       }
     }
@@ -227,13 +312,17 @@ export default function AppShell() {
   const selectedHost = hosts.find((h) => h.id === selectedHostId) ?? null;
 
   const activeSession =
-    mainView.type === "session" ? openSessions.find((s) => s.tabId === mainView.tabId) : undefined;
+    mainView.type === "session"
+      ? openSessions.find((s) => s.tabId === mainView.tabId)
+      : undefined;
   // Look up the live host record rather than using the session's snapshot
   // (taken once, at connect time) so fields like last_connected_at stay
   // current after the connection completes.
   const contextHost =
     mainView.type === "session"
-      ? (hosts.find((h) => h.id === activeSession?.host.id) ?? activeSession?.host ?? null)
+      ? (hosts.find((h) => h.id === activeSession?.host.id) ??
+        activeSession?.host ??
+        null)
       : mainView.type === "manage" && mainView.tab === "hosts"
         ? selectedHost
         : null;
@@ -241,11 +330,49 @@ export default function AppShell() {
     ? openSessions.some((s) => s.host.id === contextHost.id)
     : false;
   const dockedPanelVisible =
-    rightPanelVisible && (isInlineFormModal(modal) || snippetsDrawerOpen || contextHost !== null);
+    rightPanelVisible &&
+    (isInlineFormModal(modal) || snippetsDrawerOpen || contextHost !== null);
   // The host tree stays visible while a session is focused (so you can open
   // another host without leaving it), but hides for the other 4 sidebar
   // destinations so they read as clean, single-purpose views.
-  const showHostTree = mainView.type === "session" || (mainView.type === "manage" && mainView.tab === "hosts");
+  const showHostTree =
+    mainView.type === "session" ||
+    (mainView.type === "manage" && mainView.tab === "hosts");
+  const leftPanelOpen =
+    showHostTree &&
+    leftSidebarVisible &&
+    (!leftPanelOverlays || activeOverlay === "left");
+  const rightPanelOpen =
+    dockedPanelVisible && (!rightPanelOverlays || activeOverlay === "right");
+
+  function handleLeftPanelToggle() {
+    if (!leftPanelOverlays) {
+      toggleLeftSidebar();
+      return;
+    }
+    if (!leftSidebarVisible) setLeftSidebarVisible(true);
+    setActiveOverlay((current) => (current === "left" ? null : "left"));
+  }
+
+  function handleRightPanelToggle() {
+    if (!rightPanelOverlays) {
+      toggleRightPanel();
+      return;
+    }
+    if (!rightPanelVisible) setRightPanelVisible(true);
+    setActiveOverlay((current) => (current === "right" ? null : "right"));
+  }
+
+  function handleSnippetsToggle() {
+    if (!snippetsDrawerOpen) setRightPanelVisible(true);
+    toggleSnippetsDrawer();
+    if (rightPanelOverlays) {
+      setRightPanelVisible(true);
+      setActiveOverlay(
+        snippetsDrawerOpen && activeOverlay === "right" ? null : "right",
+      );
+    }
+  }
 
   // The single gate for "is it OK to talk to this host's network right
   // now" - every caller (double-click, right-click menu, the host panel's
@@ -258,7 +385,9 @@ export default function AppShell() {
   // "run on hosts", Quick Commands' one-off exec fallback) can reuse it
   // too - this wrapper only adds the inline busy/error UI state specific
   // to the Connect/SFTP buttons here.
-  async function ensureVpnUp(host: Host): Promise<{ ok: boolean; message?: string }> {
+  async function ensureVpnUp(
+    host: Host,
+  ): Promise<{ ok: boolean; message?: string }> {
     if (!host.vpn_profile_id) return { ok: true };
     setVpnGateError(null);
     setVpnGateHostId(host.id);
@@ -299,12 +428,14 @@ export default function AppShell() {
       // connect below - never touch rightPanelVisible here, so a manually
       // hidden right panel stays hidden rather than being forced back open.
       setLeftSidebarVisible(false);
+      setActiveOverlay(null);
       return;
     }
     if (!(await ensureVpnUp(host)).ok) return;
     const tabId = openSession(host, "terminal");
     setMainView({ type: "session", tabId });
     setLeftSidebarVisible(false);
+    setActiveOverlay(null);
   }
 
   async function handleOpenSftp(host: Host) {
@@ -312,6 +443,7 @@ export default function AppShell() {
     const tabId = openSession(host, "sftp");
     setMainView({ type: "session", tabId });
     setLeftSidebarVisible(false);
+    setActiveOverlay(null);
   }
 
   function handleCloseTab(tabId: string) {
@@ -326,7 +458,11 @@ export default function AppShell() {
     }
     if (mainView.type === "session" && mainView.tabId === tabId) {
       const fallback = remaining[remaining.length - 1];
-      setMainView(fallback ? { type: "session", tabId: fallback.tabId } : { type: "manage", tab: "hosts" });
+      setMainView(
+        fallback
+          ? { type: "session", tabId: fallback.tabId }
+          : { type: "manage", tab: "hosts" },
+      );
     }
   }
 
@@ -343,11 +479,15 @@ export default function AppShell() {
     direction: "row" | "column",
     host?: Host,
   ): Promise<{ ok: boolean; message?: string }> {
-    const session = useSessionsStore.getState().openSessions.find((s) => s.tabId === tabId);
-    if (!session?.layout) return { ok: false, message: "This tab is no longer open." };
+    const session = useSessionsStore
+      .getState()
+      .openSessions.find((s) => s.tabId === tabId);
+    if (!session?.layout)
+      return { ok: false, message: "This tab is no longer open." };
     const leaf = collectLeaves(session.layout).find((l) => l.paneId === paneId);
     const targetHost = host ?? leaf?.host;
-    if (!targetHost) return { ok: false, message: "This pane is no longer open." };
+    if (!targetHost)
+      return { ok: false, message: "This pane is no longer open." };
     const gate = await ensureVpnUp(targetHost);
     if (!gate.ok) return gate;
     if (splitPane(tabId, paneId, direction, host) === null) {
@@ -377,11 +517,16 @@ export default function AppShell() {
       openSessions.map((s, i) => ({
         host_id: s.host.id,
         kind: s.kind,
-        pane_count: s.kind === "terminal" && s.layout ? countLeaves(s.layout) : 1,
-        layout_json: s.kind === "terminal" && s.layout ? JSON.stringify(serializeLayout(s.layout)) : null,
+        pane_count:
+          s.kind === "terminal" && s.layout ? countLeaves(s.layout) : 1,
+        layout_json:
+          s.kind === "terminal" && s.layout
+            ? JSON.stringify(serializeLayout(s.layout))
+            : null,
         sort_order: i,
       })),
     );
+    notify("Workspace saved.", "success");
   }
 
   // Replays a saved workspace's tabs through the exact same handleConnect/
@@ -402,18 +547,28 @@ export default function AppShell() {
       await handleConnect(host);
       const openedTabId = useSessionsStore
         .getState()
-        .openSessions.find((s) => s.host.id === host.id && s.kind === "terminal")?.tabId;
+        .openSessions.find(
+          (s) => s.host.id === host.id && s.kind === "terminal",
+        )?.tabId;
       if (!openedTabId) continue;
 
       const restoredLayout = tab.layout_json
-        ? deserializeLayout(JSON.parse(tab.layout_json), new Map(hosts.map((h) => [h.id, h])))
+        ? deserializeLayout(
+            JSON.parse(tab.layout_json),
+            new Map(hosts.map((h) => [h.id, h])),
+          )
         : null;
       if (restoredLayout) {
         // Gate every distinct host referenced anywhere in the restored
         // tree before applying it - setLayout below replaces the whole
         // tree in one shot, bypassing handleSplitPane's own per-split
         // gating.
-        const distinctHosts = new Map(collectLeaves(restoredLayout).map((leaf) => [leaf.host.id, leaf.host]));
+        const distinctHosts = new Map(
+          collectLeaves(restoredLayout).map((leaf) => [
+            leaf.host.id,
+            leaf.host,
+          ]),
+        );
         for (const h of distinctHosts.values()) {
           if (h.id !== host.id) await ensureVpnUp(h); // best-effort, same as every other host in this loop
         }
@@ -425,8 +580,12 @@ export default function AppShell() {
       // to pane_count flat panes on the tab's single saved host, exactly
       // the old behavior.
       for (let i = 1; i < tab.pane_count; i++) {
-        const current = useSessionsStore.getState().openSessions.find((s) => s.tabId === openedTabId);
-        const firstLeaf = current?.layout ? collectLeaves(current.layout)[0] : undefined;
+        const current = useSessionsStore
+          .getState()
+          .openSessions.find((s) => s.tabId === openedTabId);
+        const firstLeaf = current?.layout
+          ? collectLeaves(current.layout)[0]
+          : undefined;
         if (!firstLeaf) break;
         await handleSplitPane(openedTabId, firstLeaf.paneId, "row");
       }
@@ -439,10 +598,15 @@ export default function AppShell() {
   // if the sidebar was left hidden).
   function handleActivitySelect(tab: ManageTab) {
     if (mainView.type === "manage" && mainView.tab === tab) {
-      toggleLeftSidebar();
+      if (tab === "hosts") handleLeftPanelToggle();
     } else {
       setMainView({ type: "manage", tab });
-      setLeftSidebarVisible(true);
+      if (tab === "hosts") {
+        setLeftSidebarVisible(true);
+        setActiveOverlay(leftPanelOverlays ? "left" : null);
+      } else {
+        setActiveOverlay(null);
+      }
     }
   }
 
@@ -453,16 +617,56 @@ export default function AppShell() {
   // so the inline form panel opens exactly the way it already does
   // elsewhere.
   const paletteActions: PaletteAction[] = [
-    { id: "new-host", label: "New Host", run: () => openModal({ kind: "host" }) },
-    { id: "new-group", label: "New Group", run: () => openModal({ kind: "group" }) },
-    { id: "go-hosts", label: "Go to Hosts", run: () => handleActivitySelect("hosts") },
-    { id: "go-identities", label: "Go to Identities", run: () => handleActivitySelect("identities") },
-    { id: "go-keys", label: "Go to Keys", run: () => handleActivitySelect("keys") },
-    { id: "go-vpn", label: "Go to VPN", run: () => handleActivitySelect("vpn") },
-    { id: "go-workspaces", label: "Go to Workspaces", run: () => handleActivitySelect("workspaces") },
-    { id: "go-backup", label: "Go to Backup", run: () => handleActivitySelect("backup") },
-    { id: "go-settings", label: "Go to Settings (Known Hosts, etc.)", run: () => handleActivitySelect("settings") },
-    { id: "toggle-snippets", label: "Toggle Snippets panel", run: () => toggleSnippetsDrawer() },
+    {
+      id: "new-host",
+      label: "New Host",
+      run: () => openModal({ kind: "host" }),
+    },
+    {
+      id: "new-group",
+      label: "New Group",
+      run: () => openModal({ kind: "group" }),
+    },
+    {
+      id: "go-hosts",
+      label: "Go to Hosts",
+      run: () => handleActivitySelect("hosts"),
+    },
+    {
+      id: "go-identities",
+      label: "Go to Identities",
+      run: () => handleActivitySelect("identities"),
+    },
+    {
+      id: "go-keys",
+      label: "Go to Keys",
+      run: () => handleActivitySelect("keys"),
+    },
+    {
+      id: "go-vpn",
+      label: "Go to VPN",
+      run: () => handleActivitySelect("vpn"),
+    },
+    {
+      id: "go-workspaces",
+      label: "Go to Workspaces",
+      run: () => handleActivitySelect("workspaces"),
+    },
+    {
+      id: "go-backup",
+      label: "Go to Backup",
+      run: () => handleActivitySelect("backup"),
+    },
+    {
+      id: "go-settings",
+      label: "Go to Settings (Known Hosts, etc.)",
+      run: () => handleActivitySelect("settings"),
+    },
+    {
+      id: "toggle-snippets",
+      label: "Toggle Snippets panel",
+      run: handleSnippetsToggle,
+    },
   ];
 
   async function handleExportCsv() {
@@ -476,8 +680,10 @@ export default function AppShell() {
       });
       if (!path) return;
       await localWriteTextFile(path, csv);
+      notify("Hosts exported successfully.", "success");
     } catch (e) {
       setCsvError(String(e));
+      notify("Hosts could not be exported.", "error");
     }
   }
 
@@ -493,8 +699,10 @@ export default function AppShell() {
       const content = await localReadTextFile(path);
       const summary = await importHostsCsv(content);
       setImportResult(summary);
+      notify("Host import completed.", "success");
     } catch (e) {
       setCsvError(String(e));
+      notify("Hosts could not be imported.", "error");
     }
   }
 
@@ -511,7 +719,9 @@ export default function AppShell() {
 
   function hostMatchesGridSearch(host: Host): boolean {
     if (!hostsGridQuery) return true;
-    const identity = identities.find((candidate) => candidate.id === host.identity_id);
+    const identity = identities.find(
+      (candidate) => candidate.id === host.identity_id,
+    );
     return (
       host.label.toLowerCase().includes(hostsGridQuery) ||
       host.hostname.toLowerCase().includes(hostsGridQuery) ||
@@ -526,8 +736,11 @@ export default function AppShell() {
   // hidden along with its non-matching ancestors.
   function groupHasGridMatch(groupId: string): boolean {
     if (!hostsGridQuery) return true;
-    if (hosts.some((h) => h.group_id === groupId && hostMatchesGridSearch(h))) return true;
-    return groups.some((g) => g.parent_id === groupId && groupHasGridMatch(g.id));
+    if (hosts.some((h) => h.group_id === groupId && hostMatchesGridSearch(h)))
+      return true;
+    return groups.some(
+      (g) => g.parent_id === groupId && groupHasGridMatch(g.id),
+    );
   }
 
   // Recursively renders one level of the group tree as: each child group's
@@ -539,7 +752,8 @@ export default function AppShell() {
   // HostTree's own - they're different jobs (compact navigation vs. card
   // browsing) over the same data, not something that needs to stay synced.
   function renderGroupSection(parentId: string | null) {
-    const { childGroups: allChildGroups, childHosts: allChildHosts } = getGroupChildren(groups, hosts, parentId);
+    const { childGroups: allChildGroups, childHosts: allChildHosts } =
+      getGroupChildren(groups, hosts, parentId);
     const childGroups = allChildGroups.filter((g) => groupHasGridMatch(g.id));
     const childHosts = allChildHosts.filter(hostMatchesGridSearch);
 
@@ -547,16 +761,23 @@ export default function AppShell() {
       <>
         {childGroups.map((group) => {
           const isCollapsed = !hostsGridQuery && collapsedGroups.has(group.id);
-          const directCount = hosts.filter((h) => h.group_id === group.id).length;
+          const directCount = hosts.filter(
+            (h) => h.group_id === group.id,
+          ).length;
           return (
             <section key={group.id} className="mb-4">
               <button
                 type="button"
                 onClick={() => toggleGroupCollapsed(group.id)}
-                className="mb-2 flex w-full items-center gap-2 rounded-xl px-1 py-1 text-left text-xs font-bold uppercase tracking-[0.12em] text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"
+                className="mb-2 flex w-full items-center gap-2 rounded-xl px-1 py-1 text-left text-xs font-bold uppercase tracking-[0.12em] text-slate-500 hover:text-teal-600 dark:text-slate-400 dark:hover:text-teal-300"
               >
-                <span className="w-3 shrink-0 text-xs text-slate-400">{isCollapsed ? "▸" : "▾"}</span>
-                <NavIcon icon="folder" className="h-4 w-4 shrink-0 text-indigo-400" />
+                <span className="w-3 shrink-0 text-xs text-slate-400">
+                  {isCollapsed ? "▸" : "▾"}
+                </span>
+                <NavIcon
+                  icon="folder"
+                  className="h-4 w-4 shrink-0 text-teal-400"
+                />
                 <span className="truncate">{group.name}</span>
                 <span className="ml-auto shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold tracking-normal text-slate-400 dark:bg-slate-800">
                   {directCount} host{directCount === 1 ? "" : "s"}
@@ -582,7 +803,9 @@ export default function AppShell() {
                 <HostCard
                   key={h.id}
                   host={h}
-                  identity={identities.find((identity) => identity.id === h.identity_id)}
+                  identity={identities.find(
+                    (identity) => identity.id === h.identity_id,
+                  )}
                   isSelected={selectedHostId === h.id}
                   isOpen={openSessions.some((s) => s.host.id === h.id)}
                   onSelect={() => setSelectedHostId(h.id)}
@@ -609,16 +832,24 @@ export default function AppShell() {
 
   if (loadError) {
     return (
-      <div className="flex h-full items-center justify-center bg-slate-100 dark:bg-slate-900">
-        <p className="text-red-600 dark:text-red-400">{loadError}</p>
+      <div className="flex h-full items-center justify-center bg-slate-50 p-6 dark:bg-slate-950">
+        <Notice intent="error" className="max-w-lg">
+          {loadError}
+        </Notice>
       </div>
     );
   }
 
   if (!loaded) {
     return (
-      <div className="flex h-full items-center justify-center bg-slate-100 dark:bg-slate-900">
-        <p className="text-slate-500 dark:text-slate-400">Loading…</p>
+      <div className="flex h-full items-center justify-center bg-slate-50 dark:bg-slate-950">
+        <div
+          role="status"
+          className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400"
+        >
+          <LoadingSpinner className="h-5 w-5 text-teal-600" /> Loading
+          workspace…
+        </div>
       </div>
     );
   }
@@ -628,103 +859,126 @@ export default function AppShell() {
       <ActivityBar
         activeTab={mainView.type === "manage" ? mainView.tab : null}
         onSelect={(tab) => handleActivitySelect(tab as ManageTab)}
-        leftSidebarVisible={leftSidebarVisible}
-        onToggleSidebar={toggleLeftSidebar}
+        leftSidebarVisible={leftPanelOpen}
+        onToggleSidebar={handleLeftPanelToggle}
       />
 
       {showHostTree && (
         <>
-        <aside
-          style={{ width: leftSidebarVisible ? leftSidebarWidth : 0 }}
-          aria-hidden={!leftSidebarVisible}
-          className={`shrink-0 overflow-hidden border-r border-slate-200/80 bg-white/80 dark:border-slate-800 dark:bg-slate-950 ${
-            isDraggingLeftPanel ? "" : "transition-[width] duration-150 ease-out"
-          }`}
-        >
-        <div className="flex h-full flex-col" style={{ width: leftSidebarWidth }}>
-          <div className="border-b border-slate-200 p-3 dark:border-slate-800">
-            <p className="mb-2 px-1 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Connection library</p>
-            <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => openModal({ kind: "host" })}
-              className="flex-1 rounded-xl bg-indigo-600 px-2 py-2 text-xs font-bold text-white shadow-sm shadow-indigo-600/20 hover:bg-indigo-700"
+          <aside
+            style={{ width: leftPanelOpen ? leftSidebarWidth : 0 }}
+            aria-hidden={!leftPanelOpen}
+            className={`${leftPanelOverlays ? "absolute inset-y-0 left-[52px] z-40 shadow-2xl" : "relative shrink-0"} overflow-hidden border-r border-slate-200 bg-white/95 backdrop-blur-md dark:border-slate-800 dark:bg-slate-950/95 ${
+              isDraggingLeftPanel
+                ? ""
+                : "transition-[width] duration-150 ease-out"
+            }`}
+          >
+            <div
+              className="flex h-full flex-col"
+              style={{ width: leftSidebarWidth }}
             >
-              + Host
-            </button>
-            <button
-              type="button"
-              onClick={() => openModal({ kind: "group" })}
-              className="flex-1 rounded-xl border border-slate-200 bg-white px-2 py-2 text-xs font-bold text-slate-600 shadow-sm hover:border-indigo-300 hover:text-indigo-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
-            >
-              + Group
-            </button>
+              <div className="border-b border-slate-200 p-3 dark:border-slate-800">
+                <p className="mb-2 px-1 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                  Connection library
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openModal({ kind: "host" })}
+                    className="flex-1 rounded-lg bg-teal-600 px-2 py-2 text-xs font-bold text-white shadow-sm shadow-slate-950/10 hover:bg-teal-700"
+                  >
+                    + Host
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openModal({ kind: "group" })}
+                    className="flex-1 rounded-xl border border-slate-200 bg-white px-2 py-2 text-xs font-bold text-slate-600 shadow-sm hover:border-teal-300 hover:text-teal-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                  >
+                    + Group
+                  </button>
+                </div>
+              </div>
+              <div className="flex gap-2 border-b border-slate-200 px-3 py-2.5 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={handleExportCsv}
+                  title="Export all hosts to a CSV file"
+                  className="flex-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-teal-600 dark:text-slate-400 dark:hover:bg-slate-800"
+                >
+                  Export CSV
+                </button>
+                <button
+                  type="button"
+                  onClick={handleImportCsv}
+                  title="Import hosts from a CSV file"
+                  className="flex-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-teal-600 dark:text-slate-400 dark:hover:bg-slate-800"
+                >
+                  Import CSV
+                </button>
+              </div>
+              {csvError && (
+                <p className="border-b border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-400">
+                  {csvError}
+                </p>
+              )}
+              <div className="flex-1 overflow-y-auto p-2">
+                <HostTree
+                  selectedHostId={selectedHostId}
+                  onSelectHost={(host) => {
+                    setSelectedHostId(host.id);
+                    setMainView({ type: "manage", tab: "hosts" });
+                  }}
+                  onConnectHost={(host) => {
+                    setSelectedHostId(host.id);
+                    handleConnect(host);
+                  }}
+                  onEditGroup={(group) => openModal({ kind: "group", group })}
+                  onEditHost={(host) => {
+                    setSelectedHostId(host.id);
+                    openModal({ kind: "host", host });
+                  }}
+                  onNewHost={(groupId) => openModal({ kind: "host", groupId })}
+                  onNewSubgroup={(parentId) =>
+                    openModal({ kind: "group", parentId })
+                  }
+                />
+              </div>
             </div>
-          </div>
-          <div className="flex gap-2 border-b border-slate-200 px-3 py-2.5 dark:border-slate-800">
-            <button
-              type="button"
-              onClick={handleExportCsv}
-              title="Export all hosts to a CSV file"
-              className="flex-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-indigo-600 dark:text-slate-400 dark:hover:bg-slate-800"
-            >
-              Export CSV
-            </button>
-            <button
-              type="button"
-              onClick={handleImportCsv}
-              title="Import hosts from a CSV file"
-              className="flex-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-indigo-600 dark:text-slate-400 dark:hover:bg-slate-800"
-            >
-              Import CSV
-            </button>
-          </div>
-          {csvError && (
-            <p className="border-b border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-400">
-              {csvError}
-            </p>
-          )}
-          <div className="flex-1 overflow-y-auto p-2">
-            <HostTree
-              selectedHostId={selectedHostId}
-              onSelectHost={(host) => {
-                setSelectedHostId(host.id);
-                setMainView({ type: "manage", tab: "hosts" });
-              }}
-              onConnectHost={(host) => {
-                setSelectedHostId(host.id);
-                handleConnect(host);
-              }}
-              onEditGroup={(group) => openModal({ kind: "group", group })}
-              onEditHost={(host) => {
-                setSelectedHostId(host.id);
-                openModal({ kind: "host", host });
-              }}
-              onNewHost={(groupId) => openModal({ kind: "host", groupId })}
-              onNewSubgroup={(parentId) => openModal({ kind: "group", parentId })}
+          </aside>
+          {leftPanelOpen && !leftPanelOverlays && (
+            <ResizeHandle
+              panelSide="left"
+              width={leftSidebarWidth}
+              onResize={setLeftSidebarWidth}
+              onReset={() => setLeftSidebarWidth(DEFAULT_LEFT_SIDEBAR_WIDTH)}
+              onDragStateChange={setIsDraggingLeftPanel}
             />
-          </div>
-        </div>
-        </aside>
-        {leftSidebarVisible && (
-          <ResizeHandle
-            panelSide="left"
-            width={leftSidebarWidth}
-            onResize={setLeftSidebarWidth}
-            onReset={() => setLeftSidebarWidth(DEFAULT_LEFT_SIDEBAR_WIDTH)}
-            onDragStateChange={setIsDraggingLeftPanel}
-          />
-        )}
+          )}
         </>
+      )}
+
+      {activeOverlay && (leftPanelOpen || rightPanelOpen) && (
+        <button
+          type="button"
+          aria-label="Close panel"
+          onClick={() => setActiveOverlay(null)}
+          className="absolute inset-0 z-30 bg-slate-950/35 backdrop-blur-[1px]"
+        />
       )}
 
       <main className="flex min-w-[320px] flex-1 flex-col overflow-hidden">
         {openSessions.length > 0 && (
-          <div className="flex min-h-12 items-stretch border-b border-slate-200 bg-white px-1 dark:border-slate-800 dark:bg-slate-950">
+          <div className="flex min-h-10 items-stretch border-b border-slate-200 bg-white px-1 dark:border-slate-800 dark:bg-slate-950">
             {tabBarOverflowing && (
               <button
                 type="button"
-                onClick={() => tabBarRef.current?.scrollBy({ left: -160, behavior: "smooth" })}
+                onClick={() =>
+                  tabBarRef.current?.scrollBy({
+                    left: -160,
+                    behavior: "smooth",
+                  })
+                }
                 title="Scroll tabs left"
                 className="shrink-0 px-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
               >
@@ -743,21 +997,30 @@ export default function AppShell() {
               onDrop={(e) => {
                 e.preventDefault();
                 if (!draggedTabId) return;
-                const fromIndex = openSessions.findIndex((x) => x.tabId === draggedTabId);
-                if (fromIndex !== -1) reorderSessions(fromIndex, openSessions.length);
+                const fromIndex = openSessions.findIndex(
+                  (x) => x.tabId === draggedTabId,
+                );
+                if (fromIndex !== -1)
+                  reorderSessions(fromIndex, openSessions.length);
                 setDraggedTabId(null);
                 setDragOverIndex(null);
               }}
             >
               {openSessions.map((s, index) => {
-                const active = mainView.type === "session" && mainView.tabId === s.tabId;
+                const active =
+                  mainView.type === "session" && mainView.tabId === s.tabId;
                 // SFTP tabs don't report a connect/error lifecycle into
                 // sessionsStore the way terminal tabs do - only style the dot
                 // by real status for terminal sessions, otherwise fall back
                 // to plain active/inactive coloring. A split tab's dot
                 // reflects its first (primary) pane specifically.
-                const firstPaneId = s.kind === "terminal" && s.layout ? collectLeaves(s.layout)[0]?.paneId : undefined;
-                const status = firstPaneId ? sessionStatuses[firstPaneId] : undefined;
+                const firstPaneId =
+                  s.kind === "terminal" && s.layout
+                    ? collectLeaves(s.layout)[0]?.paneId
+                    : undefined;
+                const status = firstPaneId
+                  ? sessionStatuses[firstPaneId]
+                  : undefined;
                 const statusLabel =
                   status === "connected"
                     ? "Connected"
@@ -782,9 +1045,11 @@ export default function AppShell() {
                           : "bg-slate-400 dark:bg-slate-600";
                 return (
                   <Fragment key={s.tabId}>
-                    {dragOverIndex === index && draggedTabId && draggedTabId !== s.tabId && (
-                      <div className="h-7 w-0.5 shrink-0 self-center rounded bg-indigo-500" />
-                    )}
+                    {dragOverIndex === index &&
+                      draggedTabId &&
+                      draggedTabId !== s.tabId && (
+                        <div className="h-7 w-0.5 shrink-0 self-center rounded bg-teal-500" />
+                      )}
                     <div
                       draggable
                       onDragStart={(e) => {
@@ -806,31 +1071,40 @@ export default function AppShell() {
                         e.preventDefault();
                         e.stopPropagation();
                         e.dataTransfer.dropEffect = "move";
-                        if (draggedTabId && draggedTabId !== s.tabId) setDragOverIndex(index);
+                        if (draggedTabId && draggedTabId !== s.tabId)
+                          setDragOverIndex(index);
                       }}
                       onDrop={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
                         if (!draggedTabId || draggedTabId === s.tabId) return;
-                        const fromIndex = openSessions.findIndex((x) => x.tabId === draggedTabId);
+                        const fromIndex = openSessions.findIndex(
+                          (x) => x.tabId === draggedTabId,
+                        );
                         if (fromIndex !== -1) reorderSessions(fromIndex, index);
                         setDraggedTabId(null);
                         setDragOverIndex(null);
                       }}
                       className={`group flex shrink-0 items-center gap-2 rounded-lg border px-3 py-1.5 text-sm ${
                         active
-                          ? "border-indigo-200 bg-indigo-50 text-indigo-950 shadow-sm dark:border-indigo-900 dark:bg-indigo-950/60 dark:text-indigo-100"
+                          ? "border-teal-200 bg-teal-50 text-teal-950 shadow-sm dark:border-teal-900 dark:bg-teal-950/60 dark:text-teal-100"
                           : "border-transparent text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-900"
                       } ${draggedTabId === s.tabId ? "opacity-40" : ""}`}
                     >
                       <button
                         type="button"
-                        onClick={() => setMainView({ type: "session", tabId: s.tabId })}
+                        onClick={() =>
+                          setMainView({ type: "session", tabId: s.tabId })
+                        }
                         title={statusLabel}
                         className="flex max-w-48 items-center gap-1.5 truncate"
                       >
-                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dotClass}`} />
-                        {s.kind === "sftp" ? "📁 " : ""}
+                        <span
+                          className={`h-1.5 w-1.5 shrink-0 rounded-full ${dotClass}`}
+                        />
+                        {s.kind === "sftp" && (
+                          <NavIcon icon="folder" className="h-3.5 w-3.5" />
+                        )}
                         {s.host.label}
                       </button>
                       <button
@@ -839,21 +1113,26 @@ export default function AppShell() {
                         className="text-xs text-slate-400 opacity-0 hover:text-slate-700 group-hover:opacity-100 dark:hover:text-slate-200"
                         title="Close session"
                       >
-                        ✕
+                        <NavIcon icon="close" className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   </Fragment>
                 );
               })}
               {dragOverIndex === openSessions.length && draggedTabId && (
-                <div className="h-7 w-0.5 shrink-0 self-center rounded bg-indigo-500" />
+                <div className="h-7 w-0.5 shrink-0 self-center rounded bg-teal-500" />
               )}
             </div>
             {tabBarOverflowing && (
               <>
                 <button
                   type="button"
-                  onClick={() => tabBarRef.current?.scrollBy({ left: 160, behavior: "smooth" })}
+                  onClick={() =>
+                    tabBarRef.current?.scrollBy({
+                      left: 160,
+                      behavior: "smooth",
+                    })
+                  }
                   title="Scroll tabs right"
                   className="shrink-0 px-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
                 >
@@ -869,7 +1148,7 @@ export default function AppShell() {
                     title="List all open tabs"
                     className="flex h-full items-center px-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
                   >
-                    ▾
+                    <NavIcon icon="chevronDown" className="h-4 w-4" />
                   </button>
                   {tabOverflowMenuOpen && (
                     <div
@@ -885,12 +1164,15 @@ export default function AppShell() {
                             setTabOverflowMenuOpen(false);
                           }}
                           className={`flex w-full items-center gap-1.5 truncate px-3 py-1.5 text-left hover:bg-slate-100 dark:hover:bg-slate-700 ${
-                            mainView.type === "session" && mainView.tabId === s.tabId
+                            mainView.type === "session" &&
+                            mainView.tabId === s.tabId
                               ? "text-teal-600 dark:text-teal-400"
                               : "text-slate-700 dark:text-slate-200"
                           }`}
                         >
-                          {s.kind === "sftp" ? "📁 " : ""}
+                          {s.kind === "sftp" && (
+                            <NavIcon icon="folder" className="h-3.5 w-3.5" />
+                          )}
                           {s.host.label}
                         </button>
                       ))}
@@ -904,16 +1186,18 @@ export default function AppShell() {
 
         <div className="relative flex-1 overflow-hidden">
           <div
-            className={`absolute inset-0 overflow-y-auto p-4 sm:p-6 lg:p-8 ${
+            className={`absolute inset-0 overflow-y-auto p-3 sm:p-4 xl:p-5 ${
               mainView.type === "manage" ? "visible" : "invisible"
             }`}
           >
             {mainView.type === "manage" && mainView.tab === "hosts" && (
-              <div className="server-workspace mx-auto w-full max-w-[1440px]">
-                <header className="mb-7 flex flex-wrap items-start gap-4">
+              <div className="server-workspace mx-auto w-full max-w-[1680px]">
+                <header className="mb-4 flex flex-wrap items-center gap-3">
                   <div className="mr-auto min-w-48">
-                    <h1 className="text-2xl font-extrabold tracking-tight text-slate-950 dark:text-white">Servers</h1>
-                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                    <h1 className="text-xl font-bold tracking-tight text-slate-950 dark:text-white">
+                      Servers
+                    </h1>
+                    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
                       {hosts.length === 0
                         ? "Add your first server to connect over SSH."
                         : `${hosts.length} saved server${hosts.length === 1 ? "" : "s"}`}
@@ -934,20 +1218,21 @@ export default function AppShell() {
                     </svg>
                     <input
                       value={hostsGridSearch}
-                      onChange={(e) => setHostsGridSearch(e.currentTarget.value)}
+                      onChange={(e) =>
+                        setHostsGridSearch(e.currentTarget.value)
+                      }
                       placeholder="Search servers"
                       aria-label="Search servers"
-                      className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-900 shadow-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      className="min-h-9 w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 shadow-sm outline-none hover:border-slate-400 focus:border-teal-600 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-600"
                     />
                   </div>
 
-                  <button
+                  <Button
                     type="button"
                     onClick={() => openModal({ kind: "host" })}
-                    className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm shadow-indigo-600/20 hover:bg-indigo-700"
                   >
                     + Add server
-                  </button>
+                  </Button>
                 </header>
 
                 {groups.length > 0 && hosts.length > 0 && (
@@ -955,14 +1240,16 @@ export default function AppShell() {
                     <button
                       type="button"
                       onClick={() => setCollapsedGroups(new Set())}
-                      className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-semibold text-slate-500 hover:border-indigo-300 hover:text-indigo-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                      className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-semibold text-slate-500 hover:border-teal-300 hover:text-teal-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
                     >
                       Expand all
                     </button>
                     <button
                       type="button"
-                      onClick={() => setCollapsedGroups(new Set(groups.map((g) => g.id)))}
-                      className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-semibold text-slate-500 hover:border-indigo-300 hover:text-indigo-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                      onClick={() =>
+                        setCollapsedGroups(new Set(groups.map((g) => g.id)))
+                      }
+                      className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-semibold text-slate-500 hover:border-teal-300 hover:text-teal-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
                     >
                       Collapse all
                     </button>
@@ -970,32 +1257,37 @@ export default function AppShell() {
                 )}
 
                 {hosts.length === 0 ? (
-                  <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-white/60 px-6 py-16 text-center dark:border-slate-800 dark:bg-slate-900/40">
-                    <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/70 dark:text-indigo-300">
-                      <NavIcon icon="hosts" className="h-7 w-7" />
+                  <div className="rounded-xl border border-dashed border-slate-300 bg-white/60 px-5 py-10 text-center dark:border-slate-700 dark:bg-slate-900/50">
+                    <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-teal-50 text-teal-700 dark:bg-teal-950/70 dark:text-teal-300">
+                      <NavIcon icon="hosts" className="h-6 w-6" />
                     </div>
-                    <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">No servers yet</h2>
+                    <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                      No servers yet
+                    </h2>
                     <p className="mx-auto mt-1 max-w-sm text-sm text-slate-500 dark:text-slate-400">
-                      Save a host, choose password or private-key authentication, and open a full SSH terminal.
+                      Save a host, choose password or private-key
+                      authentication, and open a full SSH terminal.
                     </p>
-                    <button
+                    <Button
                       type="button"
                       onClick={() => openModal({ kind: "host" })}
-                      className="mt-5 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-700"
+                      className="mt-4"
                     >
                       Add server
-                    </button>
+                    </Button>
                   </div>
                 ) : hostsGridQuery && !hosts.some(hostMatchesGridSearch) ? (
-                  <div className="rounded-2xl border border-slate-200 bg-white px-6 py-12 text-center dark:border-slate-800 dark:bg-slate-900">
-                    <h2 className="font-bold text-slate-900 dark:text-slate-100">No matching servers</h2>
+                  <div className="rounded-xl border border-slate-200 bg-white px-5 py-9 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                    <h2 className="font-bold text-slate-900 dark:text-slate-100">
+                      No matching servers
+                    </h2>
                     <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                       Try a different name, address, username, or tag.
                     </p>
                     <button
                       type="button"
                       onClick={() => setHostsGridSearch("")}
-                      className="mt-4 text-sm font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400"
+                      className="mt-4 text-sm font-semibold text-teal-600 hover:text-teal-700 dark:text-teal-400"
                     >
                       Clear search
                     </button>
@@ -1025,7 +1317,9 @@ export default function AppShell() {
             {mainView.type === "manage" && mainView.tab === "vpn" && (
               <VpnPanel
                 onNew={() => openModal({ kind: "vpn-profile" })}
-                onEdit={(profile) => openModal({ kind: "vpn-profile", profile })}
+                onEdit={(profile) =>
+                  openModal({ kind: "vpn-profile", profile })
+                }
               />
             )}
             {mainView.type === "manage" && mainView.tab === "workspaces" && (
@@ -1035,8 +1329,12 @@ export default function AppShell() {
                 onOpen={handleOpenWorkspace}
               />
             )}
-            {mainView.type === "manage" && mainView.tab === "backup" && <BackupPanel />}
-            {mainView.type === "manage" && mainView.tab === "settings" && <SettingsPanel />}
+            {mainView.type === "manage" && mainView.tab === "backup" && (
+              <BackupPanel />
+            )}
+            {mainView.type === "manage" && mainView.tab === "settings" && (
+              <SettingsPanel />
+            )}
           </div>
 
           {/* Every open session stays mounted so its SSH connection and
@@ -1049,7 +1347,9 @@ export default function AppShell() {
             <div
               key={s.tabId}
               className={`absolute inset-0 ${
-                mainView.type === "session" && mainView.tabId === s.tabId ? "visible" : "invisible"
+                mainView.type === "session" && mainView.tabId === s.tabId
+                  ? "visible"
+                  : "invisible"
               }`}
             >
               {s.kind === "terminal" && s.layout ? (
@@ -1059,19 +1359,24 @@ export default function AppShell() {
                   totalPaneCount={countLeaves(s.layout)}
                   broadcastEnabled={s.broadcastEnabled}
                   onToggleBroadcast={() => toggleBroadcast(s.tabId)}
-                  onSplit={(paneId, direction, host) => handleSplitPane(s.tabId, paneId, direction, host)}
+                  onSplit={(paneId, direction, host) =>
+                    handleSplitPane(s.tabId, paneId, direction, host)
+                  }
                   onClosePane={(paneId) => handleClosePane(s.tabId, paneId)}
                 />
               ) : (
-                <SftpBrowser host={s.host} onClose={() => handleCloseTab(s.tabId)} />
+                <SftpBrowser
+                  host={s.host}
+                  onClose={() => handleCloseTab(s.tabId)}
+                />
               )}
             </div>
           ))}
         </div>
       </main>
 
-      {dockedPanelVisible && (
-        <div className="hidden lg:block">
+      {rightPanelOpen && !rightPanelOverlays && (
+        <div>
           <ResizeHandle
             panelSide="right"
             width={rightPanelWidth}
@@ -1083,11 +1388,11 @@ export default function AppShell() {
       )}
       <div
         style={{
-          width: dockedPanelVisible ? rightPanelWidth : 0,
-          maxWidth: "calc(100vw - 4rem)",
+          width: rightPanelOpen ? rightPanelWidth : 0,
+          maxWidth: "calc(100vw - 6.5rem)",
         }}
-        aria-hidden={!dockedPanelVisible}
-        className={`absolute inset-y-0 right-0 z-40 shrink-0 overflow-hidden border-l border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-950 lg:static lg:z-auto lg:border-l-0 lg:shadow-none ${
+        aria-hidden={!rightPanelOpen}
+        className={`${rightPanelOverlays ? "absolute inset-y-0 right-[52px] z-40 shadow-2xl" : "relative shrink-0"} overflow-hidden border-l border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 ${
           isDraggingRightPanel ? "" : "transition-[width] duration-150 ease-out"
         }`}
       >
@@ -1095,9 +1400,20 @@ export default function AppShell() {
           {isInlineFormModal(modal) ? (
             <InlineFormPanel
               modal={modal}
-              onDone={() => setModal(null)}
+              onDone={closeInlineForm}
+              onSaved={(kind) => {
+                const labels: Record<typeof kind, string> = {
+                  group: "Group saved.",
+                  host: "Server saved.",
+                  identity: "Identity saved.",
+                  key: "SSH key saved.",
+                  "vpn-profile": "VPN profile saved.",
+                };
+                notify(labels[kind], "success");
+              }}
               onSaveAndConnectHost={(host) => {
-                setModal(null);
+                closeInlineForm();
+                notify("Server saved. Opening a terminal…", "success");
                 handleConnect(host);
               }}
             />
@@ -1106,7 +1422,7 @@ export default function AppShell() {
               onNew={() => setModal({ kind: "snippet" })}
               onEdit={(snippet) => setModal({ kind: "snippet", snippet })}
               onRun={(snippet) => setModal({ kind: "run-snippet", snippet })}
-              onClose={toggleSnippetsDrawer}
+              onClose={handleSnippetsToggle}
             />
           ) : (
             contextHost && (
@@ -1114,7 +1430,11 @@ export default function AppShell() {
                 host={contextHost}
                 sessionOpen={contextHostSessionOpen}
                 vpnBusy={vpnGateHostId === contextHost.id}
-                vpnError={vpnGateError?.hostId === contextHost.id ? vpnGateError.message : null}
+                vpnError={
+                  vpnGateError?.hostId === contextHost.id
+                    ? vpnGateError.message
+                    : null
+                }
                 onConnect={() => handleConnect(contextHost)}
                 onOpenSftp={() => handleOpenSftp(contextHost)}
               />
@@ -1131,29 +1451,34 @@ export default function AppShell() {
         <AiAssistantDrawer
           host={contextHost}
           onClose={toggleAiPanel}
-          onOpenSettings={() => setMainView({ type: "manage", tab: "settings" })}
+          onOpenSettings={() =>
+            setMainView({ type: "manage", tab: "settings" })
+          }
         />
       )}
 
-      <nav className="flex w-14 shrink-0 flex-col items-center gap-1.5 border-l border-slate-200/80 bg-slate-100/90 py-3 dark:border-slate-800 dark:bg-slate-950">
+      <nav className="flex w-[52px] shrink-0 flex-col items-center gap-1 border-l border-slate-200 bg-slate-100/90 py-2 dark:border-slate-800 dark:bg-slate-950">
         <button
           type="button"
-          title={rightPanelVisible ? "Hide details" : "Show details"}
-          aria-label={rightPanelVisible ? "Hide details" : "Show details"}
-          onClick={toggleRightPanel}
-          className="flex h-8 w-10 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-200 dark:text-slate-400 dark:hover:bg-slate-800"
+          title={rightPanelOpen ? "Hide details" : "Show details"}
+          aria-label={rightPanelOpen ? "Hide details" : "Show details"}
+          onClick={handleRightPanelToggle}
+          className="flex h-8 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-white hover:text-teal-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-teal-300"
         >
-          <NavIcon icon={sidebarToggleIcon("right", rightPanelVisible)} className="h-4 w-4" />
+          <NavIcon
+            icon={sidebarToggleIcon("right", rightPanelOpen)}
+            className="h-4 w-4"
+          />
         </button>
         <button
           type="button"
           title={snippetsDrawerOpen ? "Hide Snippets" : "Show Snippets"}
           aria-label={snippetsDrawerOpen ? "Hide Snippets" : "Show Snippets"}
-          onClick={toggleSnippetsDrawer}
-          className={`flex h-10 w-10 items-center justify-center rounded-lg ${
+          onClick={handleSnippetsToggle}
+          className={`flex h-9 w-9 items-center justify-center rounded-lg ${
             snippetsDrawerOpen
-              ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/20"
-              : "text-slate-500 hover:bg-white hover:text-indigo-600 dark:text-slate-400 dark:hover:bg-slate-800"
+              ? "bg-teal-600 text-white shadow-md shadow-slate-950/10"
+              : "text-slate-500 hover:bg-white hover:text-teal-600 dark:text-slate-400 dark:hover:bg-slate-800"
           }`}
         >
           <NavIcon icon="snippets" className="h-5 w-5" />
@@ -1163,10 +1488,10 @@ export default function AppShell() {
           title={aiPanelOpen ? "Hide AI Assistant" : "Show AI Assistant"}
           aria-label={aiPanelOpen ? "Hide AI Assistant" : "Show AI Assistant"}
           onClick={toggleAiPanel}
-          className={`flex h-10 w-10 items-center justify-center rounded-lg ${
+          className={`flex h-9 w-9 items-center justify-center rounded-lg ${
             aiPanelOpen
-              ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/20"
-              : "text-slate-500 hover:bg-white hover:text-indigo-600 dark:text-slate-400 dark:hover:bg-slate-800"
+              ? "bg-teal-600 text-white shadow-md shadow-slate-950/10"
+              : "text-slate-500 hover:bg-white hover:text-teal-600 dark:text-slate-400 dark:hover:bg-slate-800"
           }`}
         >
           <NavIcon icon="ai" className="h-5 w-5" />
@@ -1174,13 +1499,31 @@ export default function AppShell() {
       </nav>
 
       {modal?.kind === "snippet" && (
-        <Modal title={modal.snippet ? "Edit snippet" : "New snippet"} onClose={() => setModal(null)}>
-          <SnippetForm snippet={modal.snippet} onDone={() => setModal(null)} />
+        <Modal
+          title={modal.snippet ? "Edit snippet" : "New snippet"}
+          onClose={() => setModal(null)}
+        >
+          <SnippetForm
+            snippet={modal.snippet}
+            onDone={() => {
+              setModal(null);
+              notify("Snippet saved.", "success");
+            }}
+          />
         </Modal>
       )}
       {modal?.kind === "run-snippet" && (
-        <Modal title={`Run "${modal.snippet.label}"`} onClose={() => setModal(null)}>
-          <RunSnippetForm snippet={modal.snippet} onDone={() => setModal(null)} />
+        <Modal
+          title={`Run "${modal.snippet.label}"`}
+          onClose={() => setModal(null)}
+        >
+          <RunSnippetForm
+            snippet={modal.snippet}
+            onDone={() => {
+              setModal(null);
+              notify("Snippet completed.", "success");
+            }}
+          />
         </Modal>
       )}
       {importResult && (
@@ -1191,7 +1534,9 @@ export default function AppShell() {
             {importResult.imported > 0 && importResult.updated > 0 && " "}
             {importResult.updated > 0 &&
               `Updated ${importResult.updated} existing host${importResult.updated === 1 ? "" : "s"}.`}
-            {importResult.imported === 0 && importResult.updated === 0 && "No hosts to import."}
+            {importResult.imported === 0 &&
+              importResult.updated === 0 &&
+              "No hosts to import."}
           </p>
           {importResult.warnings.length > 0 && (
             <div className="mb-4 max-h-56 space-y-1.5 overflow-y-auto rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">

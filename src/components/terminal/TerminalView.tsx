@@ -7,13 +7,29 @@ import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import "@xterm/xterm/css/xterm.css";
-import { sessionConnect, sessionDisconnect, sessionResize, sessionWrite } from "../../lib/tauri-bridge";
+import {
+  sessionConnect,
+  sessionDisconnect,
+  sessionResize,
+  sessionWrite,
+} from "../../lib/tauri-bridge";
 import { Host } from "../../lib/tauri-bridge";
-import { TERMINAL_THEME_PRESETS, useSettingsStore } from "../../state/settingsStore";
+import {
+  TERMINAL_THEME_PRESETS,
+  useSettingsStore,
+} from "../../state/settingsStore";
 import { useHostsStore } from "../../state/hostsStore";
-import { MAX_PANES, SessionStatus, useSessionsStore } from "../../state/sessionsStore";
+import {
+  MAX_PANES,
+  SessionStatus,
+  useSessionsStore,
+} from "../../state/sessionsStore";
 import { collectLeaves } from "../../lib/paneTree";
-import { parseRemoteHistory, rankRemoteHistory, useCommandHistoryStore } from "../../state/commandHistoryStore";
+import {
+  parseRemoteHistory,
+  rankRemoteHistory,
+  useCommandHistoryStore,
+} from "../../state/commandHistoryStore";
 import { useSnippetsStore } from "../../state/snippetsStore";
 import { friendlyError } from "../../lib/friendlyError";
 import { useTerminalContextMenu } from "./useTerminalContextMenu";
@@ -88,7 +104,10 @@ interface TerminalViewProps {
   // subtree - the MAX_PANES cap applies tab-wide.
   paneCount: number;
   broadcastEnabled: boolean;
-  onSplit: (direction: "row" | "column", host?: Host) => Promise<{ ok: boolean; message?: string }>;
+  onSplit: (
+    direction: "row" | "column",
+    host?: Host,
+  ) => Promise<{ ok: boolean; message?: string }>;
   onToggleBroadcast: () => void;
   // Closes this pane specifically - AppShell.tsx routes this to closing the
   // whole tab instead when it's the tab's only remaining pane, so this
@@ -146,7 +165,10 @@ export default function TerminalView({
   useEffect(() => {
     if (!splitPickerOpen) return;
     function close(e: MouseEvent) {
-      if (splitPopoverRef.current && !splitPopoverRef.current.contains(e.target as Node)) {
+      if (
+        splitPopoverRef.current &&
+        !splitPopoverRef.current.contains(e.target as Node)
+      ) {
         setSplitPickerOpen(false);
       }
     }
@@ -157,7 +179,9 @@ export default function TerminalView({
   async function handleConfirmSplit() {
     setSplitBusy(true);
     setSplitError(null);
-    const chosenHost = splitHostId ? hosts.find((h) => h.id === splitHostId) : undefined;
+    const chosenHost = splitHostId
+      ? hosts.find((h) => h.id === splitHostId)
+      : undefined;
     const result = await onSplit(splitDirection, chosenHost);
     setSplitBusy(false);
     if (!result.ok) {
@@ -168,22 +192,25 @@ export default function TerminalView({
     setSplitHostId("");
   }
 
-  const { openContextMenu, menu: terminalContextMenu } = useTerminalContextMenu({
-    onCopy: () => {
-      const term = termRef.current;
-      if (term) void copySelectionToClipboard(term);
+  const { openContextMenu, menu: terminalContextMenu } = useTerminalContextMenu(
+    {
+      onCopy: () => {
+        const term = termRef.current;
+        if (term) void copySelectionToClipboard(term);
+      },
+      onPaste: () => {
+        const term = termRef.current;
+        if (term) void pasteFromClipboard(term);
+      },
     },
-    onPaste: () => {
-      const term = termRef.current;
-      if (term) void pasteFromClipboard(term);
-    },
-  });
+  );
 
   useEffect(() => {
     if (!containerRef.current) return;
 
     const initialSettings = useSettingsStore.getState();
-    const initialThemePreset = TERMINAL_THEME_PRESETS[initialSettings.terminalThemeKey];
+    const initialThemePreset =
+      TERMINAL_THEME_PRESETS[initialSettings.terminalThemeKey];
 
     const term = new Terminal({
       cursorBlink: true,
@@ -199,7 +226,11 @@ export default function TerminalView({
     // Default handler uses window.open(), which doesn't behave usefully in
     // a Tauri webview - route through the OS's actual default browser
     // instead.
-    term.loadAddon(new WebLinksAddon((_event, uri) => { void openUrl(uri); }));
+    term.loadAddon(
+      new WebLinksAddon((_event, uri) => {
+        void openUrl(uri);
+      }),
+    );
     // Lets a remote program request clipboard read/write via OSC 52 escape
     // sequences (e.g. tmux/vim "copy to system clipboard") - previously
     // copy/paste only worked via the browser's native text-selection
@@ -320,7 +351,9 @@ export default function TerminalView({
         if (event.type === "data") {
           const bytes = base64ToBytes(event.data);
           term.write(bytes);
-          outputTail = (outputTail + new TextDecoder().decode(bytes)).slice(-256);
+          outputTail = (outputTail + new TextDecoder().decode(bytes)).slice(
+            -256,
+          );
           if (SECRET_PROMPT_RE.test(outputTail)) {
             suppressNextLine = true;
             // Otherwise the matched text just sits in the tail (nothing
@@ -359,7 +392,9 @@ export default function TerminalView({
               if (disposed || !result?.output?.stdout) return;
               const commands = parseRemoteHistory(result.output.stdout);
               if (commands.length === 0) return;
-              useCommandHistoryStore.getState().setRemoteTopUsed(host.id, rankRemoteHistory(commands, 10));
+              useCommandHistoryStore
+                .getState()
+                .setRemoteTopUsed(host.id, rankRemoteHistory(commands, 10));
             })
             .catch(() => {});
         })
@@ -390,11 +425,14 @@ export default function TerminalView({
       // this effect only re-runs on host.id changing, but broadcastEnabled
       // and sibling panes can change any time while it's connected (the
       // toggle, or splitting/closing a pane).
-      const tabSession = useSessionsStore.getState().openSessions.find((s) => s.tabId === tabId);
+      const tabSession = useSessionsStore
+        .getState()
+        .openSessions.find((s) => s.tabId === tabId);
       if (tabSession?.broadcastEnabled && tabSession.layout) {
         for (const leaf of collectLeaves(tabSession.layout)) {
           if (leaf.paneId === paneId) continue;
-          const siblingSessionId = useSessionsStore.getState().sessionIds[leaf.paneId];
+          const siblingSessionId =
+            useSessionsStore.getState().sessionIds[leaf.paneId];
           if (siblingSessionId) sessionWrite(siblingSessionId, data);
         }
       }
@@ -489,7 +527,7 @@ export default function TerminalView({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex min-h-12 items-center justify-between border-b border-slate-200 bg-white px-4 py-2 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+      <div className="flex min-h-10 items-center justify-between border-b border-slate-200 bg-white px-4 py-2 shadow-sm dark:border-slate-800 dark:bg-slate-950">
         <div className="flex items-center gap-2 text-sm">
           <span
             className={`h-2 w-2 rounded-full ${
@@ -502,7 +540,9 @@ export default function TerminalView({
                     : "bg-red-500"
             }`}
           />
-          <span className="font-medium text-slate-900 dark:text-slate-100">{host.label}</span>
+          <span className="font-medium text-slate-900 dark:text-slate-100">
+            {host.label}
+          </span>
           <span className="text-slate-400">
             {host.hostname}:{host.port}
           </span>
@@ -519,7 +559,7 @@ export default function TerminalView({
               }
               className={`rounded-lg px-2 py-1 text-xs font-medium ${
                 broadcastEnabled
-                  ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/20"
+                  ? "bg-teal-600 text-white shadow-sm shadow-slate-950/10"
                   : "text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800"
               }`}
             >
@@ -534,7 +574,11 @@ export default function TerminalView({
                 setSplitPickerOpen((open) => !open);
               }}
               disabled={paneCount >= MAX_PANES}
-              title={paneCount >= MAX_PANES ? `Up to ${MAX_PANES} panes per tab` : "Split this pane"}
+              title={
+                paneCount >= MAX_PANES
+                  ? `Up to ${MAX_PANES} panes per tab`
+                  : "Split this pane"
+              }
               className="rounded-lg px-2 py-1 text-sm text-slate-500 hover:bg-slate-200 disabled:opacity-40 disabled:hover:bg-transparent dark:hover:bg-slate-800"
             >
               Split
@@ -551,7 +595,7 @@ export default function TerminalView({
                     onClick={() => setSplitDirection("row")}
                     className={`flex-1 rounded-md px-2 py-1 text-xs font-medium ${
                       splitDirection === "row"
-                        ? "bg-indigo-600 text-white"
+                        ? "bg-teal-600 text-white"
                         : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600"
                     }`}
                   >
@@ -562,7 +606,7 @@ export default function TerminalView({
                     onClick={() => setSplitDirection("column")}
                     className={`flex-1 rounded-md px-2 py-1 text-xs font-medium ${
                       splitDirection === "column"
-                        ? "bg-indigo-600 text-white"
+                        ? "bg-teal-600 text-white"
                         : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600"
                     }`}
                   >
@@ -583,12 +627,16 @@ export default function TerminalView({
                       </option>
                     ))}
                 </select>
-                {splitError && <p className="mb-2 text-xs text-red-600 dark:text-red-400">{splitError}</p>}
+                {splitError && (
+                  <p className="mb-2 text-xs text-red-600 dark:text-red-400">
+                    {splitError}
+                  </p>
+                )}
                 <button
                   type="button"
                   onClick={handleConfirmSplit}
                   disabled={splitBusy}
-                  className="w-full rounded-lg bg-indigo-600 px-2 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                  className="w-full rounded-lg bg-teal-600 px-2 py-1.5 text-xs font-semibold text-white hover:bg-teal-700 disabled:opacity-50"
                 >
                   {splitBusy ? "Splitting…" : "Split"}
                 </button>
@@ -625,7 +673,9 @@ export default function TerminalView({
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.currentTarget.value);
-              searchAddonRef.current?.findNext(e.currentTarget.value, { incremental: true });
+              searchAddonRef.current?.findNext(e.currentTarget.value, {
+                incremental: true,
+              });
             }}
             onKeyDown={(e) => {
               if (e.key === "Escape") {
@@ -640,7 +690,7 @@ export default function TerminalView({
               }
             }}
             placeholder="Search scrollback…"
-            className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/15 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
           />
           <button
             type="button"
@@ -669,11 +719,16 @@ export default function TerminalView({
         </div>
       )}
 
-      <div className="relative min-h-0 flex-1 p-2" style={{ backgroundColor: themePreset.background }}>
+      <div
+        className="relative min-h-0 flex-1 p-2"
+        style={{ backgroundColor: themePreset.background }}
+      >
         <div
           ref={containerRef}
           className="h-full w-full"
-          onContextMenu={(e) => openContextMenu(e, termRef.current?.hasSelection() ?? false)}
+          onContextMenu={(e) =>
+            openContextMenu(e, termRef.current?.hasSelection() ?? false)
+          }
         />
         {terminalContextMenu}
         {(status === "connecting" || status === "reconnecting") && (
@@ -681,11 +736,13 @@ export default function TerminalView({
             className="absolute inset-0 flex flex-col items-center justify-center gap-3"
             style={{ backgroundColor: themePreset.background }}
           >
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-500 border-t-indigo-400" />
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-500 border-t-teal-400" />
             <p className="text-sm" style={{ color: themePreset.foreground }}>
-              {status === "reconnecting" ? "Reconnecting to " : "Connecting to "}
-              <span className="font-medium">{host.label}</span> ({host.hostname}:
-              {host.port})…
+              {status === "reconnecting"
+                ? "Reconnecting to "
+                : "Connecting to "}
+              <span className="font-medium">{host.label}</span> ({host.hostname}
+              :{host.port})…
             </p>
           </div>
         )}

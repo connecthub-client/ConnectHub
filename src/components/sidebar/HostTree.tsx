@@ -106,7 +106,8 @@ export default function HostTree(props: HostTreeProps) {
       host.label.toLowerCase().includes(query) ||
       host.hostname.toLowerCase().includes(query) ||
       host.tags.some((t) => t.label.toLowerCase().includes(query));
-    const tagOk = tagFilter.size === 0 || host.tags.some((t) => tagFilter.has(t.id));
+    const tagOk =
+      tagFilter.size === 0 || host.tags.some((t) => tagFilter.has(t.id));
     return textOk && tagOk;
   }
 
@@ -116,7 +117,8 @@ export default function HostTree(props: HostTreeProps) {
   // filtered out along with it.
   function groupHasMatch(groupId: string): boolean {
     if (!isFiltering) return true;
-    if (hosts.some((h) => h.group_id === groupId && hostMatches(h))) return true;
+    if (hosts.some((h) => h.group_id === groupId && hostMatches(h)))
+      return true;
     return groups.some((g) => g.parent_id === groupId && groupHasMatch(g.id));
   }
 
@@ -127,7 +129,9 @@ export default function HostTree(props: HostTreeProps) {
       <div
         key={host.id}
         className={`group my-0.5 flex items-center justify-between rounded-xl px-2 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800 ${
-          props.selectedHostId === host.id ? "bg-indigo-50 ring-1 ring-inset ring-indigo-100 dark:bg-indigo-950/60 dark:ring-indigo-900" : ""
+          props.selectedHostId === host.id
+            ? "bg-teal-50 ring-1 ring-inset ring-teal-100 dark:bg-teal-950/60 dark:ring-teal-900"
+            : ""
         }`}
         style={{ paddingLeft: `${depth * 16 + 24}px` }}
       >
@@ -163,16 +167,24 @@ export default function HostTree(props: HostTreeProps) {
           )}
           <span
             className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-              openHostIds.has(host.id) ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-700"
+              openHostIds.has(host.id)
+                ? "bg-emerald-500"
+                : "bg-slate-300 dark:bg-slate-700"
             }`}
           />
-          <span className="min-w-0 flex-1 truncate font-medium">{host.label}</span>
-          <span className="max-w-20 truncate text-[11px] text-slate-400">{host.hostname}</span>
+          <span className="min-w-0 flex-1 truncate font-medium">
+            {host.label}
+          </span>
+          <span className="max-w-20 truncate text-[11px] text-slate-400">
+            {host.hostname}
+          </span>
         </button>
         <div className="flex shrink-0 items-center gap-1">
           <button
             type="button"
-            title={host.is_favorite ? "Remove from favorites" : "Add to favorites"}
+            title={
+              host.is_favorite ? "Remove from favorites" : "Add to favorites"
+            }
             onClick={() => toggleHostFavorite(host.id, !host.is_favorite)}
             className={`rounded px-1 text-xs ${
               host.is_favorite
@@ -187,7 +199,7 @@ export default function HostTree(props: HostTreeProps) {
               type="button"
               title="Edit host"
               onClick={() => props.onEditHost(host)}
-              className="rounded-md px-1.5 py-0.5 text-xs text-slate-400 hover:bg-white hover:text-indigo-600 dark:hover:bg-slate-700"
+              className="rounded-md px-1.5 py-0.5 text-xs text-slate-400 hover:bg-white hover:text-teal-600 dark:hover:bg-slate-700"
             >
               Edit
             </button>
@@ -206,7 +218,8 @@ export default function HostTree(props: HostTreeProps) {
   }
 
   function renderLevel(parentId: string | null, depth: number) {
-    const { childGroups: allChildGroups, childHosts: allChildHosts } = getGroupChildren(groups, hosts, parentId);
+    const { childGroups: allChildGroups, childHosts: allChildHosts } =
+      getGroupChildren(groups, hosts, parentId);
     const childGroups = allChildGroups.filter((g) => groupHasMatch(g.id));
     const childHosts = allChildHosts.filter(hostMatches);
 
@@ -233,7 +246,7 @@ export default function HostTree(props: HostTreeProps) {
                   type="button"
                   title="New host in this group"
                   onClick={() => props.onNewHost(group.id)}
-                  className="rounded px-1 text-xs text-slate-500 hover:text-indigo-600"
+                  className="rounded px-1 text-xs text-slate-500 hover:text-teal-600"
                 >
                   +host
                 </button>
@@ -241,7 +254,7 @@ export default function HostTree(props: HostTreeProps) {
                   type="button"
                   title="New subgroup"
                   onClick={() => props.onNewSubgroup(group.id)}
-                  className="rounded px-1 text-xs text-slate-500 hover:text-indigo-600"
+                  className="rounded px-1 text-xs text-slate-500 hover:text-teal-600"
                 >
                   +grp
                 </button>
@@ -249,7 +262,7 @@ export default function HostTree(props: HostTreeProps) {
                   type="button"
                   title="Edit group"
                   onClick={() => props.onEditGroup(group)}
-                  className="rounded px-1 text-xs text-slate-500 hover:text-indigo-600"
+                  className="rounded px-1 text-xs text-slate-500 hover:text-teal-600"
                 >
                   edit
                 </button>
@@ -258,7 +271,12 @@ export default function HostTree(props: HostTreeProps) {
                   title="Delete group"
                   onClick={async () => {
                     setDeleteError(null);
-                    if (await confirm(`Delete group "${group.name}"? Hosts inside become ungrouped.`, { danger: true })) {
+                    if (
+                      await confirm(
+                        `Delete group "${group.name}"? Hosts inside become ungrouped.`,
+                        { danger: true },
+                      )
+                    ) {
                       try {
                         await deleteGroup(group.id);
                       } catch (err) {
@@ -272,7 +290,8 @@ export default function HostTree(props: HostTreeProps) {
                 </button>
               </div>
             </div>
-            {(isFiltering || !collapsed.has(group.id)) && renderLevel(group.id, depth + 1)}
+            {(isFiltering || !collapsed.has(group.id)) &&
+              renderLevel(group.id, depth + 1)}
           </div>
         ))}
 
@@ -281,18 +300,30 @@ export default function HostTree(props: HostTreeProps) {
     );
   }
 
-  function SectionHeader({ id, label, count }: { id: string; label: string; count?: number }) {
+  function SectionHeader({
+    id,
+    label,
+    count,
+  }: {
+    id: string;
+    label: string;
+    count?: number;
+  }) {
     const isCollapsed = collapsed.has(id);
     return (
       <button
         type="button"
         onClick={() => toggle(id)}
-        className="mt-2 flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400"
+        className="mt-2 flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 hover:text-teal-600 dark:hover:text-teal-400"
       >
-        <span className="w-3 text-xs normal-case">{isCollapsed ? "▸" : "▾"}</span>
+        <span className="w-3 text-xs normal-case">
+          {isCollapsed ? "▸" : "▾"}
+        </span>
         <span>{label}</span>
         {count !== undefined && (
-          <span className="ml-auto font-normal normal-case text-slate-400">{count} hosts</span>
+          <span className="ml-auto font-normal normal-case text-slate-400">
+            {count} hosts
+          </span>
         )}
       </button>
     );
@@ -326,7 +357,7 @@ export default function HostTree(props: HostTreeProps) {
         value={search}
         onChange={(e) => setSearch(e.currentTarget.value)}
         placeholder="Search hosts…"
-        className="mx-2 mb-3 w-[calc(100%-1rem)] rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+        className="mx-2 mb-3 w-[calc(100%-1rem)] rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/15 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
       />
       {usedTags.length > 0 && (
         <div className="mx-2 mb-2 flex flex-wrap gap-1">
@@ -337,7 +368,7 @@ export default function HostTree(props: HostTreeProps) {
               onClick={() => toggleTagFilter(tag.id)}
               className={`rounded-full border px-2 py-0.5 text-xs ${
                 tagFilter.has(tag.id)
-                  ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
+                  ? "border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-950 dark:text-teal-300"
                   : "border-slate-300 text-slate-500 hover:border-slate-400 dark:border-slate-700 dark:text-slate-400"
               }`}
             >
@@ -372,7 +403,9 @@ export default function HostTree(props: HostTreeProps) {
       {isFiltering ? (
         noFilterResults ? (
           <p className="px-2 py-4 text-sm text-slate-400">
-            {query ? `No hosts match "${search.trim()}".` : "No hosts match the selected tags."}
+            {query
+              ? `No hosts match "${search.trim()}".`
+              : "No hosts match the selected tags."}
           </p>
         ) : (
           renderLevel(null, 0)
@@ -382,17 +415,23 @@ export default function HostTree(props: HostTreeProps) {
           {favoriteHosts.length > 0 && (
             <div className="mb-1">
               <SectionHeader id="__favorites" label="Favorites" />
-              {!collapsed.has("__favorites") && favoriteHosts.map((h) => renderHostRow(h, 0))}
+              {!collapsed.has("__favorites") &&
+                favoriteHosts.map((h) => renderHostRow(h, 0))}
             </div>
           )}
           {recentHosts.length > 0 && (
             <div className="mb-1">
               <SectionHeader id="__recent" label="Recent" />
-              {!collapsed.has("__recent") && recentHosts.map((h) => renderHostRow(h, 0))}
+              {!collapsed.has("__recent") &&
+                recentHosts.map((h) => renderHostRow(h, 0))}
             </div>
           )}
           <div>
-            <SectionHeader id="__all" label="All Servers" count={hosts.length} />
+            <SectionHeader
+              id="__all"
+              label="All Servers"
+              count={hosts.length}
+            />
             {!collapsed.has("__all") && renderLevel(null, 0)}
           </div>
         </>

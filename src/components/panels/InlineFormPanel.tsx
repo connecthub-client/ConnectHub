@@ -12,12 +12,20 @@ export type InlineFormModalState =
   | { kind: "key" }
   | { kind: "vpn-profile"; profile?: VpnProfile };
 
-const INLINE_FORM_KINDS: ReadonlySet<string> = new Set(["group", "host", "identity", "key", "vpn-profile"]);
+const INLINE_FORM_KINDS: ReadonlySet<string> = new Set([
+  "group",
+  "host",
+  "identity",
+  "key",
+  "vpn-profile",
+]);
 
 // Narrows any modal-like state (AppShell.tsx's ModalState also includes
 // "snippet"/"run-snippet", which stay as actual Modal popups, not this
 // panel) down to the five kinds this component handles.
-export function isInlineFormModal(modal: { kind: string } | null): modal is InlineFormModalState {
+export function isInlineFormModal(
+  modal: { kind: string } | null,
+): modal is InlineFormModalState {
   return modal !== null && INLINE_FORM_KINDS.has(modal.kind);
 }
 
@@ -39,6 +47,7 @@ function titleFor(modal: InlineFormModalState): string {
 interface InlineFormPanelProps {
   modal: InlineFormModalState;
   onDone: () => void;
+  onSaved?: (kind: InlineFormModalState["kind"]) => void;
   onSaveAndConnectHost?: (host: Host) => void;
 }
 
@@ -49,11 +58,23 @@ interface InlineFormPanelProps {
 // rather than needing Modal.tsx's backdrop-scroll trick for a tall form.
 // Snippet/RunSnippet forms are NOT part of this - they stay as actual
 // Modal popups (AppShell.tsx still renders those separately).
-export default function InlineFormPanel({ modal, onDone, onSaveAndConnectHost }: InlineFormPanelProps) {
+export default function InlineFormPanel({
+  modal,
+  onDone,
+  onSaved,
+  onSaveAndConnectHost,
+}: InlineFormPanelProps) {
+  const handleSaved = () => {
+    onSaved?.(modal.kind);
+    onDone();
+  };
+
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4 dark:border-slate-800 dark:bg-slate-950">
-        <h2 className="text-base font-bold tracking-tight text-slate-900 dark:text-slate-50">{titleFor(modal)}</h2>
+      <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-950">
+        <h2 className="text-base font-bold tracking-tight text-slate-900 dark:text-slate-50">
+          {titleFor(modal)}
+        </h2>
         <button
           type="button"
           onClick={onDone}
@@ -64,19 +85,27 @@ export default function InlineFormPanel({ modal, onDone, onSaveAndConnectHost }:
       </div>
       <div className="flex-1 overflow-y-auto bg-slate-50 p-4 dark:bg-slate-950/50">
         {modal.kind === "group" && (
-          <GroupForm group={modal.group} defaultParentId={modal.parentId} onDone={onDone} />
+          <GroupForm
+            group={modal.group}
+            defaultParentId={modal.parentId}
+            onDone={handleSaved}
+          />
         )}
         {modal.kind === "host" && (
           <HostForm
             host={modal.host}
             defaultGroupId={modal.groupId}
-            onDone={onDone}
+            onDone={handleSaved}
             onSaveAndConnect={onSaveAndConnectHost}
           />
         )}
-        {modal.kind === "identity" && <IdentityForm identity={modal.identity} onDone={onDone} />}
-        {modal.kind === "key" && <KeyForm onDone={onDone} />}
-        {modal.kind === "vpn-profile" && <VpnProfileForm profile={modal.profile} onDone={onDone} />}
+        {modal.kind === "identity" && (
+          <IdentityForm identity={modal.identity} onDone={handleSaved} />
+        )}
+        {modal.kind === "key" && <KeyForm onDone={handleSaved} />}
+        {modal.kind === "vpn-profile" && (
+          <VpnProfileForm profile={modal.profile} onDone={handleSaved} />
+        )}
       </div>
     </div>
   );

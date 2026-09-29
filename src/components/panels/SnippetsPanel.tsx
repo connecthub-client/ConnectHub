@@ -9,7 +9,11 @@ interface SnippetsPanelProps {
   onRun: (snippet: Snippet) => void;
 }
 
-export default function SnippetsPanel({ onNew, onEdit, onRun }: SnippetsPanelProps) {
+export default function SnippetsPanel({
+  onNew,
+  onEdit,
+  onRun,
+}: SnippetsPanelProps) {
   const snippets = useSnippetsStore((s) => s.snippets);
   const loadSnippets = useSnippetsStore((s) => s.loadSnippets);
   const deleteSnippet = useSnippetsStore((s) => s.deleteSnippet);
@@ -34,11 +38,18 @@ export default function SnippetsPanel({ onNew, onEdit, onRun }: SnippetsPanelPro
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <div><h2 className="text-lg font-extrabold tracking-tight text-slate-900 dark:text-slate-50">Snippets</h2><p className="mt-0.5 text-xs text-slate-400">Reusable commands for one or many servers</p></div>
+        <div>
+          <h2 className="text-lg font-bold tracking-tight text-slate-900 dark:text-slate-50">
+            Snippets
+          </h2>
+          <p className="mt-0.5 text-xs text-slate-400">
+            Reusable commands for one or many servers
+          </p>
+        </div>
         <button
           type="button"
           onClick={onNew}
-          className="rounded-xl bg-indigo-600 px-3 py-2 text-sm font-bold text-white shadow-sm shadow-indigo-600/20 hover:bg-indigo-700"
+          className="rounded-lg bg-teal-600 px-3 py-2 text-sm font-bold text-white shadow-sm shadow-slate-950/10 hover:bg-teal-700"
         >
           New snippet
         </button>
@@ -51,13 +62,17 @@ export default function SnippetsPanel({ onNew, onEdit, onRun }: SnippetsPanelPro
       )}
 
       {snippets.length === 0 ? (
-        <p className="rounded-2xl border-2 border-dashed border-slate-200 px-4 py-10 text-center text-sm leading-6 text-slate-400 dark:border-slate-800">
-          No snippets yet. Save a command once and run it on one or many hosts later.
+        <p className="rounded-xl border-2 border-dashed border-slate-200 px-4 py-10 text-center text-sm leading-6 text-slate-400 dark:border-slate-800">
+          No snippets yet. Save a command once and run it on one or many hosts
+          later.
         </p>
       ) : (
-        <div className="divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
+        <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
           {snippets.map((snippet) => (
-            <div key={snippet.id} className="flex items-center justify-between gap-3 px-4 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/40">
+            <div
+              key={snippet.id}
+              className="flex items-center justify-between gap-3 px-4 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/40"
+            >
               <div className="min-w-0">
                 <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                   {snippet.label}
@@ -70,14 +85,14 @@ export default function SnippetsPanel({ onNew, onEdit, onRun }: SnippetsPanelPro
                 <button
                   type="button"
                   onClick={() => onRun(snippet)}
-                  className="font-semibold text-indigo-600 hover:text-indigo-700"
+                  className="font-semibold text-teal-600 hover:text-teal-700"
                 >
                   Run
                 </button>
                 <button
                   type="button"
                   onClick={() => onEdit(snippet)}
-                  className="text-slate-500 hover:text-indigo-600"
+                  className="text-slate-500 hover:text-teal-600"
                 >
                   Edit
                 </button>
