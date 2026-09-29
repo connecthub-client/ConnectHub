@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.2.0] — 2026-09-29
+
+### Changed
+
+- The Servers workspace now uses a Harbor-inspired layout with a prominent search and add flow, responsive grouped cards, connection-state indicators, and at-a-glance username, authentication, VPN, and tag details. Connect, Edit, and Delete are directly available on every card while double-click and right-click workflows remain intact.
+- The add/edit server experience is reorganized into clear Server details, Appearance, SSH credentials, VPN, and Notes sections, while preserving saved identities, password and private-key authentication, encrypted-key passphrases, imported keys, tags, groups, VPN profiles, and Save & Connect.
+
+### Fixed
+
+- The server form now overlays the workspace on narrower windows instead of pushing the panel off-screen, and an empty persisted right-panel state no longer obscures the workspace when there is no panel content to show.
+
 ## [2.1.0] — 2026-08-19
 
 ### Added
@@ -144,7 +155,8 @@ Initial public release.
 - VPN helper scripts run under narrowly-scoped polkit rules and force `--script-security 0`, so an uploaded `.ovpn` config can never execute arbitrary code as root.
 - Vault key derivation and the per-installation auto-unlock secret were hardened during development; see [ARCHITECTURE.md](ARCHITECTURE.md#vault--master-password) for the current design and its tradeoffs.
 
-[Unreleased]: https://github.com/connecthub-client/ConnectHub/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/connecthub-client/ConnectHub/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/connecthub-client/ConnectHub/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/connecthub-client/ConnectHub/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/connecthub-client/ConnectHub/compare/v1.3.1...v2.0.0
 [1.3.1]: https://github.com/connecthub-client/ConnectHub/compare/v1.3.0...v1.3.1
