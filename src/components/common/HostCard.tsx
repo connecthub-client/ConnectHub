@@ -37,16 +37,16 @@ export default function HostCard({
   onDelete,
   onContextMenu,
 }: HostCardProps) {
-  const accent = host.color ?? "#6366f1";
+  const accent = host.color ?? "#f97316";
   const initial = host.label.trim().charAt(0).toUpperCase() || "?";
 
   return (
     <article
       onContextMenu={onContextMenu}
-      className={`group flex min-h-36 min-w-0 cursor-default flex-col rounded-xl border bg-white p-2.5 text-left shadow-sm outline-none transition hover:-translate-y-0.5 hover:shadow-md focus-within:ring-2 focus-within:ring-indigo-500 dark:bg-slate-900 ${
+      className={`group flex aspect-[2/1] min-h-24 min-w-0 cursor-default flex-col rounded-xl border bg-white p-2 text-left shadow-sm outline-none transition hover:-translate-y-0.5 hover:shadow-md focus-within:ring-2 focus-within:ring-teal-500 dark:bg-slate-900 ${
         isSelected
-          ? "border-indigo-500 ring-1 ring-indigo-500/20 dark:border-indigo-400"
-          : "border-slate-200 hover:border-indigo-300 dark:border-slate-800 dark:hover:border-indigo-700"
+          ? "border-orange-500 ring-1 ring-orange-500/25 dark:border-orange-400"
+          : "border-slate-200 hover:border-teal-300 dark:border-slate-800 dark:hover:border-teal-700"
       }`}
     >
       <button
@@ -82,7 +82,7 @@ export default function HostCard({
         </div>
       </div>
 
-      <div className="mt-3 flex max-h-11 flex-wrap gap-1 overflow-hidden">
+      <div className="mt-1.5 flex max-h-9 flex-wrap gap-1 overflow-hidden">
         <span className="max-w-full truncate rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-700 dark:bg-indigo-950/70 dark:text-indigo-300">
           {authLabel(identity)}
         </span>
@@ -108,7 +108,7 @@ export default function HostCard({
       </div>
       </button>
 
-      <div className="mt-auto flex gap-1.5 pt-3">
+      <div className="mt-auto flex gap-1.5 pt-1.5">
         <button
           type="button"
           disabled={!host.identity_id}

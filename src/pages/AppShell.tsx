@@ -624,7 +624,7 @@ export default function AppShell() {
   }
 
   return (
-    <div className="relative flex h-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-[#080d1a] dark:text-slate-100">
+    <div className="relative flex h-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <ActivityBar
         activeTab={mainView.type === "manage" ? mainView.tab : null}
         onSelect={(tab) => handleActivitySelect(tab as ManageTab)}
