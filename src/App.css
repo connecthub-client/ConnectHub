@@ -125,6 +125,6 @@ textarea,
    ceiling so cards never become too narrow or excessively numerous on ultrawide screens. */
 .server-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
   gap: 0.625rem;
 }

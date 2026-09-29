@@ -43,7 +43,7 @@ export default function HostCard({
   return (
     <article
       onContextMenu={onContextMenu}
-      className={`group flex aspect-[2/1] min-h-24 min-w-0 cursor-default flex-col rounded-xl border bg-white p-2 text-left shadow-sm outline-none transition hover:-translate-y-0.5 hover:shadow-md focus-within:ring-2 focus-within:ring-teal-500 dark:bg-slate-900 ${
+      className={`group flex aspect-[5/2] min-h-24 min-w-0 cursor-default flex-col rounded-xl border bg-white p-2 text-left shadow-sm outline-none transition hover:-translate-y-0.5 hover:shadow-md focus-within:ring-2 focus-within:ring-teal-500 dark:bg-slate-900 ${
         isSelected
           ? "border-orange-500 ring-1 ring-orange-500/25 dark:border-orange-400"
           : "border-slate-200 hover:border-teal-300 dark:border-slate-800 dark:hover:border-teal-700"
