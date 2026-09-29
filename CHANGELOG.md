@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.2.1] — 2026-09-29
+
+### Added
+
+- ConnectHub now checks for updates shortly after startup and shows an update prompt when a newer release is available. AppImage installations can download, verify, install, and restart from the prompt; package-managed Linux installations are directed to the new installer.
+
+### Changed
+
+- The full application interface now shares a professional responsive design system across navigation, host management, settings, identities, keys, VPN profiles, workspaces, snippets, backup, terminal, SFTP, dialogs, and the AI assistant.
+
+### Fixed
+
+- Release packaging now includes the signed updater artifact and valid `latest.json` metadata required by the in-app updater.
+- Manual update checks now translate malformed release responses and connection failures into actionable messages instead of exposing raw updater errors.
+
 ## [2.2.0] — 2026-09-29
 
 ### Changed

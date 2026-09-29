@@ -27,6 +27,7 @@ import {
 import { inputClass, labelClass, primaryButtonClass, selectClass } from "../forms/formStyles";
 import { useConfirm } from "../common/useConfirm";
 import { PanelScaffold } from "../common/PanelScaffold";
+import { friendlyUpdaterError, RELEASES_URL } from "../../lib/updater";
 
 const THEME_MODES: ThemeMode[] = ["system", "light", "dark"];
 const CURSOR_STYLES: CursorStyle[] = ["block", "bar", "underline"];
@@ -39,8 +40,6 @@ type UpdateState =
   | { phase: "downloading"; update: Update; percent: number | null }
   | { phase: "ready-to-restart" }
   | { phase: "error"; message: string };
-
-const RELEASES_URL = "https://github.com/connecthub-client/ConnectHub/releases/latest";
 
 function AboutSection() {
   const [version, setVersion] = useState<string | null>(null);
@@ -77,7 +76,7 @@ function AboutSection() {
       const update = await check();
       setState(update ? { phase: "found", update } : { phase: "up-to-date" });
     } catch (e) {
-      setState({ phase: "error", message: String(e) });
+      setState({ phase: "error", message: friendlyUpdaterError(e) });
     }
   }
 
@@ -101,15 +100,9 @@ function AboutSection() {
       });
       setState({ phase: "ready-to-restart" });
     } catch (e) {
-      const message = String(e);
-      // Same underlying cause as the installable check above (a .deb/.rpm install fed
-      // an AppImage-format artifact) can still surface here if that check missed an
-      // edge case - translate the raw backend string rather than showing it as-is.
       setState({
         phase: "error",
-        message: message.includes("invalid updater binary format")
-          ? "Automatic install isn't supported for this installation - download the new version from the releases page instead."
-          : message,
+        message: friendlyUpdaterError(e),
       });
     }
   }

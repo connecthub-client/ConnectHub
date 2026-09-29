@@ -4,6 +4,7 @@ interface ModalProps {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  dismissible?: boolean;
 }
 
 const FOCUSABLE_SELECTOR =
@@ -15,9 +16,13 @@ function getFocusableElements(container: HTMLElement): HTMLElement[] {
   );
 }
 
-export default function Modal({ title, onClose, children }: ModalProps) {
+export default function Modal({ title, onClose, children, dismissible = true }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
+  const onCloseRef = useRef(onClose);
+  const dismissibleRef = useRef(dismissible);
+  onCloseRef.current = onClose;
+  dismissibleRef.current = dismissible;
 
   // Escape-to-close, a Tab focus trap so keyboard focus can't leave the
   // dialog while it's open, initial focus moved into the dialog on open,
@@ -32,9 +37,9 @@ export default function Modal({ title, onClose, children }: ModalProps) {
     (initial ?? dialog)?.focus();
 
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
+      if (e.key === "Escape" && dismissibleRef.current) {
         e.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key === "Tab" && dialog) {
@@ -65,7 +70,7 @@ export default function Modal({ title, onClose, children }: ModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/60 p-4 backdrop-blur-md">
-      <div className="fixed inset-0" onClick={onClose} aria-hidden="true" />
+      <div className="fixed inset-0" onClick={dismissible ? onClose : undefined} aria-hidden="true" />
       <div
         ref={dialogRef}
         role="dialog"
@@ -78,14 +83,16 @@ export default function Modal({ title, onClose, children }: ModalProps) {
           <h2 id={titleId} className="text-xl font-extrabold tracking-tight text-slate-950 dark:text-white">
             {title}
           </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close dialog"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-sm text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-white"
-          >
-            ✕
-          </button>
+          {dismissible && (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close dialog"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-sm text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-white"
+            >
+              ✕
+            </button>
+          )}
         </div>
         {children}
       </div>
