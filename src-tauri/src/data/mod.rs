@@ -194,7 +194,10 @@ fn add_column_if_missing(
     drop(stmt);
 
     if !exists {
-        conn.execute(&format!("ALTER TABLE {table} ADD COLUMN {column} {decl}"), ())?;
+        conn.execute(
+            &format!("ALTER TABLE {table} ADD COLUMN {column} {decl}"),
+            (),
+        )?;
     }
     Ok(())
 }

@@ -91,8 +91,16 @@ pub async fn send(api_key: &str, model: &str, messages: &[MessageInput]) -> AppR
 
     for block in blocks {
         if block.get("type").and_then(|v| v.as_str()) == Some("tool_use") {
-            let command = block.pointer("/input/command").and_then(|v| v.as_str()).unwrap_or_default().to_string();
-            let purpose = block.pointer("/input/purpose").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+            let command = block
+                .pointer("/input/command")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string();
+            let purpose = block
+                .pointer("/input/purpose")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string();
             return Ok(TurnResult::ToolCall { command, purpose });
         }
     }

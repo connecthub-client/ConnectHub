@@ -11,6 +11,8 @@ use crate::models::ssh_key::{GenerateKeyInput, ImportKeyInput, SshKey};
 use crate::vault::crypto;
 use crate::vault::kdf::VaultKey;
 
+type EncryptedPrivateKeyRow = (Vec<u8>, Vec<u8>, Option<Vec<u8>>, Option<Vec<u8>>);
+
 fn row_to_key(row: &rusqlite::Row) -> rusqlite::Result<SshKey> {
     Ok(SshKey {
         id: row.get(0)?,
@@ -39,12 +41,7 @@ pub fn get_decrypted_private_key(
     key: &VaultKey,
     id: Uuid,
 ) -> AppResult<(String, Option<String>)> {
-    let (pk_nonce, pk_ciphertext, pass_nonce, pass_ciphertext): (
-        Vec<u8>,
-        Vec<u8>,
-        Option<Vec<u8>>,
-        Option<Vec<u8>>,
-    ) = conn
+    let (pk_nonce, pk_ciphertext, pass_nonce, pass_ciphertext): EncryptedPrivateKeyRow = conn
         .query_row(
             "SELECT private_key_nonce, private_key_ciphertext, passphrase_nonce, passphrase_ciphertext
              FROM ssh_keys WHERE id = ?1",
@@ -82,7 +79,10 @@ pub fn generate(conn: &Connection, key: &VaultKey, input: GenerateKeyInput) -> A
         .public_key()
         .to_openssh()
         .map_err(|e| AppError::InvalidKey(e.to_string()))?;
-    let fingerprint = private_key.public_key().fingerprint(HashAlg::Sha256).to_string();
+    let fingerprint = private_key
+        .public_key()
+        .fingerprint(HashAlg::Sha256)
+        .to_string();
     let pem = private_key
         .to_openssh(LineEnding::LF)
         .map_err(|e| AppError::InvalidKey(e.to_string()))?
@@ -165,7 +165,10 @@ pub fn import(conn: &Connection, key: &VaultKey, input: ImportKeyInput) -> AppRe
         .public_key()
         .to_openssh()
         .map_err(|e| AppError::InvalidKey(e.to_string()))?;
-    let fingerprint = decrypted.public_key().fingerprint(HashAlg::Sha256).to_string();
+    let fingerprint = decrypted
+        .public_key()
+        .fingerprint(HashAlg::Sha256)
+        .to_string();
     let key_type = decrypted.algorithm().to_string();
 
     store_key(
@@ -316,7 +319,10 @@ mod tests {
         // instead of hardcoding a PEM that could drift from the crate's format.
         let fixture = PrivateKey::random(&mut OsRng, Algorithm::Ed25519).unwrap();
         let pem = fixture.to_openssh(LineEnding::LF).unwrap().to_string();
-        let expected_fingerprint = fixture.public_key().fingerprint(HashAlg::Sha256).to_string();
+        let expected_fingerprint = fixture
+            .public_key()
+            .fingerprint(HashAlg::Sha256)
+            .to_string();
 
         let imported = import(
             &conn,

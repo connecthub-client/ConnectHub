@@ -13,7 +13,10 @@ pub fn workspace_list(state: State<AppState>) -> AppResult<Vec<Workspace>> {
 }
 
 #[tauri::command]
-pub fn workspace_list_tabs(state: State<AppState>, workspace_id: Uuid) -> AppResult<Vec<WorkspaceTab>> {
+pub fn workspace_list_tabs(
+    state: State<AppState>,
+    workspace_id: Uuid,
+) -> AppResult<Vec<WorkspaceTab>> {
     let conn = state.db.lock().unwrap();
     workspaces::list_tabs(&conn, workspace_id)
 }

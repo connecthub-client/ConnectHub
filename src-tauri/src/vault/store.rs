@@ -10,10 +10,12 @@ use crate::error::{AppError, AppResult};
 
 const VERIFIER_PLAINTEXT: &[u8] = b"sshtool-vault-v1";
 
+type EncryptedSshKeyRow = (Uuid, Vec<u8>, Vec<u8>, Option<Vec<u8>>, Option<Vec<u8>>);
+type VaultMetaRow = (Vec<u8>, u32, u32, u32, Vec<u8>, Vec<u8>);
+
 pub fn db_path() -> AppResult<PathBuf> {
-    let mut dir = dirs::data_dir().ok_or_else(|| {
-        AppError::Crypto("could not determine platform data directory".into())
-    })?;
+    let mut dir = dirs::data_dir()
+        .ok_or_else(|| AppError::Crypto("could not determine platform data directory".into()))?;
     dir.push("sshtool");
     std::fs::create_dir_all(&dir)?;
     dir.push("vault.db");
@@ -70,9 +72,8 @@ fn open_at(path: &std::path::Path) -> AppResult<Connection> {
 }
 
 pub fn local_secret_path() -> AppResult<PathBuf> {
-    let mut dir = dirs::data_dir().ok_or_else(|| {
-        AppError::Crypto("could not determine platform data directory".into())
-    })?;
+    let mut dir = dirs::data_dir()
+        .ok_or_else(|| AppError::Crypto("could not determine platform data directory".into()))?;
     dir.push("sshtool");
     std::fs::create_dir_all(&dir)?;
     dir.push(".local_secret");
@@ -173,7 +174,7 @@ fn migrate_to_new_secret(
         "SELECT id, private_key_nonce, private_key_ciphertext, passphrase_nonce, passphrase_ciphertext
          FROM ssh_keys",
     )?;
-    let key_rows: Vec<(Uuid, Vec<u8>, Vec<u8>, Option<Vec<u8>>, Option<Vec<u8>>)> = stmt
+    let key_rows: Vec<EncryptedSshKeyRow> = stmt
         .query_map((), |row| {
             Ok((
                 row.get(0)?,
@@ -264,7 +265,7 @@ pub fn create(conn: &Connection, password: &str) -> AppResult<VaultKey> {
 }
 
 pub fn unlock(conn: &Connection, password: &str) -> AppResult<VaultKey> {
-    let row: Option<(Vec<u8>, u32, u32, u32, Vec<u8>, Vec<u8>)> = conn
+    let row: Option<VaultMetaRow> = conn
         .query_row(
             "SELECT salt, kdf_m_cost, kdf_t_cost, kdf_p_cost, verifier_nonce, verifier_ciphertext
              FROM vault_meta WHERE id = 0",
@@ -360,7 +361,10 @@ mod tests {
         assert!(!first.is_empty());
 
         let second = get_or_create_local_secret_at(&path).unwrap();
-        assert_eq!(first, second, "the same file must yield the same secret every time");
+        assert_eq!(
+            first, second,
+            "the same file must yield the same secret every time"
+        );
 
         std::fs::remove_file(&path).ok();
     }
@@ -377,7 +381,8 @@ mod tests {
     fn open_hardens_vault_db_to_0600_even_if_it_already_existed_with_looser_permissions() {
         use std::os::unix::fs::PermissionsExt;
 
-        let path = std::env::temp_dir().join(format!("sshtool-test-vault-{}.db", uuid::Uuid::new_v4()));
+        let path =
+            std::env::temp_dir().join(format!("sshtool-test-vault-{}.db", uuid::Uuid::new_v4()));
         // Simulate a vault.db that predates this permission check, created
         // under a permissive umask.
         std::fs::write(&path, b"").unwrap();
@@ -386,7 +391,10 @@ mod tests {
         let _conn = open_at(&path).unwrap();
 
         let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
-        assert_eq!(mode, 0o600, "vault.db must be hardened to 0600 on open, retroactively too");
+        assert_eq!(
+            mode, 0o600,
+            "vault.db must be hardened to 0600 on open, retroactively too"
+        );
 
         std::fs::remove_file(&path).ok();
     }
@@ -435,7 +443,9 @@ mod tests {
         let key = crate::data::ssh_keys::generate(
             &conn,
             &old_key,
-            GenerateKeyInput { label: "test-key".into() },
+            GenerateKeyInput {
+                label: "test-key".into(),
+            },
         )
         .unwrap();
 
@@ -460,8 +470,6 @@ mod tests {
 
         // And decrypting with the retired key must now fail (proves the
         // ciphertext was actually re-encrypted, not just re-labeled).
-        assert!(
-            crate::data::ssh_keys::get_decrypted_private_key(&conn, &old_key, key.id).is_err()
-        );
+        assert!(crate::data::ssh_keys::get_decrypted_private_key(&conn, &old_key, key.id).is_err());
     }
 }

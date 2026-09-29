@@ -87,15 +87,31 @@ pub async fn send(api_key: &str, model: &str, messages: &[MessageInput]) -> AppR
 
     if let Some(tool_calls) = message.get("tool_calls").and_then(|v| v.as_array()) {
         if let Some(first) = tool_calls.first() {
-            let args_str = first.pointer("/function/arguments").and_then(|v| v.as_str()).unwrap_or("{}");
-            let args: Value = serde_json::from_str(args_str)
-                .map_err(|e| AppError::Ai(format!("OpenAI returned malformed tool arguments: {e}")))?;
-            let command = args.get("command").and_then(|v| v.as_str()).unwrap_or_default().to_string();
-            let purpose = args.get("purpose").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+            let args_str = first
+                .pointer("/function/arguments")
+                .and_then(|v| v.as_str())
+                .unwrap_or("{}");
+            let args: Value = serde_json::from_str(args_str).map_err(|e| {
+                AppError::Ai(format!("OpenAI returned malformed tool arguments: {e}"))
+            })?;
+            let command = args
+                .get("command")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string();
+            let purpose = args
+                .get("purpose")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string();
             return Ok(TurnResult::ToolCall { command, purpose });
         }
     }
 
-    let text = message.get("content").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+    let text = message
+        .get("content")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
     Ok(TurnResult::Text { text })
 }

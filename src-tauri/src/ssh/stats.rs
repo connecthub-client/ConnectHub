@@ -71,7 +71,9 @@ pub struct HostStats {
 // callers can degrade to "stats unavailable" instead of a hard error - this
 // panel is a nice-to-have, not a connection-blocking feature.
 pub fn parse_stats_output(stdout: &str) -> Option<HostStats> {
-    let line = stdout.lines().find(|l| l.starts_with("CONNECTHUB_STATS "))?;
+    let line = stdout
+        .lines()
+        .find(|l| l.starts_with("CONNECTHUB_STATS "))?;
     let mut fields = line.split_whitespace().skip(1);
     let cpu_percent: f64 = fields.next()?.parse().ok()?;
     let mem_used_kb: u64 = fields.next()?.parse().ok()?;
@@ -111,9 +113,10 @@ mod tests {
 
     #[test]
     fn parses_a_well_formed_stats_line() {
-        let stats =
-            parse_stats_output("CONNECTHUB_STATS 12 2048000 8192000 500 1000 512000 2048000 10240000 51200000")
-                .unwrap();
+        let stats = parse_stats_output(
+            "CONNECTHUB_STATS 12 2048000 8192000 500 1000 512000 2048000 10240000 51200000",
+        )
+        .unwrap();
         assert_eq!(stats.cpu_percent, 12.0);
         assert_eq!(stats.mem_used_mb, 2000);
         assert_eq!(stats.mem_total_mb, 8000);
@@ -155,8 +158,7 @@ mod tests {
 
     #[test]
     fn handles_a_host_with_no_swap_configured() {
-        let stats =
-            parse_stats_output("CONNECTHUB_STATS 3 100 200 10 20 0 0 10000 20000").unwrap();
+        let stats = parse_stats_output("CONNECTHUB_STATS 3 100 200 10 20 0 0 10000 20000").unwrap();
         assert_eq!(stats.swap_used_mb, 0);
         assert_eq!(stats.swap_total_mb, 0);
     }

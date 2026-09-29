@@ -13,8 +13,7 @@ fn row_to_snippet(row: &rusqlite::Row) -> rusqlite::Result<Snippet> {
 }
 
 pub fn list(conn: &Connection) -> AppResult<Vec<Snippet>> {
-    let mut stmt =
-        conn.prepare("SELECT id, label, body FROM snippets ORDER BY label")?;
+    let mut stmt = conn.prepare("SELECT id, label, body FROM snippets ORDER BY label")?;
     let rows = stmt.query_map((), row_to_snippet)?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }

@@ -164,8 +164,12 @@ mod tests {
 
         let listed = list(&conn).unwrap();
         assert_eq!(listed.len(), 2);
-        assert!(listed.iter().any(|h| h.hostname == "a.example.com" && h.port == 22));
-        assert!(listed.iter().any(|h| h.hostname == "b.example.com" && h.port == 2222));
+        assert!(listed
+            .iter()
+            .any(|h| h.hostname == "a.example.com" && h.port == 22));
+        assert!(listed
+            .iter()
+            .any(|h| h.hostname == "b.example.com" && h.port == 2222));
     }
 
     #[test]
@@ -211,7 +215,8 @@ mod tests {
     // genuine.
     #[test]
     fn concurrent_first_connections_to_the_same_host_never_both_succeed_with_different_keys() {
-        let dir = std::env::temp_dir().join(format!("connecthub-known-hosts-race-{}", Uuid::new_v4()));
+        let dir =
+            std::env::temp_dir().join(format!("connecthub-known-hosts-race-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         let db_path = dir.join("known_hosts.db");
         {
@@ -227,7 +232,8 @@ mod tests {
                 let barrier = barrier.clone();
                 std::thread::spawn(move || {
                     let mut conn = Connection::open(&db_path).unwrap();
-                    conn.busy_timeout(std::time::Duration::from_secs(5)).unwrap();
+                    conn.busy_timeout(std::time::Duration::from_secs(5))
+                        .unwrap();
                     barrier.wait();
                     verify_or_trust(&mut conn, "race.example.com", 22, fingerprint)
                 })
@@ -235,9 +241,14 @@ mod tests {
             .collect();
         let results: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
 
-        let trusted_new = results.iter().filter(|r| matches!(r, Ok(HostKeyCheck::TrustedNew))).count();
-        let mismatches =
-            results.iter().filter(|r| matches!(r, Err(AppError::HostKeyMismatch { .. }))).count();
+        let trusted_new = results
+            .iter()
+            .filter(|r| matches!(r, Ok(HostKeyCheck::TrustedNew)))
+            .count();
+        let mismatches = results
+            .iter()
+            .filter(|r| matches!(r, Err(AppError::HostKeyMismatch { .. })))
+            .count();
         assert_eq!(
             trusted_new, 1,
             "exactly one of two concurrent first-time connections to the same host must win \

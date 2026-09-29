@@ -28,7 +28,8 @@ use crate::error::{AppError, AppResult};
 // https://console.cloud.google.com -> APIs & Services -> Credentials ->
 // Create Credentials -> OAuth client ID -> Desktop app, and swap these two
 // values for yours.
-pub const CLIENT_ID: &str = "949498803538-qhkcshubqo35o7sgvdbkjobfunuf0k15.apps.googleusercontent.com";
+pub const CLIENT_ID: &str =
+    "949498803538-qhkcshubqo35o7sgvdbkjobfunuf0k15.apps.googleusercontent.com";
 pub const CLIENT_SECRET: &str = "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";
 
 const AUTH_ENDPOINT: &str = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -83,7 +84,9 @@ pub async fn login(cancel_rx: oneshot::Receiver<()>) -> AppResult<TokenResponse>
     let challenge = pkce_challenge(&verifier);
     let expected_state = generate_url_safe_token(16);
 
-    let listener = TcpListener::bind("127.0.0.1:0").await.map_err(AppError::Io)?;
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .map_err(AppError::Io)?;
     let port = listener.local_addr().map_err(AppError::Io)?.port();
     let redirect_uri = format!("http://127.0.0.1:{port}");
 
@@ -173,7 +176,9 @@ fn parse_query(query: &str) -> std::collections::HashMap<String, String> {
         .map(|(k, v)| {
             (
                 k.to_string(),
-                urlencoding::decode(v).map(|s| s.into_owned()).unwrap_or_else(|_| v.to_string()),
+                urlencoding::decode(v)
+                    .map(|s| s.into_owned())
+                    .unwrap_or_else(|_| v.to_string()),
             )
         })
         .collect()
@@ -222,10 +227,14 @@ async fn parse_token_response(resp: reqwest::Response) -> AppResult<TokenRespons
 
     if let Some(err) = raw.error {
         let desc = raw.error_description.unwrap_or_default();
-        return Err(AppError::Google(format!("Google rejected the request: {err} {desc}")));
+        return Err(AppError::Google(format!(
+            "Google rejected the request: {err} {desc}"
+        )));
     }
     if !status.is_success() {
-        return Err(AppError::Google(format!("Google token endpoint returned {status}")));
+        return Err(AppError::Google(format!(
+            "Google token endpoint returned {status}"
+        )));
     }
 
     Ok(TokenResponse {

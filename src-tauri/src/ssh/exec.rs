@@ -73,7 +73,12 @@ pub async fn run(app: &AppState, host_id: Uuid, command: String) -> AppResult<Ex
 // feature is the only caller today - a command an LLM chose to run, or
 // asked to run at another LLM's suggestion, has no size guarantee at all
 // otherwise.
-pub async fn run_capped(app: &AppState, host_id: Uuid, command: String, max_bytes: usize) -> AppResult<ExecOutput> {
+pub async fn run_capped(
+    app: &AppState,
+    host_id: Uuid,
+    command: String,
+    max_bytes: usize,
+) -> AppResult<ExecOutput> {
     let handle = connect_and_authenticate(app, host_id, None).await?;
     let mut channel = handle
         .channel_open_session()
@@ -127,7 +132,11 @@ pub async fn run_capped(app: &AppState, host_id: Uuid, command: String, max_byte
 // Runs `command` on every host concurrently, each over its own connection.
 // Per-host failures (auth, connect, etc.) are captured individually rather
 // than aborting the whole batch.
-pub async fn run_on_hosts(app: &AppState, host_ids: Vec<Uuid>, command: String) -> Vec<HostExecResult> {
+pub async fn run_on_hosts(
+    app: &AppState,
+    host_ids: Vec<Uuid>,
+    command: String,
+) -> Vec<HostExecResult> {
     let tasks = host_ids.into_iter().map(|host_id| {
         let command = command.clone();
         async move {
@@ -169,7 +178,8 @@ mod tests {
     use std::sync::Arc;
 
     async fn build_app_state(test_server: &TestServer) -> AppState {
-        let db_path = std::env::temp_dir().join(format!("connecthub-test-exec-{}.db", Uuid::new_v4()));
+        let db_path =
+            std::env::temp_dir().join(format!("connecthub-test-exec-{}.db", Uuid::new_v4()));
         let conn = rusqlite::Connection::open(&db_path).unwrap();
         crate::data::init_schema(&conn).unwrap();
         crate::ssh::known_hosts::init_schema(&conn).unwrap();
@@ -240,7 +250,9 @@ mod tests {
         let app = build_app_state(&test_server).await;
         let host_id = host_id_of(&app);
 
-        let output = run(&app, host_id, "hello_from_exec".into()).await.expect("exec failed");
+        let output = run(&app, host_id, "hello_from_exec".into())
+            .await
+            .expect("exec failed");
 
         assert_eq!(output.stdout.trim(), "hello_from_exec");
         assert_eq!(output.exit_status, Some(0));
@@ -252,7 +264,9 @@ mod tests {
         let app = build_app_state(&test_server).await;
         let host_id = host_id_of(&app);
 
-        let output = run(&app, host_id, "exit 7".into()).await.expect("exec failed");
+        let output = run(&app, host_id, "exit 7".into())
+            .await
+            .expect("exec failed");
 
         assert!(output.stderr.contains("simulated failure"));
         assert_eq!(output.exit_status, Some(7));
@@ -268,7 +282,9 @@ mod tests {
         // is the simplest way to produce output bigger than a small cap.
         let long_command = "x".repeat(1000);
 
-        let output = run_capped(&app, host_id, long_command, 100).await.expect("exec failed");
+        let output = run_capped(&app, host_id, long_command, 100)
+            .await
+            .expect("exec failed");
 
         assert!(output.truncated);
         assert!(output.stdout.len() <= 100);
@@ -280,7 +296,9 @@ mod tests {
         let app = build_app_state(&test_server).await;
         let host_id = host_id_of(&app);
 
-        let output = run_capped(&app, host_id, "short_output".into(), 1024).await.expect("exec failed");
+        let output = run_capped(&app, host_id, "short_output".into(), 1024)
+            .await
+            .expect("exec failed");
 
         assert!(!output.truncated);
         assert_eq!(output.stdout.trim(), "short_output");
@@ -293,12 +311,16 @@ mod tests {
         let host_id = host_id_of(&app);
         let bogus_host_id = Uuid::new_v4(); // not in the db at all
 
-        let results = run_on_hosts(&app, vec![host_id, bogus_host_id], "batch_test_ok".into()).await;
+        let results =
+            run_on_hosts(&app, vec![host_id, bogus_host_id], "batch_test_ok".into()).await;
 
         assert_eq!(results.len(), 2);
         let ok_result = results.iter().find(|r| r.host_id == host_id).unwrap();
         assert!(ok_result.error.is_none());
-        assert_eq!(ok_result.output.as_ref().unwrap().stdout.trim(), "batch_test_ok");
+        assert_eq!(
+            ok_result.output.as_ref().unwrap().stdout.trim(),
+            "batch_test_ok"
+        );
 
         let bad_result = results.iter().find(|r| r.host_id == bogus_host_id).unwrap();
         assert!(bad_result.output.is_none());
@@ -441,7 +463,10 @@ mod live_sshd_tests {
         assert_eq!(results.len(), 2);
         let ok_result = results.iter().find(|r| r.host_id == host_id).unwrap();
         assert!(ok_result.error.is_none());
-        assert_eq!(ok_result.output.as_ref().unwrap().stdout.trim(), "batch_test_ok");
+        assert_eq!(
+            ok_result.output.as_ref().unwrap().stdout.trim(),
+            "batch_test_ok"
+        );
 
         let bad_result = results.iter().find(|r| r.host_id == bogus_host_id).unwrap();
         assert!(bad_result.output.is_none());

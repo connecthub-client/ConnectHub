@@ -47,7 +47,9 @@ pub fn list(conn: &Connection) -> AppResult<Vec<Host>> {
     let mut stmt = conn.prepare(&format!(
         "SELECT {SELECT_COLUMNS} FROM hosts ORDER BY sort_order"
     ))?;
-    let mut hosts: Vec<Host> = stmt.query_map((), row_to_host)?.collect::<Result<Vec<_>, _>>()?;
+    let mut hosts: Vec<Host> = stmt
+        .query_map((), row_to_host)?
+        .collect::<Result<Vec<_>, _>>()?;
 
     let mut tags_by_host = tags::list_by_host_bulk(conn)?;
     for host in &mut hosts {
@@ -183,14 +185,36 @@ mod tests {
     #[test]
     fn create_and_update_roundtrip_the_icon_field() {
         let conn = test_conn();
-        let created = create(&conn, HostInput { icon: Some("server".into()), ..input() }).unwrap();
+        let created = create(
+            &conn,
+            HostInput {
+                icon: Some("server".into()),
+                ..input()
+            },
+        )
+        .unwrap();
         assert_eq!(created.icon, Some("server".into()));
 
-        let updated =
-            update(&conn, created.id, HostInput { icon: Some("database".into()), ..input() }).unwrap();
+        let updated = update(
+            &conn,
+            created.id,
+            HostInput {
+                icon: Some("database".into()),
+                ..input()
+            },
+        )
+        .unwrap();
         assert_eq!(updated.icon, Some("database".into()));
 
-        let cleared = update(&conn, created.id, HostInput { icon: None, ..input() }).unwrap();
+        let cleared = update(
+            &conn,
+            created.id,
+            HostInput {
+                icon: None,
+                ..input()
+            },
+        )
+        .unwrap();
         assert_eq!(cleared.icon, None);
     }
 
@@ -200,17 +224,39 @@ mod tests {
         let prod = crate::data::tags::get_or_create(&conn, "prod").unwrap();
         let db = crate::data::tags::get_or_create(&conn, "db").unwrap();
 
-        let created = create(&conn, HostInput { tag_ids: vec![prod.id], ..input() }).unwrap();
+        let created = create(
+            &conn,
+            HostInput {
+                tag_ids: vec![prod.id],
+                ..input()
+            },
+        )
+        .unwrap();
         assert_eq!(created.tags.len(), 1);
         assert_eq!(created.tags[0].label, "prod");
 
-        let updated =
-            update(&conn, created.id, HostInput { tag_ids: vec![prod.id, db.id], ..input() }).unwrap();
+        let updated = update(
+            &conn,
+            created.id,
+            HostInput {
+                tag_ids: vec![prod.id, db.id],
+                ..input()
+            },
+        )
+        .unwrap();
         let mut labels: Vec<&str> = updated.tags.iter().map(|t| t.label.as_str()).collect();
         labels.sort();
         assert_eq!(labels, vec!["db", "prod"]);
 
-        let cleared = update(&conn, created.id, HostInput { tag_ids: vec![], ..input() }).unwrap();
+        let cleared = update(
+            &conn,
+            created.id,
+            HostInput {
+                tag_ids: vec![],
+                ..input()
+            },
+        )
+        .unwrap();
         assert!(cleared.tags.is_empty());
     }
 
@@ -218,8 +264,23 @@ mod tests {
     fn list_includes_each_host_own_tags() {
         let conn = test_conn();
         let prod = crate::data::tags::get_or_create(&conn, "prod").unwrap();
-        let a = create(&conn, HostInput { label: "a".into(), tag_ids: vec![prod.id], ..input() }).unwrap();
-        let b = create(&conn, HostInput { label: "b".into(), ..input() }).unwrap();
+        let a = create(
+            &conn,
+            HostInput {
+                label: "a".into(),
+                tag_ids: vec![prod.id],
+                ..input()
+            },
+        )
+        .unwrap();
+        let b = create(
+            &conn,
+            HostInput {
+                label: "b".into(),
+                ..input()
+            },
+        )
+        .unwrap();
 
         let listed = list(&conn).unwrap();
         let listed_a = listed.iter().find(|h| h.id == a.id).unwrap();
@@ -302,7 +363,15 @@ mod tests {
         let created = create(&conn, input()).unwrap();
         set_favorite(&conn, created.id, true).unwrap();
 
-        let updated = update(&conn, created.id, HostInput { label: "renamed".into(), ..input() }).unwrap();
+        let updated = update(
+            &conn,
+            created.id,
+            HostInput {
+                label: "renamed".into(),
+                ..input()
+            },
+        )
+        .unwrap();
         assert!(updated.is_favorite);
     }
 
@@ -328,8 +397,12 @@ mod tests {
             auth_password: None,
             avoid_default_route: true,
         };
-        let profile_id = vpn_profiles::create(&conn, &key, vpn_input("profile-a")).unwrap().id;
-        let other_profile_id = vpn_profiles::create(&conn, &key, vpn_input("profile-b")).unwrap().id;
+        let profile_id = vpn_profiles::create(&conn, &key, vpn_input("profile-a"))
+            .unwrap()
+            .id;
+        let other_profile_id = vpn_profiles::create(&conn, &key, vpn_input("profile-b"))
+            .unwrap()
+            .id;
 
         // Three hosts on the same profile - not just two - since a query
         // that happens to work for exactly 2 (e.g. an accidental LIMIT, or
@@ -340,25 +413,48 @@ mod tests {
         // handle for any number of hosts, not just a pair.
         let matching_a = create(
             &conn,
-            HostInput { label: "a".into(), vpn_profile_id: Some(profile_id), ..input() },
+            HostInput {
+                label: "a".into(),
+                vpn_profile_id: Some(profile_id),
+                ..input()
+            },
         )
         .unwrap();
         let matching_b = create(
             &conn,
-            HostInput { label: "b".into(), vpn_profile_id: Some(profile_id), ..input() },
+            HostInput {
+                label: "b".into(),
+                vpn_profile_id: Some(profile_id),
+                ..input()
+            },
         )
         .unwrap();
         let matching_c = create(
             &conn,
-            HostInput { label: "c".into(), vpn_profile_id: Some(profile_id), ..input() },
+            HostInput {
+                label: "c".into(),
+                vpn_profile_id: Some(profile_id),
+                ..input()
+            },
         )
         .unwrap();
         create(
             &conn,
-            HostInput { label: "other-profile".into(), vpn_profile_id: Some(other_profile_id), ..input() },
+            HostInput {
+                label: "other-profile".into(),
+                vpn_profile_id: Some(other_profile_id),
+                ..input()
+            },
         )
         .unwrap();
-        create(&conn, HostInput { label: "no-profile".into(), ..input() }).unwrap();
+        create(
+            &conn,
+            HostInput {
+                label: "no-profile".into(),
+                ..input()
+            },
+        )
+        .unwrap();
 
         let matched = list_by_vpn_profile(&conn, profile_id).unwrap();
         let matched_ids: Vec<Uuid> = matched.iter().map(|h| h.id).collect();

@@ -19,10 +19,13 @@ fn row_to_profile(row: &rusqlite::Row) -> rusqlite::Result<VpnProfile> {
     })
 }
 
-const SELECT_COLUMNS: &str = "id, label, config, auth_username, auth_password_ciphertext, avoid_default_route, created_at";
+const SELECT_COLUMNS: &str =
+    "id, label, config, auth_username, auth_password_ciphertext, avoid_default_route, created_at";
 
 pub fn list(conn: &Connection) -> AppResult<Vec<VpnProfile>> {
-    let mut stmt = conn.prepare(&format!("SELECT {SELECT_COLUMNS} FROM vpn_profiles ORDER BY label"))?;
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {SELECT_COLUMNS} FROM vpn_profiles ORDER BY label"
+    ))?;
     let rows = stmt.query_map((), row_to_profile)?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }
@@ -258,7 +261,10 @@ mod tests {
             &conn,
             &key,
             created.id,
-            VpnProfileInput { avoid_default_route: false, ..input(None) },
+            VpnProfileInput {
+                avoid_default_route: false,
+                ..input(None)
+            },
         )
         .unwrap();
         assert!(!updated.avoid_default_route);
@@ -312,7 +318,10 @@ mod tests {
         .unwrap();
 
         assert_eq!(updated.label, "renamed");
-        assert!(updated.has_auth_password, "password should survive an update that doesn't mention it");
+        assert!(
+            updated.has_auth_password,
+            "password should survive an update that doesn't mention it"
+        );
     }
 
     #[test]
@@ -399,7 +408,8 @@ mod tests {
         let conn = test_conn();
         let key = test_key();
         let mut bad = input(None);
-        bad.config = "client\nplugin /usr/lib/openvpn/evil.so\nremote vpn.example.com 1194\n".into();
+        bad.config =
+            "client\nplugin /usr/lib/openvpn/evil.so\nremote vpn.example.com 1194\n".into();
         let result = create(&conn, &key, bad);
         assert!(matches!(result, Err(AppError::Vpn(_))));
     }
@@ -419,7 +429,8 @@ mod tests {
         let conn = test_conn();
         let key = test_key();
         let mut ok = input(None);
-        ok.config = "client\n# plugin /usr/lib/openvpn/evil.so\nremote vpn.example.com 1194\n".into();
+        ok.config =
+            "client\n# plugin /usr/lib/openvpn/evil.so\nremote vpn.example.com 1194\n".into();
         assert!(create(&conn, &key, ok).is_ok());
     }
 

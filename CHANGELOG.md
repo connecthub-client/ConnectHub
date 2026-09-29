@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.2.4] — 2026-09-29
+
+### Added
+
+- Main-branch pushes now run a complete CI and signed-release pipeline covering frontend formatting, linting, type checks, dependency auditing, production builds, Rust formatting, compilation, tests, warning-as-error Clippy, package validation, checksums, updater metadata, GitHub Release publication, and post-publish verification.
+
 ## [2.2.3] — 2026-09-29
 
 ### Added

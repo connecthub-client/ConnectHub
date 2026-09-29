@@ -10,7 +10,11 @@ pub struct AiProviderSecret {
     pub api_key: String,
 }
 
-pub fn get(conn: &Connection, key: &VaultKey, provider: &str) -> AppResult<Option<AiProviderSecret>> {
+pub fn get(
+    conn: &Connection,
+    key: &VaultKey,
+    provider: &str,
+) -> AppResult<Option<AiProviderSecret>> {
     let row: Option<(Option<String>, Vec<u8>, Vec<u8>)> = conn
         .query_row(
             "SELECT model, api_key_nonce, api_key_ciphertext FROM ai_provider_settings WHERE provider = ?1",
@@ -54,7 +58,10 @@ pub fn set(
 }
 
 pub fn clear(conn: &Connection, provider: &str) -> AppResult<()> {
-    conn.execute("DELETE FROM ai_provider_settings WHERE provider = ?1", (provider,))?;
+    conn.execute(
+        "DELETE FROM ai_provider_settings WHERE provider = ?1",
+        (provider,),
+    )?;
     Ok(())
 }
 
@@ -99,8 +106,14 @@ mod tests {
         set(&conn, &key, "openai", "sk-openai", None).unwrap();
         set(&conn, &key, "anthropic", "sk-anthropic", None).unwrap();
 
-        assert_eq!(get(&conn, &key, "openai").unwrap().unwrap().api_key, "sk-openai");
-        assert_eq!(get(&conn, &key, "anthropic").unwrap().unwrap().api_key, "sk-anthropic");
+        assert_eq!(
+            get(&conn, &key, "openai").unwrap().unwrap().api_key,
+            "sk-openai"
+        );
+        assert_eq!(
+            get(&conn, &key, "anthropic").unwrap().unwrap().api_key,
+            "sk-anthropic"
+        );
     }
 
     #[test]

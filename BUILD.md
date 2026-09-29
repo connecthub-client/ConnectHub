@@ -23,6 +23,8 @@ npm run tauri build
 
 This runs the frontend build (`tsc && vite build`) and then Tauri's bundler for your current OS/architecture. Bundled installers are written to `src-tauri/target/release/bundle/`:
 
+Official releases are built by `.github/workflows/ci.yml`, not from a developer workstation. After the synchronized application version and changelog are committed to `main`, the workflow runs every quality gate, builds and signs the Linux bundles, creates checksums and updater metadata, and publishes the GitHub Release. If that version already has a release, CI still runs but publishing is skipped.
+
 | Platform | Output |
 | --- | --- |
 | Linux | `bundle/appimage/*.AppImage`, `bundle/deb/*.deb`, `bundle/rpm/*.rpm` |
@@ -43,11 +45,13 @@ npm run build     # tsc && vite build, output in dist/
 
 ```bash
 cd src-tauri
-cargo check
-cargo test --lib
-cargo clippy --lib --no-default-features
+cargo fmt --all -- --check
+cargo check --locked --all-targets
+cargo test --locked --lib
+cargo clippy --locked --all-targets -- -D warnings
 cd ..
-npx tsc --noEmit
+npm audit --audit-level=high
+npm run check
 ```
 
 ## Code signing status

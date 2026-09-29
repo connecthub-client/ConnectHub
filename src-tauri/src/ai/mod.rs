@@ -41,7 +41,12 @@ pub fn status(state: &AppState) -> AppResult<AiSettingsStatus> {
     })
 }
 
-pub fn save_settings(state: &AppState, provider: &str, api_key: &str, model: Option<&str>) -> AppResult<()> {
+pub fn save_settings(
+    state: &AppState,
+    provider: &str,
+    api_key: &str,
+    model: Option<&str>,
+) -> AppResult<()> {
     let conn = state.db.lock().unwrap();
     state.with_key(|key| ai_settings::set(&conn, key, provider, api_key, model))
 }
@@ -51,7 +56,11 @@ pub fn clear_settings(state: &AppState, provider: &str) -> AppResult<()> {
     ai_settings::clear(&conn, provider)
 }
 
-pub async fn send_turn(state: &AppState, provider: &str, messages: Vec<MessageInput>) -> AppResult<TurnResult> {
+pub async fn send_turn(
+    state: &AppState,
+    provider: &str,
+    messages: Vec<MessageInput>,
+) -> AppResult<TurnResult> {
     // The vault lock is dropped (this block ends) before the network call
     // below - never hold a std::sync::Mutex across an .await.
     let secret = {
@@ -59,8 +68,12 @@ pub async fn send_turn(state: &AppState, provider: &str, messages: Vec<MessageIn
         state.with_key(|key| ai_settings::get(&conn, key, provider))?
     };
     let secret = secret.ok_or_else(|| {
-        crate::error::AppError::Ai(format!("no API key configured for {provider} - add one in Settings"))
+        crate::error::AppError::Ai(format!(
+            "no API key configured for {provider} - add one in Settings"
+        ))
     })?;
-    let model = secret.model.unwrap_or_else(|| default_model(provider).to_string());
+    let model = secret
+        .model
+        .unwrap_or_else(|| default_model(provider).to_string());
     providers::send(provider, &secret.api_key, &model, &messages).await
 }

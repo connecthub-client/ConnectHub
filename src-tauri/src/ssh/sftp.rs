@@ -47,7 +47,11 @@ pub async fn connect(app: &AppState, sftp_sessions: SftpMap, host_id: Uuid) -> A
     Ok(sftp_id)
 }
 
-pub async fn canonicalize(sftp_sessions: &SftpMap, sftp_id: Uuid, path: String) -> AppResult<String> {
+pub async fn canonicalize(
+    sftp_sessions: &SftpMap,
+    sftp_id: Uuid,
+    path: String,
+) -> AppResult<String> {
     let sftp = get_session(sftp_sessions, sftp_id)?;
     sftp.canonicalize(&path)
         .await
@@ -61,7 +65,11 @@ fn get_session(sftp_sessions: &SftpMap, sftp_id: Uuid) -> AppResult<Arc<SftpSess
         .ok_or(AppError::SessionNotFound)
 }
 
-pub async fn list(sftp_sessions: &SftpMap, sftp_id: Uuid, path: String) -> AppResult<Vec<SftpEntry>> {
+pub async fn list(
+    sftp_sessions: &SftpMap,
+    sftp_id: Uuid,
+    path: String,
+) -> AppResult<Vec<SftpEntry>> {
     let sftp = get_session(sftp_sessions, sftp_id)?;
     let read_dir = sftp
         .read_dir(&path)
@@ -198,7 +206,8 @@ mod tests {
     async fn full_sftp_roundtrip() {
         let test_server = TestServer::start().await;
 
-        let db_path = std::env::temp_dir().join(format!("connecthub-test-sftp-{}.db", Uuid::new_v4()));
+        let db_path =
+            std::env::temp_dir().join(format!("connecthub-test-sftp-{}.db", Uuid::new_v4()));
         let conn = rusqlite::Connection::open(&db_path).unwrap();
         crate::data::init_schema(&conn).unwrap();
         crate::ssh::known_hosts::init_schema(&conn).unwrap();
@@ -265,26 +274,40 @@ mod tests {
         // Paths are relative to TestServer's own temp root (which stands
         // in for "/"), not a real absolute path on this machine.
         let work_dir = "/work".to_string();
-        mkdir(&sftp_sessions, sftp_id, work_dir.clone()).await.expect("mkdir failed");
+        mkdir(&sftp_sessions, sftp_id, work_dir.clone())
+            .await
+            .expect("mkdir failed");
 
         let local_src = tempfile_dir().join(format!("upload-src-{}.txt", Uuid::new_v4()));
         std::fs::write(&local_src, b"hello from connecthub sftp test").unwrap();
 
         let remote_file = format!("{work_dir}/uploaded.txt");
-        upload(&sftp_sessions, sftp_id, local_src.to_string_lossy().to_string(), remote_file.clone())
-            .await
-            .expect("upload failed");
+        upload(
+            &sftp_sessions,
+            sftp_id,
+            local_src.to_string_lossy().to_string(),
+            remote_file.clone(),
+        )
+        .await
+        .expect("upload failed");
 
-        let entries = list(&sftp_sessions, sftp_id, work_dir.clone()).await.expect("list failed");
+        let entries = list(&sftp_sessions, sftp_id, work_dir.clone())
+            .await
+            .expect("list failed");
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].name, "uploaded.txt");
         assert_eq!(entries[0].size, 31);
         assert!(!entries[0].is_dir);
 
         let local_dst = tempfile_dir().join(format!("download-dst-{}.txt", Uuid::new_v4()));
-        download(&sftp_sessions, sftp_id, remote_file.clone(), local_dst.to_string_lossy().to_string())
-            .await
-            .expect("download failed");
+        download(
+            &sftp_sessions,
+            sftp_id,
+            remote_file.clone(),
+            local_dst.to_string_lossy().to_string(),
+        )
+        .await
+        .expect("download failed");
         let downloaded = std::fs::read_to_string(&local_dst).unwrap();
         assert_eq!(downloaded, "hello from connecthub sftp test");
 
@@ -297,13 +320,17 @@ mod tests {
             .expect("list after rename failed");
         assert_eq!(entries[0].name, "renamed.txt");
 
-        remove_file(&sftp_sessions, sftp_id, renamed_file).await.expect("remove_file failed");
+        remove_file(&sftp_sessions, sftp_id, renamed_file)
+            .await
+            .expect("remove_file failed");
         let entries = list(&sftp_sessions, sftp_id, work_dir.clone())
             .await
             .expect("list after delete failed");
         assert!(entries.is_empty());
 
-        remove_dir(&sftp_sessions, sftp_id, work_dir).await.expect("remove_dir failed");
+        remove_dir(&sftp_sessions, sftp_id, work_dir)
+            .await
+            .expect("remove_dir failed");
 
         disconnect(&sftp_sessions, sftp_id);
         assert!(sftp_sessions.get(&sftp_id).is_none());
@@ -326,7 +353,8 @@ mod tests {
     async fn upload_surfaces_a_server_side_write_failure() {
         let test_server = TestServer::start().await;
 
-        let db_path = std::env::temp_dir().join(format!("connecthub-test-sftp-{}.db", Uuid::new_v4()));
+        let db_path =
+            std::env::temp_dir().join(format!("connecthub-test-sftp-{}.db", Uuid::new_v4()));
         let conn = rusqlite::Connection::open(&db_path).unwrap();
         crate::data::init_schema(&conn).unwrap();
         crate::ssh::known_hosts::init_schema(&conn).unwrap();
@@ -394,7 +422,13 @@ mod tests {
         std::fs::write(&local_src, b"this write should be rejected by the server").unwrap();
 
         let remote_file = format!("/{WRITE_FAILURE_MARKER}.txt");
-        let result = upload(&sftp_sessions, sftp_id, local_src.to_string_lossy().to_string(), remote_file).await;
+        let result = upload(
+            &sftp_sessions,
+            sftp_id,
+            local_src.to_string_lossy().to_string(),
+            remote_file,
+        )
+        .await;
 
         assert!(
             result.is_err(),

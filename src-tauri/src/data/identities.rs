@@ -107,7 +107,12 @@ pub fn create(conn: &Connection, key: &VaultKey, input: IdentityInput) -> AppRes
 
 // `input.password`: None keeps the existing stored password unchanged,
 // Some("") clears it, Some(p) replaces it - see IdentityInput's docs.
-pub fn update(conn: &Connection, key: &VaultKey, id: Uuid, input: IdentityInput) -> AppResult<Identity> {
+pub fn update(
+    conn: &Connection,
+    key: &VaultKey,
+    id: Uuid,
+    input: IdentityInput,
+) -> AppResult<Identity> {
     let has_password = match input.password {
         Some(ref p) if !p.is_empty() => {
             let enc = crypto::encrypt(key, p.as_bytes())?;
@@ -253,7 +258,10 @@ mod tests {
         .unwrap();
 
         assert_eq!(updated.label, "renamed");
-        assert!(updated.has_password, "password should survive an update that doesn't mention it");
+        assert!(
+            updated.has_password,
+            "password should survive an update that doesn't mention it"
+        );
     }
 
     #[test]

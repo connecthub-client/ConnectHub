@@ -1,15 +1,23 @@
-name: CI
+name: CI and Release
 
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: main-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 jobs:
   frontend:
-    name: Frontend (type-check + build)
-    runs-on: ubuntu-latest
+    name: Frontend standards and build
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -17,38 +25,224 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: npx tsc --noEmit
-      - run: npm run build
+      - name: Dependency security audit
+        run: npm audit --audit-level=high
+      - name: ESLint, TypeScript, and production build
+        run: npm run check
 
   backend:
-    name: Backend (check + test + clippy)
-    runs-on: ubuntu-latest
+    name: Rust standards and tests
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - name: Install Tauri Linux dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libjavascriptcoregtk-4.1-dev \
-            libssl-dev \
-            libgtk-3-dev \
-            librsvg2-dev \
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
             libayatana-appindicator3-dev \
-            pkg-config \
-            build-essential
+            libgtk-3-dev \
+            libjavascriptcoregtk-4.1-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            pkg-config
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          components: clippy,rustfmt
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-      - name: cargo check
+      - name: Rust formatting
         working-directory: src-tauri
-        run: cargo check
-      - name: cargo test (unit only — live sshd tests are excluded via #[ignore])
+        run: cargo fmt --all -- --check
+      - name: Rust compile check
         working-directory: src-tauri
-        run: cargo test --lib
-      - name: cargo clippy
+        run: cargo check --locked --all-targets
+      - name: Rust test suite
         working-directory: src-tauri
-        run: cargo clippy --lib --no-default-features
+        run: cargo test --locked --lib
+      - name: Clippy with warnings denied
+        working-directory: src-tauri
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+  release:
+    name: Signed Linux release
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: [frontend, backend]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Validate version and determine release state
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          lock_version="$(node -p "require('./package-lock.json').version")"
+          tauri_version="$(jq -r .version src-tauri/tauri.conf.json)"
+          cargo_version="$(cargo metadata --locked --no-deps --format-version 1 --manifest-path src-tauri/Cargo.toml | jq -r '.packages[] | select(.name == "connecthub") | .version')"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "package.json contains an invalid release version: $version" >&2
+            exit 1
+          fi
+          if [[ "$version" != "$lock_version" || "$version" != "$tauri_version" || "$version" != "$cargo_version" ]]; then
+            echo "Release versions disagree: package=$version lock=$lock_version tauri=$tauri_version cargo=$cargo_version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          if release_json="$(gh release view "v$version" --json isDraft 2>/dev/null)"; then
+            if [[ "$(jq -r .isDraft <<< "$release_json")" == "true" ]]; then
+              gh release delete "v$version" --yes --cleanup-tag
+              echo "publish=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "Release v$version already exists; CI will pass without publishing a duplicate."
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+            fi
+          elif git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null 2>&1; then
+            echo "Tag v$version exists without a GitHub Release; refusing to overwrite it." >&2
+            exit 1
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install release build dependencies
+        if: steps.version.outputs.publish == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            libayatana-appindicator3-dev \
+            libfuse2 \
+            libgtk-3-dev \
+            libjavascriptcoregtk-4.1-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            patchelf \
+            pkg-config \
+            rpm
+          npm ci
+
+      - name: Require updater signing key
+        if: steps.version.outputs.publish == 'true'
+        run: |
+          if [[ -z "$TAURI_SIGNING_PRIVATE_KEY" ]]; then
+            echo "Repository secret TAURI_SIGNING_PRIVATE_KEY is required." >&2
+            exit 1
+          fi
+
+      - name: Build signed installers
+        if: steps.version.outputs.publish == 'true'
+        run: npm run tauri build
+
+      - name: Stage and validate release artifacts
+        if: steps.version.outputs.publish == 'true'
+        id: artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ steps.version.outputs.version }}"
+          stage="$RUNNER_TEMP/connecthub-release-$version"
+          mkdir -p "$stage"
+          cp "src-tauri/target/release/bundle/appimage/ConnectHub_${version}_amd64.AppImage" "$stage/"
+          cp "src-tauri/target/release/bundle/appimage/ConnectHub_${version}_amd64.AppImage.sig" "$stage/"
+          cp "src-tauri/target/release/bundle/deb/ConnectHub_${version}_amd64.deb" "$stage/"
+          cp "src-tauri/target/release/bundle/deb/ConnectHub_${version}_amd64.deb.sig" "$stage/"
+          cp "src-tauri/target/release/bundle/rpm/ConnectHub-${version}-1.x86_64.rpm" "$stage/"
+          cp "src-tauri/target/release/bundle/rpm/ConnectHub-${version}-1.x86_64.rpm.sig" "$stage/"
+          test "$(dpkg-deb -f "$stage/ConnectHub_${version}_amd64.deb" Version)" = "$version"
+          test "$(rpm -qp --qf '%{VERSION}' "$stage/ConnectHub-${version}-1.x86_64.rpm")" = "$version"
+          test -s "$stage/ConnectHub_${version}_amd64.AppImage.sig"
+          test -s "$stage/ConnectHub_${version}_amd64.deb.sig"
+          test -s "$stage/ConnectHub-${version}-1.x86_64.rpm.sig"
+          CONNECTHUB_RELEASE_DIRECTORY="$stage" \
+          CONNECTHUB_RELEASE_VERSION="$version" \
+            cargo test --locked --manifest-path src-tauri/Cargo.toml --lib \
+              commands::app_commands::tests::verifies_all_local_release_package_signatures \
+              -- --ignored --exact
+          (
+            cd "$stage"
+            sha256sum \
+              "ConnectHub_${version}_amd64.AppImage" \
+              "ConnectHub_${version}_amd64.deb" \
+              "ConnectHub-${version}-1.x86_64.rpm" > checksums.txt
+            sha256sum --check checksums.txt
+          )
+          signature="$(tr -d '\r\n' < "$stage/ConnectHub_${version}_amd64.AppImage.sig")"
+          jq -n \
+            --arg version "$version" \
+            --arg notes "See the v$version release notes for details." \
+            --arg pub_date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg signature "$signature" \
+            --arg url "https://github.com/${{ github.repository }}/releases/download/v${version}/ConnectHub_${version}_amd64.AppImage" \
+            '{version: $version, notes: $notes, pub_date: $pub_date, platforms: {"linux-x86_64": {signature: $signature, url: $url}}}' \
+            > "$stage/latest.json"
+          jq -e --arg version "$version" '.version == $version and (.platforms["linux-x86_64"].signature | length > 0)' "$stage/latest.json"
+          awk -v version="$version" '
+            $0 ~ "^## \\[" version "\\]" { found=1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > "$stage/release-notes.md"
+          if [[ ! -s "$stage/release-notes.md" ]]; then
+            printf 'ConnectHub v%s\n' "$version" > "$stage/release-notes.md"
+          fi
+          echo "stage=$stage" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release
+        if: steps.version.outputs.publish == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ steps.version.outputs.version }}"
+          tag="${{ steps.version.outputs.tag }}"
+          stage="${{ steps.artifacts.outputs.stage }}"
+          gh release create "$tag" \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "ConnectHub v$version" \
+            --notes-file "$stage/release-notes.md" \
+            --draft \
+            "$stage/ConnectHub_${version}_amd64.AppImage" \
+            "$stage/ConnectHub_${version}_amd64.AppImage.sig" \
+            "$stage/ConnectHub_${version}_amd64.deb" \
+            "$stage/ConnectHub_${version}_amd64.deb.sig" \
+            "$stage/ConnectHub-${version}-1.x86_64.rpm" \
+            "$stage/ConnectHub-${version}-1.x86_64.rpm.sig" \
+            "$stage/checksums.txt" \
+            "$stage/latest.json"
+          gh release edit "$tag" --repo "${{ github.repository }}" --draft=false --latest
+
+      - name: Verify published updater metadata
+        if: steps.version.outputs.publish == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ steps.version.outputs.version }}"
+          for attempt in {1..10}; do
+            remote_version="$(curl -fsSL "https://github.com/${{ github.repository }}/releases/latest/download/latest.json" | jq -r .version || true)"
+            if [[ "$remote_version" == "$version" ]]; then
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "Published latest.json did not resolve to $version." >&2
+          exit 1

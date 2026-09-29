@@ -268,4 +268,25 @@ mod tests {
         tampered[0] ^= 1;
         assert!(verify_package_signature(&tampered, &signature).is_err());
     }
+
+    #[test]
+    #[ignore = "release pipeline only"]
+    fn verifies_all_local_release_package_signatures() {
+        let directory = std::path::PathBuf::from(
+            std::env::var("CONNECTHUB_RELEASE_DIRECTORY")
+                .expect("CONNECTHUB_RELEASE_DIRECTORY is required"),
+        );
+        let version = std::env::var("CONNECTHUB_RELEASE_VERSION")
+            .expect("CONNECTHUB_RELEASE_VERSION is required");
+        for asset in [
+            format!("ConnectHub_{version}_amd64.AppImage"),
+            format!("ConnectHub_{version}_amd64.deb"),
+            format!("ConnectHub-{version}-1.x86_64.rpm"),
+        ] {
+            let package = std::fs::read(directory.join(&asset)).unwrap();
+            let signature = std::fs::read(directory.join(format!("{asset}.sig"))).unwrap();
+            verify_package_signature(&package, &signature)
+                .unwrap_or_else(|error| panic!("{asset} failed signature verification: {error}"));
+        }
+    }
 }

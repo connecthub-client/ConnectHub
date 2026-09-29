@@ -28,8 +28,9 @@ pub fn get(conn: &Connection, key: &VaultKey) -> AppResult<Option<GoogleAuth>> {
         return Ok(None);
     };
     let plaintext = crypto::decrypt(key, &nonce, &ciphertext)?;
-    let refresh_token = String::from_utf8(plaintext)
-        .map_err(|_| crate::error::AppError::Crypto("stored refresh token is not valid UTF-8".into()))?;
+    let refresh_token = String::from_utf8(plaintext).map_err(|_| {
+        crate::error::AppError::Crypto("stored refresh token is not valid UTF-8".into())
+    })?;
 
     Ok(Some(GoogleAuth {
         account_email,

@@ -87,12 +87,19 @@ pub fn export_csv(conn: &Connection) -> AppResult<String> {
                 identity_label,
                 identity_username,
                 notes: host.notes.clone().unwrap_or_default(),
-                tags: host.tags.iter().map(|t| t.label.as_str()).collect::<Vec<_>>().join(";"),
+                tags: host
+                    .tags
+                    .iter()
+                    .map(|t| t.label.as_str())
+                    .collect::<Vec<_>>()
+                    .join(";"),
             })
             .map_err(|e| AppError::Csv(e.to_string()))?;
     }
 
-    let bytes = writer.into_inner().map_err(|e| AppError::Csv(e.to_string()))?;
+    let bytes = writer
+        .into_inner()
+        .map_err(|e| AppError::Csv(e.to_string()))?;
     String::from_utf8(bytes).map_err(|e| AppError::Csv(e.to_string()))
 }
 
@@ -157,11 +164,18 @@ fn resolve_group_path(
 }
 
 fn parse_tag_labels(raw: &str) -> Vec<String> {
-    raw.split(';').map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect()
+    raw.split(';')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .collect()
 }
 
 fn resolve_tag_ids(conn: &Connection, labels: &[String]) -> AppResult<Vec<Uuid>> {
-    labels.iter().map(|label| tags::get_or_create(conn, label).map(|t| t.id)).collect()
+    labels
+        .iter()
+        .map(|label| tags::get_or_create(conn, label).map(|t| t.id))
+        .collect()
 }
 
 pub fn import_csv(conn: &Connection, content: &str) -> AppResult<ImportSummary> {
@@ -177,8 +191,10 @@ pub fn import_csv(conn: &Connection, content: &str) -> AppResult<ImportSummary> 
     // update that host in place rather than create a duplicate every time)
     // and for preserving fields the CSV doesn't carry (vpn_profile_id,
     // color, sort_order) instead of blanking them out on update.
-    let existing_by_label: HashMap<String, crate::models::host::Host> =
-        hosts::list(conn)?.into_iter().map(|h| (h.label.clone(), h)).collect();
+    let existing_by_label: HashMap<String, crate::models::host::Host> = hosts::list(conn)?
+        .into_iter()
+        .map(|h| (h.label.clone(), h))
+        .collect();
     let mut warnings = Vec::new();
     let mut group_cache = HashMap::new();
     let mut imported = 0usize;
@@ -207,7 +223,8 @@ pub fn import_csv(conn: &Connection, content: &str) -> AppResult<ImportSummary> 
             all_identities
                 .iter()
                 .find(|ident| {
-                    ident.username == record.identity_username && ident.label == record.identity_label
+                    ident.username == record.identity_username
+                        && ident.label == record.identity_label
                 })
                 .map(|ident| ident.id)
         };
@@ -219,7 +236,11 @@ pub fn import_csv(conn: &Connection, content: &str) -> AppResult<ImportSummary> 
             ));
         }
 
-        let notes = if record.notes.trim().is_empty() { None } else { Some(record.notes.clone()) };
+        let notes = if record.notes.trim().is_empty() {
+            None
+        } else {
+            Some(record.notes.clone())
+        };
         let tag_labels = parse_tag_labels(&record.tags);
 
         match existing_by_label.get(&record.label) {
@@ -373,7 +394,11 @@ mod tests {
         let summary = import_csv(&conn, csv).unwrap();
         assert_eq!(summary.imported, 1);
 
-        let host = hosts::list(&conn).unwrap().into_iter().find(|h| h.label == "web-1").unwrap();
+        let host = hosts::list(&conn)
+            .unwrap()
+            .into_iter()
+            .find(|h| h.label == "web-1")
+            .unwrap();
         let mut labels: Vec<&str> = host.tags.iter().map(|t| t.label.as_str()).collect();
         labels.sort();
         assert_eq!(labels, vec!["db", "prod"]);
@@ -388,7 +413,11 @@ mod tests {
 
         import_csv(&conn, csv).unwrap();
 
-        let host = hosts::list(&conn).unwrap().into_iter().find(|h| h.label == "web-1").unwrap();
+        let host = hosts::list(&conn)
+            .unwrap()
+            .into_iter()
+            .find(|h| h.label == "web-1")
+            .unwrap();
         assert!(host.tags.is_empty());
     }
 
@@ -401,12 +430,17 @@ mod tests {
 
         // Re-import the same host via an old-format CSV with no tags
         // column at all - must not wipe the tag just set above.
-        let old_format_csv = "label,hostname,port,group_path,identity_label,identity_username,notes\n\
+        let old_format_csv =
+            "label,hostname,port,group_path,identity_label,identity_username,notes\n\
                                web-1,10.0.0.99,22,,,,\n";
         let result = import_csv(&conn, old_format_csv).unwrap();
         assert_eq!((result.imported, result.updated), (0, 1));
 
-        let host = hosts::list(&conn).unwrap().into_iter().find(|h| h.label == "web-1").unwrap();
+        let host = hosts::list(&conn)
+            .unwrap()
+            .into_iter()
+            .find(|h| h.label == "web-1")
+            .unwrap();
         assert_eq!(host.hostname, "10.0.0.99");
         assert_eq!(host.tags.len(), 1);
         assert_eq!(host.tags[0].label, "prod");
@@ -437,7 +471,11 @@ mod tests {
 
         let summary = import_csv(&conn, csv).unwrap();
         assert_eq!(summary.imported, 1);
-        assert!(summary.warnings.is_empty(), "unexpected warnings: {:?}", summary.warnings);
+        assert!(
+            summary.warnings.is_empty(),
+            "unexpected warnings: {:?}",
+            summary.warnings
+        );
 
         let all_hosts = hosts::list(&conn).unwrap();
         let web1 = all_hosts.iter().find(|h| h.label == "web-1").unwrap();
@@ -522,7 +560,11 @@ mod tests {
         );
 
         let all_hosts = hosts::list(&conn).unwrap();
-        assert_eq!(all_hosts.len(), 1, "must not create a second host for the same label");
+        assert_eq!(
+            all_hosts.len(),
+            1,
+            "must not create a second host for the same label"
+        );
     }
 
     #[test]
@@ -549,7 +591,11 @@ mod tests {
         let created = import_csv(&conn, csv).unwrap();
         assert_eq!(created.imported, 1);
 
-        let host = hosts::list(&conn).unwrap().into_iter().find(|h| h.label == "web-1").unwrap();
+        let host = hosts::list(&conn)
+            .unwrap()
+            .into_iter()
+            .find(|h| h.label == "web-1")
+            .unwrap();
         hosts::update(
             &conn,
             host.id,
@@ -577,7 +623,11 @@ mod tests {
         let result = import_csv(&conn, updated_csv).unwrap();
         assert_eq!((result.imported, result.updated), (0, 1));
 
-        let refreshed = hosts::list(&conn).unwrap().into_iter().find(|h| h.label == "web-1").unwrap();
+        let refreshed = hosts::list(&conn)
+            .unwrap()
+            .into_iter()
+            .find(|h| h.label == "web-1")
+            .unwrap();
         assert_eq!(refreshed.hostname, "10.0.0.99");
         assert_eq!(refreshed.vpn_profile_id, Some(profile.id));
     }

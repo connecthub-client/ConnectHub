@@ -32,7 +32,10 @@ pub struct VpnStatus {
 
 impl VpnStatus {
     fn disconnected() -> Self {
-        Self { state: VpnState::Disconnected, message: None }
+        Self {
+            state: VpnState::Disconnected,
+            message: None,
+        }
     }
 }
 
@@ -110,7 +113,9 @@ pub fn cleanup_stale_profile_files() {
 }
 
 fn cleanup_stale_profile_files_in(dir: &Path) {
-    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
     for entry in entries.flatten() {
         let _ = std::fs::remove_file(entry.path());
     }
@@ -141,7 +146,10 @@ fn write_private_file(path: &Path, contents: &str) -> AppResult<()> {
 // majority of real-world profiles, which don't touch pull-filter at all.
 fn effective_config(profile: &VpnProfile) -> String {
     if profile.avoid_default_route {
-        format!("{}\npull-filter ignore \"redirect-gateway\"\n", profile.config)
+        format!(
+            "{}\npull-filter ignore \"redirect-gateway\"\n",
+            profile.config
+        )
     } else {
         profile.config.clone()
     }
@@ -199,8 +207,7 @@ pub async fn connect(state: &AppState, vpn_map: VpnMap, profile_id: Uuid) -> App
 
     if !setup::is_installed() {
         return Err(AppError::Vpn(
-            "VPN privilege setup hasn't been run yet - open the VPN tab and run setup first"
-                .into(),
+            "VPN privilege setup hasn't been run yet - open the VPN tab and run setup first".into(),
         ));
     }
 
@@ -268,7 +275,10 @@ struct ClaimedConnection {
 // reporting its current status back here is correct for all three: none of
 // them should trigger launching a second, competing connection.
 fn try_claim(vpn_map: &VpnMap, profile_id: Uuid) -> Result<ClaimedConnection, VpnStatus> {
-    let status = Arc::new(Mutex::new(VpnStatus { state: VpnState::Connecting, message: None }));
+    let status = Arc::new(Mutex::new(VpnStatus {
+        state: VpnState::Connecting,
+        message: None,
+    }));
     let tun_iface: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
     let added_routes: Arc<Mutex<Vec<(String, String)>>> = Arc::new(Mutex::new(Vec::new()));
     let (control_tx, control_rx) = mpsc::unbounded_channel();
@@ -281,7 +291,12 @@ fn try_claim(vpn_map: &VpnMap, profile_id: Uuid) -> Result<ClaimedConnection, Vp
                 tun_iface: tun_iface.clone(),
                 added_routes: added_routes.clone(),
             });
-            Ok(ClaimedConnection { status, control_rx, tun_iface, added_routes })
+            Ok(ClaimedConnection {
+                status,
+                control_rx,
+                tun_iface,
+                added_routes,
+            })
         }
     }
 }
@@ -422,7 +437,14 @@ async fn run_vpn(
         if let Some(tx) = ready_tx.take() {
             let _ = tx.send(final_status);
         }
-        cleanup(&vpn_map, profile_id, &config_path, &auth_path, &added_routes).await;
+        cleanup(
+            &vpn_map,
+            profile_id,
+            &config_path,
+            &auth_path,
+            &added_routes,
+        )
+        .await;
         return;
     };
 
@@ -483,7 +505,14 @@ async fn run_vpn(
     }
 
     let _ = child.wait().await;
-    cleanup(&vpn_map, profile_id, &config_path, &auth_path, &added_routes).await;
+    cleanup(
+        &vpn_map,
+        profile_id,
+        &config_path,
+        &auth_path,
+        &added_routes,
+    )
+    .await;
 }
 
 async fn cleanup(
@@ -535,7 +564,10 @@ async fn remove_host_routes(added_routes: &Arc<Mutex<Vec<(String, String)>>>) {
 // closing is what ultimately drives the Disconnected transition.
 fn parse_management_line(line: &str) -> Option<VpnStatus> {
     if let Some(rest) = line.strip_prefix(">FATAL:") {
-        return Some(VpnStatus { state: VpnState::Error, message: Some(rest.trim().to_string()) });
+        return Some(VpnStatus {
+            state: VpnState::Error,
+            message: Some(rest.trim().to_string()),
+        });
     }
     if line.contains("AUTH_FAILED") || line.contains("Verification Failed") {
         return Some(VpnStatus {
@@ -546,7 +578,10 @@ fn parse_management_line(line: &str) -> Option<VpnStatus> {
     if let Some(rest) = line.strip_prefix(">STATE:") {
         let phase = rest.split(',').nth(1).unwrap_or("");
         if phase == "CONNECTED" {
-            return Some(VpnStatus { state: VpnState::Connected, message: None });
+            return Some(VpnStatus {
+                state: VpnState::Connected,
+                message: None,
+            });
         }
     }
     None
@@ -650,12 +685,18 @@ pub async fn ensure_host_route(state: &AppState, vpn_map: &VpnMap, host_id: Uuid
         let conn = state.db.lock().unwrap();
         crate::data::hosts::get(&conn, host_id)?
     };
-    let Some(profile_id) = host.vpn_profile_id else { return Ok(()) };
-    let Some(entry) = vpn_map.get(&profile_id) else { return Ok(()) };
+    let Some(profile_id) = host.vpn_profile_id else {
+        return Ok(());
+    };
+    let Some(entry) = vpn_map.get(&profile_id) else {
+        return Ok(());
+    };
     if entry.status.lock().unwrap().state != VpnState::Connected {
         return Ok(());
     }
-    let Some(iface) = entry.tun_iface.lock().unwrap().clone() else { return Ok(()) };
+    let Some(iface) = entry.tun_iface.lock().unwrap().clone() else {
+        return Ok(());
+    };
     let added_routes = entry.added_routes.clone();
     drop(entry); // release the DashMap shard lock before the await below
     add_routes_for_hostname(&iface, &host.hostname, &added_routes).await;
@@ -674,13 +715,21 @@ async fn find_tun_interface(local_ip: &str) -> Option<String> {
     for line in text.lines() {
         // e.g. "5: tun0    inet 10.8.0.6/24 scope global tun0\       valid_lft ..."
         let cols: Vec<&str> = line.split_whitespace().collect();
-        let Some(inet_pos) = cols.iter().position(|c| *c == "inet") else { continue };
-        let Some(iface_pos) = inet_pos.checked_sub(1) else { continue };
-        let Some(iface) = cols.get(iface_pos) else { continue };
+        let Some(inet_pos) = cols.iter().position(|c| *c == "inet") else {
+            continue;
+        };
+        let Some(iface_pos) = inet_pos.checked_sub(1) else {
+            continue;
+        };
+        let Some(iface) = cols.get(iface_pos) else {
+            continue;
+        };
         if !iface.starts_with("tun") {
             continue;
         }
-        let Some(addr) = cols.get(inet_pos + 1) else { continue };
+        let Some(addr) = cols.get(inet_pos + 1) else {
+            continue;
+        };
         if addr.split('/').next() == Some(local_ip) {
             return Some((*iface).to_string());
         }
@@ -704,7 +753,8 @@ async fn resolve_all_ipv4(host: &str) -> Vec<String> {
     // Bounded so one hostname with an unreachable/hung resolver can't stall
     // every other host in the same VPN profile's list - add_host_routes
     // resolves them one at a time, sequentially.
-    let Ok(Ok(addrs)) = tokio::time::timeout(Duration::from_secs(5), tokio::net::lookup_host((host, 0))).await
+    let Ok(Ok(addrs)) =
+        tokio::time::timeout(Duration::from_secs(5), tokio::net::lookup_host((host, 0))).await
     else {
         return Vec::new();
     };
@@ -748,7 +798,10 @@ mod tests {
 
     #[test]
     fn parses_connected_state_line() {
-        let status = parse_management_line(">STATE:1700000000,CONNECTED,SUCCESS,10.8.0.6,203.0.113.5,1194,,").unwrap();
+        let status = parse_management_line(
+            ">STATE:1700000000,CONNECTED,SUCCESS,10.8.0.6,203.0.113.5,1194,,",
+        )
+        .unwrap();
         assert_eq!(status.state, VpnState::Connected);
     }
 
@@ -762,7 +815,10 @@ mod tests {
     fn parses_fatal_line_as_error() {
         let status = parse_management_line(">FATAL:All TAP-Windows adapters are in use").unwrap();
         assert_eq!(status.state, VpnState::Error);
-        assert_eq!(status.message.as_deref(), Some("All TAP-Windows adapters are in use"));
+        assert_eq!(
+            status.message.as_deref(),
+            Some("All TAP-Windows adapters are in use")
+        );
     }
 
     #[test]
@@ -784,7 +840,10 @@ mod tests {
             id,
             ActiveVpn {
                 commands: tx,
-                status: Arc::new(Mutex::new(VpnStatus { state, message: None })),
+                status: Arc::new(Mutex::new(VpnStatus {
+                    state,
+                    message: None,
+                })),
                 tun_iface: Arc::new(Mutex::new(None)),
                 added_routes: Arc::new(Mutex::new(Vec::new())),
             },
@@ -795,7 +854,10 @@ mod tests {
     #[test]
     fn status_defaults_to_disconnected_when_not_tracked() {
         let vpn_map: VpnMap = Arc::new(DashMap::new());
-        assert_eq!(status(&vpn_map, Uuid::new_v4()).state, VpnState::Disconnected);
+        assert_eq!(
+            status(&vpn_map, Uuid::new_v4()).state,
+            VpnState::Disconnected
+        );
     }
 
     #[test]
@@ -848,12 +910,17 @@ mod tests {
 
     #[tokio::test]
     async fn resolve_all_ipv4_returns_a_literal_ip_without_any_dns_lookup() {
-        assert_eq!(resolve_all_ipv4("203.0.113.5").await, vec!["203.0.113.5".to_string()]);
+        assert_eq!(
+            resolve_all_ipv4("203.0.113.5").await,
+            vec!["203.0.113.5".to_string()]
+        );
     }
 
     #[tokio::test]
     async fn resolve_all_ipv4_returns_empty_for_an_unresolvable_hostname() {
-        assert!(resolve_all_ipv4("this-host-does-not-exist.invalid").await.is_empty());
+        assert!(resolve_all_ipv4("this-host-does-not-exist.invalid")
+            .await
+            .is_empty());
     }
 
     // The route helper is never actually installed in a test environment,
@@ -863,7 +930,10 @@ mod tests {
     // same routes twice.
     #[tokio::test]
     async fn remove_host_routes_drains_the_list_even_when_the_helper_is_not_installed() {
-        let added = Arc::new(Mutex::new(vec![("tun0".to_string(), "10.0.0.5".to_string())]));
+        let added = Arc::new(Mutex::new(vec![(
+            "tun0".to_string(),
+            "10.0.0.5".to_string(),
+        )]));
         remove_host_routes(&added).await;
         assert!(added.lock().unwrap().is_empty());
     }
@@ -877,7 +947,8 @@ mod tests {
 
     #[test]
     fn cleanup_stale_profile_files_in_removes_every_leftover_file() {
-        let dir = std::env::temp_dir().join(format!("connecthub-test-vpn-profiles-{}", Uuid::new_v4()));
+        let dir =
+            std::env::temp_dir().join(format!("connecthub-test-vpn-profiles-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("some-profile.ovpn"), b"client\n").unwrap();
         std::fs::write(dir.join("some-profile.auth"), b"user\npass\n").unwrap();
@@ -890,7 +961,10 @@ mod tests {
 
     #[test]
     fn cleanup_stale_profile_files_in_is_a_noop_for_a_missing_directory() {
-        let dir = std::env::temp_dir().join(format!("connecthub-test-vpn-profiles-missing-{}", Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!(
+            "connecthub-test-vpn-profiles-missing-{}",
+            Uuid::new_v4()
+        ));
         // Must not panic even though the directory doesn't exist.
         cleanup_stale_profile_files_in(&dir);
     }
@@ -899,7 +973,13 @@ mod tests {
     async fn add_host_routes_records_nothing_when_the_route_helper_is_not_installed() {
         let added = Arc::new(Mutex::new(Vec::new()));
         let tun_iface = Arc::new(Mutex::new(None));
-        add_host_routes("10.8.0.6".into(), vec!["example.com".into()], added.clone(), tun_iface).await;
+        add_host_routes(
+            "10.8.0.6".into(),
+            vec!["example.com".into()],
+            added.clone(),
+            tun_iface,
+        )
+        .await;
         assert!(
             added.lock().unwrap().is_empty(),
             "must not record a route it never actually added"
@@ -981,7 +1061,10 @@ mod tests {
             profile_id,
             ActiveVpn {
                 commands: tx,
-                status: Arc::new(Mutex::new(VpnStatus { state: VpnState::Connecting, message: None })),
+                status: Arc::new(Mutex::new(VpnStatus {
+                    state: VpnState::Connecting,
+                    message: None,
+                })),
                 tun_iface: Arc::new(Mutex::new(Some("tun0".into()))),
                 added_routes: Arc::new(Mutex::new(Vec::new())),
             },
@@ -1000,7 +1083,10 @@ mod tests {
             profile_id,
             ActiveVpn {
                 commands: tx,
-                status: Arc::new(Mutex::new(VpnStatus { state: VpnState::Connected, message: None })),
+                status: Arc::new(Mutex::new(VpnStatus {
+                    state: VpnState::Connected,
+                    message: None,
+                })),
                 tun_iface: Arc::new(Mutex::new(None)),
                 added_routes: Arc::new(Mutex::new(Vec::new())),
             },
@@ -1025,7 +1111,10 @@ mod tests {
             profile_id,
             ActiveVpn {
                 commands: tx,
-                status: Arc::new(Mutex::new(VpnStatus { state: VpnState::Connected, message: None })),
+                status: Arc::new(Mutex::new(VpnStatus {
+                    state: VpnState::Connected,
+                    message: None,
+                })),
                 tun_iface: Arc::new(Mutex::new(Some("tun0".into()))),
                 added_routes: added_routes.clone(),
             },

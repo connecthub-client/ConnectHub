@@ -127,7 +127,10 @@ impl client::Handler for ClientHandler {
     // The one security-critical step in the whole connect flow: pins the
     // server's key on first connect (TOFU) and refuses to proceed if a later
     // connection presents a different key for the same host/port.
-    async fn check_server_key(&mut self, server_public_key: &PublicKey) -> Result<bool, Self::Error> {
+    async fn check_server_key(
+        &mut self,
+        server_public_key: &PublicKey,
+    ) -> Result<bool, Self::Error> {
         let fingerprint = format!("SHA256:{}", server_public_key.fingerprint());
         let mut conn = rusqlite::Connection::open(&self.db_path)?;
         // This connection is independent of AppState.db (see the comment on
@@ -160,7 +163,8 @@ impl client::Handler for ClientHandler {
                 match tokio::net::TcpStream::connect((host.as_str(), port)).await {
                     Ok(mut stream) => {
                         let mut channel_stream = channel.into_stream();
-                        let _ = tokio::io::copy_bidirectional(&mut channel_stream, &mut stream).await;
+                        let _ =
+                            tokio::io::copy_bidirectional(&mut channel_stream, &mut stream).await;
                     }
                     Err(_) => {
                         let _ = channel.close().await;
@@ -388,7 +392,10 @@ mod tests {
     #[test]
     fn client_config_enables_keepalive_without_an_inactivity_timeout() {
         let config = client_config();
-        assert_eq!(config.keepalive_interval, Some(std::time::Duration::from_secs(30)));
+        assert_eq!(
+            config.keepalive_interval,
+            Some(std::time::Duration::from_secs(30))
+        );
         assert_eq!(config.keepalive_max, 3);
         assert_eq!(
             config.inactivity_timeout, None,
@@ -398,34 +405,59 @@ mod tests {
 
     #[test]
     fn classify_connect_error_recognizes_connection_refused() {
-        let io_err = std::io::Error::new(std::io::ErrorKind::ConnectionRefused, "connection refused");
-        let err = classify_connect_error(HandlerError::Russh(russh::Error::IO(io_err)), "10.0.0.5", 22);
+        let io_err =
+            std::io::Error::new(std::io::ErrorKind::ConnectionRefused, "connection refused");
+        let err = classify_connect_error(
+            HandlerError::Russh(russh::Error::IO(io_err)),
+            "10.0.0.5",
+            22,
+        );
         assert!(matches!(err, AppError::ConnectionRefused(msg) if msg.contains("10.0.0.5:22")));
     }
 
     #[test]
     fn classify_connect_error_recognizes_timeout() {
         let io_err = std::io::Error::new(std::io::ErrorKind::TimedOut, "timed out");
-        let err = classify_connect_error(HandlerError::Russh(russh::Error::IO(io_err)), "10.0.0.5", 22);
+        let err = classify_connect_error(
+            HandlerError::Russh(russh::Error::IO(io_err)),
+            "10.0.0.5",
+            22,
+        );
         assert!(matches!(err, AppError::ConnectionTimedOut(msg) if msg.contains("10.0.0.5:22")));
     }
 
     #[test]
     fn classify_connect_error_recognizes_russh_connection_timeout_variant() {
-        let err = classify_connect_error(HandlerError::Russh(russh::Error::ConnectionTimeout), "10.0.0.5", 22);
+        let err = classify_connect_error(
+            HandlerError::Russh(russh::Error::ConnectionTimeout),
+            "10.0.0.5",
+            22,
+        );
         assert!(matches!(err, AppError::ConnectionTimedOut(msg) if msg.contains("10.0.0.5:22")));
     }
 
     #[test]
     fn classify_connect_error_recognizes_dns_failure_heuristically() {
-        let io_err = std::io::Error::other("failed to lookup address information: Name or service not known");
-        let err = classify_connect_error(HandlerError::Russh(russh::Error::IO(io_err)), "no-such-host.invalid", 22);
-        assert!(matches!(err, AppError::DnsResolutionFailed(msg) if msg.contains("no-such-host.invalid")));
+        let io_err = std::io::Error::other(
+            "failed to lookup address information: Name or service not known",
+        );
+        let err = classify_connect_error(
+            HandlerError::Russh(russh::Error::IO(io_err)),
+            "no-such-host.invalid",
+            22,
+        );
+        assert!(
+            matches!(err, AppError::DnsResolutionFailed(msg) if msg.contains("no-such-host.invalid"))
+        );
     }
 
     #[test]
     fn classify_connect_error_falls_back_to_generic_ssh_error() {
-        let err = classify_connect_error(HandlerError::Russh(russh::Error::Disconnect), "10.0.0.5", 22);
+        let err = classify_connect_error(
+            HandlerError::Russh(russh::Error::Disconnect),
+            "10.0.0.5",
+            22,
+        );
         assert!(matches!(err, AppError::Ssh(_)));
     }
 
@@ -461,7 +493,8 @@ mod tests {
 
         let test_server = TestServer::start().await;
 
-        let db_path = std::env::temp_dir().join(format!("connecthub-test-session-{}.db", Uuid::new_v4()));
+        let db_path =
+            std::env::temp_dir().join(format!("connecthub-test-session-{}.db", Uuid::new_v4()));
         let conn = rusqlite::Connection::open(&db_path).unwrap();
         crate::data::init_schema(&conn).unwrap();
         crate::ssh::known_hosts::init_schema(&conn).unwrap();
@@ -547,15 +580,15 @@ mod tests {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
         let mut saw_marker = false;
         while std::time::Instant::now() < deadline {
-            if let Ok(event) = event_rx.recv_timeout(std::time::Duration::from_millis(200)) {
-                if let SessionEvent::Data { data } = event {
-                    let decoded = base64::engine::general_purpose::STANDARD
-                        .decode(&data)
-                        .unwrap_or_default();
-                    if String::from_utf8_lossy(&decoded).contains("CONNECTHUB_PTY_TEST_OK") {
-                        saw_marker = true;
-                        break;
-                    }
+            if let Ok(SessionEvent::Data { data }) =
+                event_rx.recv_timeout(std::time::Duration::from_millis(200))
+            {
+                let decoded = base64::engine::general_purpose::STANDARD
+                    .decode(&data)
+                    .unwrap_or_default();
+                if String::from_utf8_lossy(&decoded).contains("CONNECTHUB_PTY_TEST_OK") {
+                    saw_marker = true;
+                    break;
                 }
             }
         }
@@ -753,7 +786,9 @@ mod live_sshd_tests {
 
         let sender = app_state.sessions.get(&session_id).unwrap().clone();
         sender
-            .send(SessionCommand::Write(b"echo SSHTOOL_PTY_TEST_OK\n".to_vec()))
+            .send(SessionCommand::Write(
+                b"echo SSHTOOL_PTY_TEST_OK\n".to_vec(),
+            ))
             .unwrap();
 
         // Collect events for up to a few seconds looking for our marker in
@@ -761,15 +796,15 @@ mod live_sshd_tests {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
         let mut saw_marker = false;
         while std::time::Instant::now() < deadline {
-            if let Ok(event) = event_rx.recv_timeout(std::time::Duration::from_millis(200)) {
-                if let SessionEvent::Data { data } = event {
-                    let decoded = base64::engine::general_purpose::STANDARD
-                        .decode(&data)
-                        .unwrap_or_default();
-                    if String::from_utf8_lossy(&decoded).contains("SSHTOOL_PTY_TEST_OK") {
-                        saw_marker = true;
-                        break;
-                    }
+            if let Ok(SessionEvent::Data { data }) =
+                event_rx.recv_timeout(std::time::Duration::from_millis(200))
+            {
+                let decoded = base64::engine::general_purpose::STANDARD
+                    .decode(&data)
+                    .unwrap_or_default();
+                if String::from_utf8_lossy(&decoded).contains("SSHTOOL_PTY_TEST_OK") {
+                    saw_marker = true;
+                    break;
                 }
             }
         }

@@ -65,7 +65,6 @@ export default function Modal({ title, onClose, children, dismissible = true }: 
       document.removeEventListener("keydown", onKeyDown);
       previouslyFocused?.focus();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

@@ -70,7 +70,10 @@ pub async fn upload_new(access_token: &str, name: &str, bytes: Vec<u8>) -> AppRe
         .map_err(|e| AppError::Google(format!("Drive upload failed: {e}")))?;
 
     if !resp.status().is_success() {
-        return Err(AppError::Google(format!("Drive upload failed: {}", resp.status())));
+        return Err(AppError::Google(format!(
+            "Drive upload failed: {}",
+            resp.status()
+        )));
     }
     resp.json()
         .await
@@ -88,7 +91,10 @@ pub async fn update_content(access_token: &str, file_id: &str, bytes: Vec<u8>) -
         .map_err(|e| AppError::Google(format!("Drive update failed: {e}")))?;
 
     if !resp.status().is_success() {
-        return Err(AppError::Google(format!("Drive update failed: {}", resp.status())));
+        return Err(AppError::Google(format!(
+            "Drive update failed: {}",
+            resp.status()
+        )));
     }
     Ok(())
 }
@@ -102,7 +108,10 @@ pub async fn download_content(access_token: &str, file_id: &str) -> AppResult<Ve
         .map_err(|e| AppError::Google(format!("Drive download failed: {e}")))?;
 
     if !resp.status().is_success() {
-        return Err(AppError::Google(format!("Drive download failed: {}", resp.status())));
+        return Err(AppError::Google(format!(
+            "Drive download failed: {}",
+            resp.status()
+        )));
     }
     resp.bytes()
         .await

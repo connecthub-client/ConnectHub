@@ -83,11 +83,11 @@ export default function HostContextPanel({
   const toggleHostDetails = useSettingsStore((s) => s.toggleHostDetails);
   const quickCommandAutoRun = useSettingsStore((s) => s.quickCommandAutoRun);
   const toggleQuickCommandAutoRun = useSettingsStore((s) => s.toggleQuickCommandAutoRun);
-  const commandHistory = useCommandHistoryStore((s) => s.byHost[host.id]) ?? [];
+  const commandHistory = useCommandHistoryStore((s) => s.byHost[host.id]);
   const recordCommandRun = useCommandHistoryStore((s) => s.record);
   const remoteTopUsed = useCommandHistoryStore((s) => s.remoteTopUsed[host.id]) ?? [];
   const localTopUsed = useMemo(
-    () => topUsedCommands(commandHistory, MOST_USED_LIMIT),
+    () => topUsedCommands(commandHistory ?? [], MOST_USED_LIMIT),
     [commandHistory],
   );
   // Prefer the server's own shell history when we have one - it reflects

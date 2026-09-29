@@ -56,11 +56,14 @@ pub async fn login(state: &AppState) -> AppResult<GoogleAuthStatus> {
             "Google did not return a refresh token - please try signing in again".into(),
         )
     })?;
-    let email = oauth::fetch_email(&tokens.access_token).await.unwrap_or(None);
+    let email = oauth::fetch_email(&tokens.access_token)
+        .await
+        .unwrap_or(None);
 
     {
         let conn = state.db.lock().unwrap();
-        state.with_key(|key| data::google_auth::set(&conn, key, email.as_deref(), &refresh_token))?;
+        state
+            .with_key(|key| data::google_auth::set(&conn, key, email.as_deref(), &refresh_token))?;
     }
 
     Ok(GoogleAuthStatus {
@@ -99,7 +102,10 @@ async fn get_access_token(state: &AppState) -> AppResult<String> {
 // reliable snapshot while another connection has it open (mid-write state,
 // journal not yet checkpointed), the backup API is.
 fn snapshot_vault_bytes(state: &AppState) -> AppResult<Vec<u8>> {
-    let tmp_path = std::env::temp_dir().join(format!("termora-vault-snapshot-{}.db", uuid::Uuid::new_v4()));
+    let tmp_path = std::env::temp_dir().join(format!(
+        "termora-vault-snapshot-{}.db",
+        uuid::Uuid::new_v4()
+    ));
     {
         let mut dst = rusqlite::Connection::open(&tmp_path)?;
         let src = state.db.lock().unwrap();
@@ -172,7 +178,9 @@ pub async fn restore_from_drive(state: &AppState) -> AppResult<()> {
 
     let vault_file = drive::find_file(&access_token, VAULT_FILE_NAME)
         .await?
-        .ok_or_else(|| AppError::Google("no backup found in Google Drive for this account".into()))?;
+        .ok_or_else(|| {
+            AppError::Google("no backup found in Google Drive for this account".into())
+        })?;
     let secret_file = drive::find_file(&access_token, SECRET_FILE_NAME)
         .await?
         .ok_or_else(|| {
@@ -208,9 +216,12 @@ pub async fn restore_from_drive(state: &AppState) -> AppResult<()> {
             // original error `e` is still what gets reported, but we've at
             // least tried to leave the user's real vault in place rather
             // than the half-restored one.
-            if let Ok((conn, key)) =
-                write_and_open_vault(&state.db_path, &secret_path, &original_vault_bytes, &original_secret)
-            {
+            if let Ok((conn, key)) = write_and_open_vault(
+                &state.db_path,
+                &secret_path,
+                &original_vault_bytes,
+                &original_secret,
+            ) {
                 *state.db.lock().unwrap() = conn;
                 *state.vault_key.lock().unwrap() = Some(key);
             }
@@ -225,7 +236,8 @@ mod tests {
 
     #[test]
     fn write_and_open_vault_opens_and_unlocks_a_valid_vault() {
-        let dir = std::env::temp_dir().join(format!("connecthub-test-restore-{}", uuid::Uuid::new_v4()));
+        let dir =
+            std::env::temp_dir().join(format!("connecthub-test-restore-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         let db_path = dir.join("vault.db");
         let secret_path = dir.join(".local_secret");
@@ -249,7 +261,8 @@ mod tests {
 
     #[test]
     fn rollback_after_a_failed_restore_recovers_the_original_vault() {
-        let dir = std::env::temp_dir().join(format!("connecthub-test-restore-{}", uuid::Uuid::new_v4()));
+        let dir =
+            std::env::temp_dir().join(format!("connecthub-test-restore-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         let db_path = dir.join("vault.db");
         let secret_path = dir.join(".local_secret");
@@ -278,13 +291,22 @@ mod tests {
             drop(conn);
             std::fs::read(&bad_db).unwrap()
         };
-        let result = write_and_open_vault(&db_path, &secret_path, &bad_vault_bytes, original_secret);
-        assert!(result.is_err(), "wrong secret for the downloaded vault must fail to unlock");
+        let result =
+            write_and_open_vault(&db_path, &secret_path, &bad_vault_bytes, original_secret);
+        assert!(
+            result.is_err(),
+            "wrong secret for the downloaded vault must fail to unlock"
+        );
 
         // Rollback: writing the ORIGINAL snapshot back must succeed and
         // unlock exactly as it did before the failed restore.
-        let (_, _key) = write_and_open_vault(&db_path, &secret_path, &original_vault_bytes, original_secret)
-            .expect("rolling back to the original vault bytes must succeed");
+        let (_, _key) = write_and_open_vault(
+            &db_path,
+            &secret_path,
+            &original_vault_bytes,
+            original_secret,
+        )
+        .expect("rolling back to the original vault bytes must succeed");
 
         std::fs::remove_dir_all(&dir).ok();
     }

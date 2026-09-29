@@ -456,6 +456,8 @@ export default function TerminalView({
       }
       term.dispose();
     };
+    // The terminal and SSH session are intentionally recreated only when the host changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [host.id]);
 
   const terminalFontFamily = useSettingsStore((s) => s.terminalFontFamily);

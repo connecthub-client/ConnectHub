@@ -67,7 +67,9 @@ pub async fn ai_command_exec(
 ) -> AppResult<AiCommandExecResult> {
     if !override_denylist {
         if let Some(pattern) = guardrails::denylist_match(&command) {
-            return Ok(AiCommandExecResult::NeedsConfirmation { pattern: pattern.to_string() });
+            return Ok(AiCommandExecResult::NeedsConfirmation {
+                pattern: pattern.to_string(),
+            });
         }
     }
     let output = exec::run_capped(&state, host_id, command, guardrails::MAX_OUTPUT_BYTES).await?;

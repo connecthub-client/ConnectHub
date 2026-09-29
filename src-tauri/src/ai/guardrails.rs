@@ -31,7 +31,10 @@ const DENYLIST_PATTERNS: &[&str] = &[
 
 pub fn denylist_match(command: &str) -> Option<&'static str> {
     let lower = command.to_lowercase();
-    DENYLIST_PATTERNS.iter().copied().find(|pattern| lower.contains(pattern))
+    DENYLIST_PATTERNS
+        .iter()
+        .copied()
+        .find(|pattern| lower.contains(pattern))
 }
 
 #[cfg(test)]

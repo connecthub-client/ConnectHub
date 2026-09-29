@@ -26,15 +26,25 @@ pub fn list(conn: &Connection) -> AppResult<Vec<Tag>> {
 pub fn get_or_create(conn: &Connection, label: &str) -> AppResult<Tag> {
     let label = label.trim();
     if let Some(existing) = conn
-        .query_row("SELECT id, label FROM tags WHERE label = ?1", (&label,), row_to_tag)
+        .query_row(
+            "SELECT id, label FROM tags WHERE label = ?1",
+            (&label,),
+            row_to_tag,
+        )
         .optional()?
     {
         return Ok(existing);
     }
 
     let id = Uuid::new_v4();
-    conn.execute("INSERT INTO tags (id, label) VALUES (?1, ?2)", (&id, &label))?;
-    Ok(Tag { id, label: label.to_string() })
+    conn.execute(
+        "INSERT INTO tags (id, label) VALUES (?1, ?2)",
+        (&id, &label),
+    )?;
+    Ok(Tag {
+        id,
+        label: label.to_string(),
+    })
 }
 
 pub fn delete(conn: &Connection, id: Uuid) -> AppResult<()> {
@@ -70,7 +80,13 @@ pub fn list_by_host_bulk(conn: &Connection) -> AppResult<HashMap<Uuid, Vec<Tag>>
     )?;
     let rows = stmt.query_map((), |row| {
         let host_id: Uuid = row.get(0)?;
-        Ok((host_id, Tag { id: row.get(1)?, label: row.get(2)? }))
+        Ok((
+            host_id,
+            Tag {
+                id: row.get(1)?,
+                label: row.get(2)?,
+            },
+        ))
     })?;
 
     let mut by_host: HashMap<Uuid, Vec<Tag>> = HashMap::new();
@@ -190,8 +206,22 @@ mod tests {
     #[test]
     fn list_by_host_bulk_groups_by_host() {
         let conn = test_conn();
-        let host_a = hosts::create(&conn, HostInput { label: "a".into(), ..host_input() }).unwrap();
-        let host_b = hosts::create(&conn, HostInput { label: "b".into(), ..host_input() }).unwrap();
+        let host_a = hosts::create(
+            &conn,
+            HostInput {
+                label: "a".into(),
+                ..host_input()
+            },
+        )
+        .unwrap();
+        let host_b = hosts::create(
+            &conn,
+            HostInput {
+                label: "b".into(),
+                ..host_input()
+            },
+        )
+        .unwrap();
         let prod = get_or_create(&conn, "prod").unwrap();
         let db = get_or_create(&conn, "db").unwrap();
 

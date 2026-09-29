@@ -25,9 +25,17 @@ pub const TOOL_DESCRIPTION: &str = "Run a shell command on the connected server 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "role", rename_all = "snake_case")]
 pub enum MessageInput {
-    User { text: String },
-    Assistant { text: Option<String>, tool_call: Option<ToolCallInput> },
-    ToolResult { command: String, output: ExecOutput },
+    User {
+        text: String,
+    },
+    Assistant {
+        text: Option<String>,
+        tool_call: Option<ToolCallInput>,
+    },
+    ToolResult {
+        command: String,
+        output: ExecOutput,
+    },
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -43,7 +51,12 @@ pub enum TurnResult {
     ToolCall { command: String, purpose: String },
 }
 
-pub async fn send(provider: &str, api_key: &str, model: &str, messages: &[MessageInput]) -> AppResult<TurnResult> {
+pub async fn send(
+    provider: &str,
+    api_key: &str,
+    model: &str,
+    messages: &[MessageInput],
+) -> AppResult<TurnResult> {
     match provider {
         "openai" => openai::send(api_key, model, messages).await,
         "anthropic" => anthropic::send(api_key, model, messages).await,
@@ -69,7 +82,10 @@ pub fn format_tool_result(command: &str, output: &ExecOutput) -> String {
             out.push('\n');
         }
     }
-    let status = output.exit_status.map(|c| c.to_string()).unwrap_or_else(|| "unknown".into());
+    let status = output
+        .exit_status
+        .map(|c| c.to_string())
+        .unwrap_or_else(|| "unknown".into());
     out.push_str(&format!("[exit status: {status}]"));
     if output.truncated {
         out.push_str("\n[output truncated - only the first portion is shown]");

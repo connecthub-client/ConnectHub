@@ -8,14 +8,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Release workflow
 
-Versioning follows [SemVer](https://semver.org). A release bumps the version in **three** places (they are not derived from one another and must be kept in sync manually): `package.json`, `src-tauri/Cargo.toml` (`[package].version`), and `src-tauri/tauri.conf.json` (`.version`). Then:
+Versioning follows [SemVer](https://semver.org). A release bumps the version in `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`, refreshes `package-lock.json`/`Cargo.lock`, and moves `[Unreleased]` entries into a matching `CHANGELOG.md` section. Commit those changes and push them to `main`; do not create the tag or GitHub Release manually.
 
-1. Add a new section to `CHANGELOG.md` (move anything under `[Unreleased]` into it), following the existing Added/Changed/Fixed/Security grouping.
-2. Commit the version bump + changelog as its own commit.
-3. Tag `vX.Y.Z` and push the tag.
-4. Build platform bundles **with the updater signing env vars set** (see `BUILD.md`'s "Auto-update signing" section) and attach them to a GitHub Release, along with a checksums file **and a `latest.json` manifest** - the in-app updater (Settings → About → "Check for updates") reads `latest.json` from the release tagged `latest`, so skipping it silently breaks auto-update for everyone already running a version that has the updater built in, without erroring anywhere obvious.
-
-There is no automated release pipeline yet (see `ROADMAP.md`); `.github/workflows/ci.yml` runs type-checks/tests/clippy on push/PR but does not build or publish release artifacts.
+`.github/workflows/ci.yml` runs frontend formatting/lint/type/build checks, npm security audit, Rust formatting/check/tests, and warning-as-error Clippy. After every gate passes, a main-branch push whose version has no existing release builds signed AppImage/DEB/RPM artifacts, validates package versions and signatures, generates checksums and `latest.json`, publishes `vX.Y.Z`, and verifies the public updater endpoint. A push whose version is already released runs CI but safely skips duplicate publishing. The release job requires the repository Actions secret `TAURI_SIGNING_PRIVATE_KEY`.
 
 ### Auto-update
 
@@ -56,10 +51,10 @@ cargo clippy --lib --no-default-features
 
 ### Frontend
 ```bash
-npx tsc --noEmit    # type-check only
+npm run check       # Prettier, ESLint, type-check, and production build
 ```
 
-There is no configured lint/format command for the frontend beyond `tsc`.
+Frontend standards are configured through ESLint and Prettier; `npm run check` is the canonical local and CI command.
 
 ## Live integration tests
 
