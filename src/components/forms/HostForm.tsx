@@ -34,6 +34,26 @@ const COLOR_PRESETS = [
   "#a855f7", // purple
 ];
 
+function FormSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="mb-4">
+        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">{title}</h3>
+        {description && <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">{description}</p>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
 export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnect }: HostFormProps) {
   const groups = useHostsStore((s) => s.groups);
   const identities = useHostsStore((s) => s.identities);
@@ -228,17 +248,26 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
   }
 
   return (
-    <form onSubmit={handleSubmit} noValidate>
+    <form onSubmit={handleSubmit} noValidate className="space-y-4 pb-2">
+      <div className="rounded-2xl bg-indigo-50 p-4 dark:bg-indigo-950/40">
+        <p className="text-sm font-semibold text-indigo-950 dark:text-indigo-100">
+          {host ? "Update this server's connection settings." : "Enter the details you use to log in over SSH."}
+        </p>
+        <p className="mt-1 text-xs leading-5 text-indigo-700 dark:text-indigo-300">
+          Passwords, private keys, and passphrases are encrypted before they are stored.
+        </p>
+      </div>
+
+      <FormSection title="Server details" description="Name the server and enter its network address.">
       <label className={labelClass}>
-        Label
+        Server name
         <RequiredMark />
       </label>
       <input
-        autoFocus
         value={label}
         onChange={(e) => setLabel(e.currentTarget.value)}
         className={inputClass}
-        placeholder="e.g. prod-web-1"
+        placeholder="e.g. prod-api-01"
         required
       />
       <FieldError message={fieldErrors.label} />
@@ -253,6 +282,7 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
             value={hostname}
             onChange={(e) => setHostname(e.currentTarget.value)}
             className={inputClass}
+            placeholder="203.0.113.10 or server.example.com"
             required
           />
           <FieldError message={fieldErrors.hostname} />
@@ -281,23 +311,25 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
         onChange={(e) => setGroupId(e.currentTarget.value)}
         className={selectClass}
       >
-        <option value="">(none - top level)</option>
+        <option value="">Ungrouped</option>
         {groups.map((g) => (
           <option key={g.id} value={g.id}>
             {g.name}
           </option>
         ))}
       </select>
+      </FormSection>
 
+      <FormSection title="Appearance and organization" description="Make this server easy to recognize and find.">
       <label className={labelClass}>Color (optional)</label>
-      <div className="flex items-center gap-2">
+      <div className="mb-4 flex items-center gap-2">
         <button
           type="button"
           onClick={() => setColor(null)}
           title="No color"
           className={`flex h-6 w-6 items-center justify-center rounded-full border text-xs ${
             color === null
-              ? "border-teal-500 text-teal-600 dark:text-teal-400"
+              ? "border-indigo-500 text-indigo-600 dark:text-indigo-400"
               : "border-slate-300 text-slate-400 dark:border-slate-700"
           }`}
         >
@@ -320,14 +352,14 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
       </div>
 
       <label className={labelClass}>Icon (optional)</label>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={() => setIcon(null)}
           title="No icon"
           className={`flex h-7 w-7 items-center justify-center rounded-lg border text-xs ${
             icon === null
-              ? "border-teal-500 text-teal-600 dark:text-teal-400"
+              ? "border-indigo-500 text-indigo-600 dark:text-indigo-400"
               : "border-slate-300 text-slate-400 hover:border-slate-400 dark:border-slate-700"
           }`}
         >
@@ -341,7 +373,7 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
             title={i.label}
             className={`flex h-7 w-7 items-center justify-center rounded-lg border ${
               icon === i.key
-                ? "border-teal-500 text-teal-600 dark:text-teal-400"
+                ? "border-indigo-500 text-indigo-600 dark:text-indigo-400"
                 : "border-slate-300 text-slate-500 hover:border-slate-400 dark:border-slate-700 dark:text-slate-400"
             }`}
           >
@@ -366,7 +398,7 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
               title={i.label}
               className={`flex h-7 w-7 items-center justify-center rounded-lg border ${
                 icon === i.key
-                  ? "border-teal-500"
+                  ? "border-indigo-500"
                   : "border-slate-300 hover:border-slate-400 dark:border-slate-700"
               }`}
             >
@@ -378,21 +410,22 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
 
       <label className={labelClass}>Tags (optional)</label>
       <TagInput selectedTagIds={tagIds} onChange={setTagIds} />
+      </FormSection>
 
-      <label className={labelClass}>Credentials</label>
+      <FormSection title="SSH credentials" description="Use new credentials for this server or attach a saved identity.">
       {identities.length > 0 && (
         <div className="mb-4 flex rounded-lg border border-slate-300 p-1 text-sm dark:border-slate-700">
           <button
             type="button"
             onClick={() => setIdentityMode("new")}
-            className={`flex-1 rounded px-3 py-1.5 ${identityMode === "new" ? "bg-teal-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
+            className={`flex-1 rounded-md px-3 py-1.5 ${identityMode === "new" ? "bg-indigo-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
           >
             New credentials
           </button>
           <button
             type="button"
             onClick={() => setIdentityMode("existing")}
-            className={`flex-1 rounded px-3 py-1.5 ${identityMode === "existing" ? "bg-teal-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
+            className={`flex-1 rounded-md px-3 py-1.5 ${identityMode === "existing" ? "bg-indigo-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
           >
             Use saved identity
           </button>
@@ -430,7 +463,7 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
                 type="radio"
                 checked={authMethod === "password"}
                 onChange={() => setAuthMethod("password")}
-                className="accent-teal-600"
+                className="accent-indigo-600"
               />
               Password
             </label>
@@ -439,7 +472,7 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
                 type="radio"
                 checked={authMethod === "private_key"}
                 onChange={() => setAuthMethod("private_key")}
-                className="accent-teal-600"
+                className="accent-indigo-600"
               />
               Private key
             </label>
@@ -461,14 +494,14 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
                   <button
                     type="button"
                     onClick={() => setKeyMode("existing")}
-                    className={`flex-1 rounded px-2 py-1.5 ${keyMode === "existing" ? "bg-teal-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
+                    className={`flex-1 rounded-md px-2 py-1.5 ${keyMode === "existing" ? "bg-indigo-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
                   >
                     Use saved key
                   </button>
                   <button
                     type="button"
                     onClick={() => setKeyMode("import")}
-                    className={`flex-1 rounded px-2 py-1.5 ${keyMode === "import" ? "bg-teal-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
+                    className={`flex-1 rounded-md px-2 py-1.5 ${keyMode === "import" ? "bg-indigo-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
                   >
                     Import new key
                   </button>
@@ -507,7 +540,7 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
                     <button
                       type="button"
                       onClick={handleBrowseKey}
-                      className="text-xs text-teal-600 hover:underline dark:text-teal-400"
+                      className="text-xs text-indigo-600 hover:underline dark:text-indigo-400"
                     >
                       Browse…
                     </button>
@@ -534,9 +567,10 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
           )}
         </div>
       )}
+      </FormSection>
 
-      <label className={labelClass}>VPN (optional)</label>
-      <p className="mb-2 -mt-1 text-xs text-slate-400">
+      <FormSection title="VPN (optional)" description="Connect a VPN automatically before opening this server.">
+      <p className="mb-3 text-xs text-slate-400">
         If this host is only reachable over a VPN, assign a profile here - connecting will bring
         the VPN up first automatically.
       </p>
@@ -544,14 +578,14 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
         <button
           type="button"
           onClick={() => setVpnMode("none")}
-          className={`flex-1 rounded px-2 py-1.5 ${vpnMode === "none" ? "bg-teal-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
+          className={`flex-1 rounded-md px-2 py-1.5 ${vpnMode === "none" ? "bg-indigo-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
         >
           None
         </button>
         <button
           type="button"
           onClick={() => setVpnMode("new")}
-          className={`flex-1 rounded px-2 py-1.5 ${vpnMode === "new" ? "bg-teal-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
+          className={`flex-1 rounded-md px-2 py-1.5 ${vpnMode === "new" ? "bg-indigo-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
         >
           Upload profile
         </button>
@@ -559,7 +593,7 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
           <button
             type="button"
             onClick={() => setVpnMode("existing")}
-            className={`flex-1 rounded px-2 py-1.5 ${vpnMode === "existing" ? "bg-teal-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
+            className={`flex-1 rounded-md px-2 py-1.5 ${vpnMode === "existing" ? "bg-indigo-600 text-white" : "text-slate-600 dark:text-slate-300"}`}
           >
             Use saved profile
           </button>
@@ -598,7 +632,7 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
             <button
               type="button"
               onClick={handleBrowseVpn}
-              className="text-xs text-teal-600 hover:underline dark:text-teal-400"
+              className="text-xs text-indigo-600 hover:underline dark:text-indigo-400"
             >
               Browse…
             </button>
@@ -616,7 +650,7 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
               type="checkbox"
               checked={vpnAvoidDefaultRoute}
               onChange={(e) => setVpnAvoidDefaultRoute(e.currentTarget.checked)}
-              className="mt-0.5 accent-teal-600"
+              className="mt-0.5 accent-indigo-600"
             />
             <span>
               Don&apos;t let this VPN take over my default internet route
@@ -649,18 +683,22 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
           />
         </div>
       )}
+      </FormSection>
 
-      <label className={labelClass}>Notes</label>
+      <FormSection title="Notes" description="Keep environment details or reminders with this server.">
+      <label className={labelClass}>Notes (optional)</label>
       <textarea
         value={notes}
         onChange={(e) => setNotes(e.currentTarget.value)}
         className={`${inputClass} h-20`}
+        placeholder="Environment, owner, maintenance notes…"
       />
+      </FormSection>
 
       {error && <p className={errorClass}>{error}</p>}
 
-      <div className="flex gap-2">
-        <button type="submit" value="save" disabled={submitting} className={`${primaryButtonClass} flex-1`}>
+      <div className="flex flex-col-reverse gap-2 sm:flex-row">
+        <button type="submit" value="save" disabled={submitting} className={`${primaryButtonClass} flex-1 rounded-xl bg-indigo-600 py-2.5 hover:bg-indigo-700`}>
           {submitting ? "Saving…" : host ? "Save changes" : "Create host"}
         </button>
         {onSaveAndConnect && (
@@ -668,7 +706,7 @@ export default function HostForm({ host, defaultGroupId, onDone, onSaveAndConnec
             type="submit"
             value="connect"
             disabled={submitting}
-            className="flex-1 rounded-md border border-teal-600 px-3 py-2 text-sm font-medium text-teal-700 transition hover:bg-teal-50 disabled:opacity-50 dark:text-teal-400 dark:hover:bg-teal-950"
+            className="flex-1 rounded-xl border border-indigo-300 bg-white px-3 py-2.5 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-50 disabled:opacity-50 dark:border-indigo-800 dark:bg-slate-900 dark:text-indigo-300 dark:hover:bg-indigo-950"
           >
             {submitting ? "Saving…" : "Save & Connect"}
           </button>

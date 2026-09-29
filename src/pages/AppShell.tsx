@@ -65,6 +65,7 @@ export default function AppShell() {
   const loaded = useHostsStore((s) => s.loaded);
   const hosts = useHostsStore((s) => s.hosts);
   const groups = useHostsStore((s) => s.groups);
+  const identities = useHostsStore((s) => s.identities);
   const exportHostsCsv = useHostsStore((s) => s.exportHostsCsv);
   const importHostsCsv = useHostsStore((s) => s.importHostsCsv);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -76,6 +77,8 @@ export default function AppShell() {
     openContextMenu: openGridContextMenu,
     menu: gridContextMenu,
     confirmDialog: gridContextMenuConfirmDialog,
+    deleteError: gridDeleteError,
+    handleDeleteHost: deleteGridHost,
   } = useHostContextMenu(
     (host) => {
       setSelectedHostId(host.id);
@@ -237,6 +240,8 @@ export default function AppShell() {
   const contextHostSessionOpen = contextHost
     ? openSessions.some((s) => s.host.id === contextHost.id)
     : false;
+  const dockedPanelVisible =
+    rightPanelVisible && (isInlineFormModal(modal) || snippetsDrawerOpen || contextHost !== null);
   // The host tree stays visible while a session is focused (so you can open
   // another host without leaving it), but hides for the other 4 sidebar
   // destinations so they read as clean, single-purpose views.
@@ -506,9 +511,11 @@ export default function AppShell() {
 
   function hostMatchesGridSearch(host: Host): boolean {
     if (!hostsGridQuery) return true;
+    const identity = identities.find((candidate) => candidate.id === host.identity_id);
     return (
       host.label.toLowerCase().includes(hostsGridQuery) ||
       host.hostname.toLowerCase().includes(hostsGridQuery) ||
+      identity?.username.toLowerCase().includes(hostsGridQuery) ||
       host.tags.some((t) => t.label.toLowerCase().includes(hostsGridQuery))
     );
   }
@@ -542,46 +549,59 @@ export default function AppShell() {
           const isCollapsed = !hostsGridQuery && collapsedGroups.has(group.id);
           const directCount = hosts.filter((h) => h.group_id === group.id).length;
           return (
-            <div key={group.id} className="mb-3">
+            <section key={group.id} className="mb-6">
               <button
                 type="button"
                 onClick={() => toggleGroupCollapsed(group.id)}
-                className="mb-2 flex w-full items-center gap-2 rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-200 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                className="mb-3 flex w-full items-center gap-2 rounded-xl px-1 py-1 text-left text-xs font-bold uppercase tracking-[0.12em] text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"
               >
                 <span className="w-3 shrink-0 text-xs text-slate-400">{isCollapsed ? "▸" : "▾"}</span>
-                <NavIcon icon="folder" className="h-4 w-4 shrink-0 text-slate-400" />
+                <NavIcon icon="folder" className="h-4 w-4 shrink-0 text-indigo-400" />
                 <span className="truncate">{group.name}</span>
-                <span className="ml-auto shrink-0 text-xs font-normal text-slate-400">
+                <span className="ml-auto shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold tracking-normal text-slate-400 dark:bg-slate-800">
                   {directCount} host{directCount === 1 ? "" : "s"}
                 </span>
               </button>
               {!isCollapsed && (
-                <div className="ml-5 border-l border-slate-200 pl-3 dark:border-slate-800">
+                <div className="ml-1 border-l border-slate-200 pl-4 dark:border-slate-800">
                   {renderGroupSection(group.id)}
                 </div>
               )}
-            </div>
+            </section>
           );
         })}
         {childHosts.length > 0 && (
-          <div className="mb-3 grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
-            {childHosts.map((h) => (
-              <HostCard
-                key={h.id}
-                host={h}
-                isSelected={selectedHostId === h.id}
-                isOpen={openSessions.some((s) => s.host.id === h.id)}
-                onSelect={() => setSelectedHostId(h.id)}
-                onConnect={() => handleConnect(h)}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setSelectedHostId(h.id);
-                  openGridContextMenu(h, e);
-                }}
-              />
-            ))}
-          </div>
+          <>
+            {parentId === null && groups.length > 0 && (
+              <h2 className="mb-3 text-xs font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
+                Ungrouped
+              </h2>
+            )}
+            <div className="mb-6 grid grid-cols-[repeat(auto-fill,minmax(270px,1fr))] gap-3">
+              {childHosts.map((h) => (
+                <HostCard
+                  key={h.id}
+                  host={h}
+                  identity={identities.find((identity) => identity.id === h.identity_id)}
+                  isSelected={selectedHostId === h.id}
+                  isOpen={openSessions.some((s) => s.host.id === h.id)}
+                  onSelect={() => setSelectedHostId(h.id)}
+                  onConnect={() => handleConnect(h)}
+                  onEdit={() => {
+                    setSelectedHostId(h.id);
+                    openModal({ kind: "host", host: h });
+                  }}
+                  onDelete={() => deleteGridHost(h)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setSelectedHostId(h.id);
+                    openGridContextMenu(h, e);
+                  }}
+                />
+              ))}
+            </div>
+          </>
         )}
       </>
     );
@@ -604,7 +624,7 @@ export default function AppShell() {
   }
 
   return (
-    <div className="flex h-full bg-slate-50 dark:bg-slate-900">
+    <div className="relative flex h-full overflow-hidden bg-slate-50 dark:bg-slate-900">
       <ActivityBar
         activeTab={mainView.type === "manage" ? mainView.tab : null}
         onSelect={(tab) => handleActivitySelect(tab as ManageTab)}
@@ -886,50 +906,109 @@ export default function AppShell() {
             }`}
           >
             {mainView.type === "manage" && mainView.tab === "hosts" && (
-              hosts.length === 0 && groups.length === 0 ? (
-                <p className="text-sm text-slate-400">
-                  Select a host from the sidebar, or create a new one.
-                </p>
-              ) : (
-                <>
-                  <div className="mb-3 flex items-center gap-2">
+              <div className="mx-auto w-full max-w-6xl">
+                <header className="mb-7 flex flex-wrap items-start gap-4">
+                  <div className="mr-auto min-w-48">
+                    <h1 className="text-2xl font-extrabold tracking-tight text-slate-950 dark:text-white">Servers</h1>
+                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                      {hosts.length === 0
+                        ? "Add your first server to connect over SSH."
+                        : `${hosts.length} saved server${hosts.length === 1 ? "" : "s"}`}
+                    </p>
+                  </div>
+
+                  <div className="relative min-w-52 flex-1 sm:max-w-72">
+                    <svg
+                      viewBox="0 0 20 20"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.7"
+                      aria-hidden="true"
+                      className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                    >
+                      <circle cx="8.5" cy="8.5" r="5.5" />
+                      <path d="m13 13 4 4" />
+                    </svg>
                     <input
                       value={hostsGridSearch}
                       onChange={(e) => setHostsGridSearch(e.currentTarget.value)}
-                      placeholder="Search hosts…"
-                      className="w-64 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 outline-none focus:border-teal-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      placeholder="Search servers"
+                      aria-label="Search servers"
+                      className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-900 shadow-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                     />
-                    {groups.length > 0 && (
-                      <div className="ml-auto flex shrink-0 gap-2 text-xs">
-                        <button
-                          type="button"
-                          onClick={() => setCollapsedGroups(new Set())}
-                          className="rounded-lg border border-slate-300 px-2 py-1 font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                        >
-                          Expand all
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setCollapsedGroups(new Set(groups.map((g) => g.id)))}
-                          className="rounded-lg border border-slate-300 px-2 py-1 font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                        >
-                          Collapse all
-                        </button>
-                      </div>
-                    )}
                   </div>
-                  <p className="mb-3 text-xs text-slate-400">
-                    Click to select, double-click to connect.
+
+                  <button
+                    type="button"
+                    onClick={() => openModal({ kind: "host" })}
+                    className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm shadow-indigo-600/20 hover:bg-indigo-700"
+                  >
+                    + Add server
+                  </button>
+                </header>
+
+                {groups.length > 0 && hosts.length > 0 && (
+                  <div className="mb-5 flex items-center justify-end gap-2 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setCollapsedGroups(new Set())}
+                      className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-semibold text-slate-500 hover:border-indigo-300 hover:text-indigo-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                    >
+                      Expand all
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCollapsedGroups(new Set(groups.map((g) => g.id)))}
+                      className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-semibold text-slate-500 hover:border-indigo-300 hover:text-indigo-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                    >
+                      Collapse all
+                    </button>
+                  </div>
+                )}
+
+                {hosts.length === 0 ? (
+                  <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-white/60 px-6 py-16 text-center dark:border-slate-800 dark:bg-slate-900/40">
+                    <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/70 dark:text-indigo-300">
+                      <NavIcon icon="hosts" className="h-7 w-7" />
+                    </div>
+                    <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">No servers yet</h2>
+                    <p className="mx-auto mt-1 max-w-sm text-sm text-slate-500 dark:text-slate-400">
+                      Save a host, choose password or private-key authentication, and open a full SSH terminal.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => openModal({ kind: "host" })}
+                      className="mt-5 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-700"
+                    >
+                      Add server
+                    </button>
+                  </div>
+                ) : hostsGridQuery && !hosts.some(hostMatchesGridSearch) ? (
+                  <div className="rounded-2xl border border-slate-200 bg-white px-6 py-12 text-center dark:border-slate-800 dark:bg-slate-900">
+                    <h2 className="font-bold text-slate-900 dark:text-slate-100">No matching servers</h2>
+                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                      Try a different name, address, username, or tag.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setHostsGridSearch("")}
+                      className="mt-4 text-sm font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400"
+                    >
+                      Clear search
+                    </button>
+                  </div>
+                ) : (
+                  renderGroupSection(null)
+                )}
+
+                {gridDeleteError && (
+                  <p className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-300">
+                    {gridDeleteError}
                   </p>
-                  {hostsGridQuery && !hosts.some(hostMatchesGridSearch) ? (
-                    <p className="text-sm text-slate-400">No hosts match "{hostsGridSearch.trim()}".</p>
-                  ) : (
-                    renderGroupSection(null)
-                  )}
-                  {gridContextMenu}
-                  {gridContextMenuConfirmDialog}
-                </>
-              )
+                )}
+                {gridContextMenu}
+                {gridContextMenuConfirmDialog}
+              </div>
             )}
             {mainView.type === "manage" && mainView.tab === "identities" && (
               <IdentitiesPanel
@@ -988,23 +1067,28 @@ export default function AppShell() {
         </div>
       </main>
 
-      {rightPanelVisible && (
-        <ResizeHandle
-          panelSide="right"
-          width={rightPanelWidth}
-          onResize={setRightPanelWidth}
-          onReset={() => setRightPanelWidth(DEFAULT_RIGHT_PANEL_WIDTH)}
-          onDragStateChange={setIsDraggingRightPanel}
-        />
+      {dockedPanelVisible && (
+        <div className="hidden lg:block">
+          <ResizeHandle
+            panelSide="right"
+            width={rightPanelWidth}
+            onResize={setRightPanelWidth}
+            onReset={() => setRightPanelWidth(DEFAULT_RIGHT_PANEL_WIDTH)}
+            onDragStateChange={setIsDraggingRightPanel}
+          />
+        </div>
       )}
       <div
-        style={{ width: rightPanelVisible ? rightPanelWidth : 0 }}
-        aria-hidden={!rightPanelVisible}
-        className={`shrink-0 overflow-hidden ${
+        style={{
+          width: dockedPanelVisible ? rightPanelWidth : 0,
+          maxWidth: "calc(100vw - 3rem)",
+        }}
+        aria-hidden={!dockedPanelVisible}
+        className={`absolute inset-y-0 right-0 z-40 shrink-0 overflow-hidden border-l border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-950 lg:static lg:z-auto lg:border-l-0 lg:shadow-none ${
           isDraggingRightPanel ? "" : "transition-[width] duration-150 ease-out"
         }`}
       >
-        <div style={{ width: rightPanelWidth }} className="h-full">
+        <div className="h-full w-full">
           {isInlineFormModal(modal) ? (
             <InlineFormPanel
               modal={modal}

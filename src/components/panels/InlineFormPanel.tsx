@@ -26,7 +26,7 @@ function titleFor(modal: InlineFormModalState): string {
     case "group":
       return modal.group ? "Edit group" : "New group";
     case "host":
-      return modal.host ? "Edit host" : "New host";
+      return modal.host ? "Edit server" : "Add server";
     case "identity":
       return modal.identity ? "Edit identity" : "New identity";
     case "key":
@@ -52,17 +52,17 @@ interface InlineFormPanelProps {
 export default function InlineFormPanel({ modal, onDone, onSaveAndConnectHost }: InlineFormPanelProps) {
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">{titleFor(modal)}</h2>
+      <div className="flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4 dark:border-slate-800 dark:bg-slate-950">
+        <h2 className="text-base font-bold tracking-tight text-slate-900 dark:text-slate-50">{titleFor(modal)}</h2>
         <button
           type="button"
           onClick={onDone}
-          className="rounded-lg px-2 py-1 text-sm text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+          className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
         >
           Cancel
         </button>
       </div>
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto bg-slate-50 p-4 dark:bg-slate-950/50">
         {modal.kind === "group" && (
           <GroupForm group={modal.group} defaultParentId={modal.parentId} onDone={onDone} />
         )}
