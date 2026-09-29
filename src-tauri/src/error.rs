@@ -57,6 +57,8 @@ pub enum AppError {
     Vpn(String),
     #[error("AI error: {0}")]
     Ai(String),
+    #[error("update error: {0}")]
+    Update(String),
 }
 
 // Tauri serializes command errors to the frontend as JSON; a plain string

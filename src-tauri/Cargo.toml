@@ -51,3 +51,5 @@ csv = "1"
 reqwest = { version = "0.12", features = ["json", "multipart"] }
 sha2 = "0.10"
 urlencoding = "2"
+minisign-verify = "0.2.5"
+semver = "1"

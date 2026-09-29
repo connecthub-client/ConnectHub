@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Debian and RPM installations can now download, cryptographically verify, install, and restart into a new ConnectHub release from the update prompt. The system asks for administrator authorization only when the verified package is ready to install.
+
 ## [2.2.2] — 2026-09-29
 
 ### Changed
