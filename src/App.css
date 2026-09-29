@@ -99,3 +99,11 @@ textarea,
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>");
   padding-right: 2.25rem;
 }
+
+/* Dense enough for infrastructure inventories while keeping a hard seven-column
+   ceiling so cards never become too narrow or excessively numerous on ultrawide screens. */
+.server-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: 0.625rem;
+}
