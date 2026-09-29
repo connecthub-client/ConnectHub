@@ -549,11 +549,11 @@ export default function AppShell() {
           const isCollapsed = !hostsGridQuery && collapsedGroups.has(group.id);
           const directCount = hosts.filter((h) => h.group_id === group.id).length;
           return (
-            <section key={group.id} className="mb-6">
+            <section key={group.id} className="mb-4">
               <button
                 type="button"
                 onClick={() => toggleGroupCollapsed(group.id)}
-                className="mb-3 flex w-full items-center gap-2 rounded-xl px-1 py-1 text-left text-xs font-bold uppercase tracking-[0.12em] text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"
+                className="mb-2 flex w-full items-center gap-2 rounded-xl px-1 py-1 text-left text-xs font-bold uppercase tracking-[0.12em] text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"
               >
                 <span className="w-3 shrink-0 text-xs text-slate-400">{isCollapsed ? "▸" : "▾"}</span>
                 <NavIcon icon="folder" className="h-4 w-4 shrink-0 text-indigo-400" />
@@ -577,7 +577,7 @@ export default function AppShell() {
                 Ungrouped
               </h2>
             )}
-            <div className="mb-6 grid grid-cols-[repeat(auto-fill,minmax(270px,1fr))] gap-3">
+            <div className="server-card-grid mb-4">
               {childHosts.map((h) => (
                 <HostCard
                   key={h.id}
@@ -624,7 +624,7 @@ export default function AppShell() {
   }
 
   return (
-    <div className="relative flex h-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-[#080d1a] dark:text-slate-100">
+    <div className="relative flex h-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <ActivityBar
         activeTab={mainView.type === "manage" ? mainView.tab : null}
         onSelect={(tab) => handleActivitySelect(tab as ManageTab)}
@@ -909,7 +909,7 @@ export default function AppShell() {
             }`}
           >
             {mainView.type === "manage" && mainView.tab === "hosts" && (
-              <div className="mx-auto w-full max-w-6xl">
+              <div className="server-workspace mx-auto w-full max-w-[1440px]">
                 <header className="mb-7 flex flex-wrap items-start gap-4">
                   <div className="mr-auto min-w-48">
                     <h1 className="text-2xl font-extrabold tracking-tight text-slate-950 dark:text-white">Servers</h1>

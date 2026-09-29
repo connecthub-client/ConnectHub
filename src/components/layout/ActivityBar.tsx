@@ -42,7 +42,7 @@ function ActivityButton({
           : "text-slate-500 hover:bg-white hover:text-indigo-600 hover:shadow-sm dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-indigo-300"
       }`}
     >
-      {active && <span className="absolute -left-2.5 h-6 w-1 rounded-r-full bg-indigo-500" />}
+      {active && <span className="absolute -left-2.5 h-6 w-1 rounded-r-full bg-orange-500" />}
       <NavIcon icon={item.icon} className="h-5 w-5" />
     </button>
   );
