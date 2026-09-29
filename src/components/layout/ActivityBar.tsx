@@ -36,12 +36,13 @@ function ActivityButton({
       title={item.label}
       aria-label={item.label}
       onClick={() => onSelect(item.tab)}
-      className={`flex h-10 w-10 items-center justify-center rounded-lg ${
+      className={`group relative flex h-11 w-11 items-center justify-center rounded-xl ${
         active
-          ? "bg-teal-600 text-white shadow-md shadow-teal-600/30"
-          : "text-slate-500 hover:bg-slate-200 dark:text-slate-400 dark:hover:bg-slate-800"
+          ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/25"
+          : "text-slate-500 hover:bg-white hover:text-indigo-600 hover:shadow-sm dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-indigo-300"
       }`}
     >
+      {active && <span className="absolute -left-2.5 h-6 w-1 rounded-r-full bg-indigo-500" />}
       <NavIcon icon={item.icon} className="h-5 w-5" />
     </button>
   );
@@ -58,13 +59,16 @@ export default function ActivityBar({
   onToggleSidebar,
 }: ActivityBarProps) {
   return (
-    <nav className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-slate-200 bg-slate-100 py-2 dark:border-slate-800 dark:bg-slate-950">
+    <nav className="flex w-16 shrink-0 flex-col items-center gap-1.5 border-r border-slate-200/80 bg-slate-100/90 py-3 dark:border-slate-800 dark:bg-slate-950">
+      <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-xs font-black tracking-tight text-white shadow-lg shadow-indigo-600/25" title="ConnectHub">
+        CH
+      </div>
       <button
         type="button"
         onClick={onToggleSidebar}
         title={leftSidebarVisible ? "Hide sidebar" : "Show sidebar"}
         aria-label={leftSidebarVisible ? "Hide sidebar" : "Show sidebar"}
-        className="mb-1 flex h-7 w-10 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-200 hover:text-teal-600 dark:hover:bg-slate-800 dark:hover:text-teal-400"
+        className="mb-1 flex h-8 w-11 items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-indigo-600 dark:hover:bg-slate-800 dark:hover:text-indigo-400"
       >
         <NavIcon icon={sidebarToggleIcon("left", leftSidebarVisible)} className="h-4 w-4" />
       </button>

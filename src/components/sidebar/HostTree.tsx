@@ -126,8 +126,8 @@ export default function HostTree(props: HostTreeProps) {
     return (
       <div
         key={host.id}
-        className={`group flex items-center justify-between rounded px-2 py-1 text-sm hover:bg-slate-100 dark:hover:bg-slate-800 ${
-          props.selectedHostId === host.id ? "bg-teal-50 dark:bg-teal-950" : ""
+        className={`group my-0.5 flex items-center justify-between rounded-xl px-2 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800 ${
+          props.selectedHostId === host.id ? "bg-indigo-50 ring-1 ring-inset ring-indigo-100 dark:bg-indigo-950/60 dark:ring-indigo-900" : ""
         }`}
         style={{ paddingLeft: `${depth * 16 + 24}px` }}
       >
@@ -144,7 +144,7 @@ export default function HostTree(props: HostTreeProps) {
             openContextMenu(host, e);
           }}
           title={host.identity_id ? "Double-click to connect" : undefined}
-          className="flex flex-1 items-center gap-1.5 text-left text-slate-700 dark:text-slate-300"
+          className="flex min-w-0 flex-1 items-center gap-2 text-left text-slate-700 dark:text-slate-300"
         >
           {host.icon ? (
             <HostIcon
@@ -166,8 +166,8 @@ export default function HostTree(props: HostTreeProps) {
               openHostIds.has(host.id) ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-700"
             }`}
           />
-          <span className="truncate">{host.label}</span>
-          <span className="shrink-0 text-xs text-slate-400">{host.hostname}</span>
+          <span className="min-w-0 flex-1 truncate font-medium">{host.label}</span>
+          <span className="max-w-20 truncate text-[11px] text-slate-400">{host.hostname}</span>
         </button>
         <div className="flex shrink-0 items-center gap-1">
           <button
@@ -187,17 +187,17 @@ export default function HostTree(props: HostTreeProps) {
               type="button"
               title="Edit host"
               onClick={() => props.onEditHost(host)}
-              className="rounded px-1 text-xs text-slate-500 hover:text-teal-600"
+              className="rounded-md px-1.5 py-0.5 text-xs text-slate-400 hover:bg-white hover:text-indigo-600 dark:hover:bg-slate-700"
             >
-              edit
+              Edit
             </button>
             <button
               type="button"
               title="Delete host"
               onClick={() => handleDeleteHost(host)}
-              className="rounded px-1 text-xs text-slate-500 hover:text-red-600"
+              className="rounded-md px-1.5 py-0.5 text-xs text-slate-400 hover:bg-white hover:text-red-600 dark:hover:bg-slate-700"
             >
-              del
+              Delete
             </button>
           </div>
         </div>
@@ -215,7 +215,7 @@ export default function HostTree(props: HostTreeProps) {
         {childGroups.map((group) => (
           <div key={group.id}>
             <div
-              className="group flex items-center justify-between rounded px-2 py-1 text-sm hover:bg-slate-100 dark:hover:bg-slate-800"
+              className="group my-0.5 flex items-center justify-between rounded-xl px-2 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800"
               style={{ paddingLeft: `${depth * 16 + 8}px` }}
             >
               <button
@@ -233,7 +233,7 @@ export default function HostTree(props: HostTreeProps) {
                   type="button"
                   title="New host in this group"
                   onClick={() => props.onNewHost(group.id)}
-                  className="rounded px-1 text-xs text-slate-500 hover:text-teal-600"
+                  className="rounded px-1 text-xs text-slate-500 hover:text-indigo-600"
                 >
                   +host
                 </button>
@@ -241,7 +241,7 @@ export default function HostTree(props: HostTreeProps) {
                   type="button"
                   title="New subgroup"
                   onClick={() => props.onNewSubgroup(group.id)}
-                  className="rounded px-1 text-xs text-slate-500 hover:text-teal-600"
+                  className="rounded px-1 text-xs text-slate-500 hover:text-indigo-600"
                 >
                   +grp
                 </button>
@@ -249,7 +249,7 @@ export default function HostTree(props: HostTreeProps) {
                   type="button"
                   title="Edit group"
                   onClick={() => props.onEditGroup(group)}
-                  className="rounded px-1 text-xs text-slate-500 hover:text-teal-600"
+                  className="rounded px-1 text-xs text-slate-500 hover:text-indigo-600"
                 >
                   edit
                 </button>
@@ -287,7 +287,7 @@ export default function HostTree(props: HostTreeProps) {
       <button
         type="button"
         onClick={() => toggle(id)}
-        className="flex w-full items-center gap-1.5 px-2 py-1 text-left text-xs font-semibold uppercase tracking-wide text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+        className="mt-2 flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400"
       >
         <span className="w-3 text-xs normal-case">{isCollapsed ? "▸" : "▾"}</span>
         <span>{label}</span>
@@ -301,8 +301,8 @@ export default function HostTree(props: HostTreeProps) {
   if (groups.length === 0 && hosts.length === 0) {
     return (
       <>
-        <p className="px-2 py-4 text-sm text-slate-400">
-          No hosts yet. Use "New host" above to add one.
+        <p className="px-2 py-4 text-sm leading-6 text-slate-400">
+          No hosts yet. Use “+ Host” above to add your first server.
         </p>
         {groupConfirmDialog}
         {hostConfirmDialog}
@@ -326,7 +326,7 @@ export default function HostTree(props: HostTreeProps) {
         value={search}
         onChange={(e) => setSearch(e.currentTarget.value)}
         placeholder="Search hosts…"
-        className="mx-2 mb-2 w-[calc(100%-1rem)] rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 outline-none focus:border-teal-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+        className="mx-2 mb-3 w-[calc(100%-1rem)] rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
       />
       {usedTags.length > 0 && (
         <div className="mx-2 mb-2 flex flex-wrap gap-1">
@@ -337,7 +337,7 @@ export default function HostTree(props: HostTreeProps) {
               onClick={() => toggleTagFilter(tag.id)}
               className={`rounded-full border px-2 py-0.5 text-xs ${
                 tagFilter.has(tag.id)
-                  ? "border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-950 dark:text-teal-300"
+                  ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
                   : "border-slate-300 text-slate-500 hover:border-slate-400 dark:border-slate-700 dark:text-slate-400"
               }`}
             >

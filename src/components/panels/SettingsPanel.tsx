@@ -26,6 +26,7 @@ import {
 } from "../../state/settingsStore";
 import { inputClass, labelClass, primaryButtonClass, selectClass } from "../forms/formStyles";
 import { useConfirm } from "../common/useConfirm";
+import { PanelScaffold } from "../common/PanelScaffold";
 
 const THEME_MODES: ThemeMode[] = ["system", "light", "dark"];
 const CURSOR_STYLES: CursorStyle[] = ["block", "bar", "underline"];
@@ -486,10 +487,9 @@ export default function SettingsPanel() {
   const setVaultAutoLockMinutes = useSettingsStore((s) => s.setVaultAutoLockMinutes);
 
   return (
-    <div className="max-w-xl">
-      <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-50">Settings</h2>
-
-      <section className="mb-6">
+    <PanelScaffold title="Settings" description="Personalize your terminal, security, integrations, and application behavior.">
+      <div className="grid max-w-3xl gap-4 [&>section]:mb-0 [&>section]:rounded-2xl [&>section]:border [&>section]:border-slate-200 [&>section]:bg-white [&>section]:p-5 [&>section]:shadow-sm dark:[&>section]:border-slate-800 dark:[&>section]:bg-slate-900">
+      <section>
         <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-200">Appearance</h3>
         <label className={labelClass}>Theme</label>
         <select
@@ -505,7 +505,7 @@ export default function SettingsPanel() {
         </select>
       </section>
 
-      <section className="mb-6">
+      <section>
         <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-200">Terminal</h3>
 
         <label className={labelClass}>Font family</label>
@@ -522,7 +522,7 @@ export default function SettingsPanel() {
           max={24}
           value={terminalFontSize}
           onChange={(e) => setTerminalFontSize(Number(e.target.value))}
-          className="mb-4 w-full accent-teal-600"
+          className="mb-4 w-full accent-indigo-600"
         />
 
         <label className={labelClass}>Cursor style</label>
@@ -565,7 +565,7 @@ export default function SettingsPanel() {
                 : "Off: a dropped terminal session shows an error with a manual Reconnect button"
             }
             className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-              autoReconnectEnabled ? "bg-teal-600" : "bg-slate-300 dark:bg-slate-700"
+              autoReconnectEnabled ? "bg-indigo-600" : "bg-slate-300 dark:bg-slate-700"
             }`}
           >
             <span
@@ -595,7 +595,7 @@ export default function SettingsPanel() {
                 : "Off: use Ctrl/Cmd+C, Ctrl/Cmd+Shift+C, or right-click Copy instead"
             }
             className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-              autoCopyOnSelectEnabled ? "bg-teal-600" : "bg-slate-300 dark:bg-slate-700"
+              autoCopyOnSelectEnabled ? "bg-indigo-600" : "bg-slate-300 dark:bg-slate-700"
             }`}
           >
             <span
@@ -612,7 +612,7 @@ export default function SettingsPanel() {
         </p>
       </section>
 
-      <section className="mb-6">
+      <section>
         <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-200">Security</h3>
         <div className="flex items-center justify-between">
           <span className={labelClass}>Lock after inactivity</span>
@@ -623,7 +623,7 @@ export default function SettingsPanel() {
             aria-label="Lock after inactivity"
             onClick={toggleVaultAutoLock}
             className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-              vaultAutoLockEnabled ? "bg-teal-600" : "bg-slate-300 dark:bg-slate-700"
+              vaultAutoLockEnabled ? "bg-indigo-600" : "bg-slate-300 dark:bg-slate-700"
             }`}
           >
             <span
@@ -653,7 +653,7 @@ export default function SettingsPanel() {
         )}
       </section>
 
-      <section className="mb-6">
+      <section>
         <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-200">Keybindings</h3>
         <div className="divide-y divide-slate-200 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
           {KEYBINDINGS.map((k) => (
@@ -671,6 +671,7 @@ export default function SettingsPanel() {
       <KnownHostsSection />
 
       <AboutSection />
-    </div>
+      </div>
+    </PanelScaffold>
   );
 }

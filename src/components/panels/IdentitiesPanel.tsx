@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Identity } from "../../lib/tauri-bridge";
 import { useHostsStore } from "../../state/hostsStore";
 import { useConfirm } from "../common/useConfirm";
+import { EmptyState, listCardClass, PanelScaffold, primaryActionClass } from "../common/PanelScaffold";
+import { NavIcon } from "../common/navIcons";
 
 interface IdentitiesPanelProps {
   onNew: () => void;
@@ -27,17 +29,17 @@ export default function IdentitiesPanel({ onNew, onEdit }: IdentitiesPanelProps)
   }
 
   return (
-    <div>
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">Identities</h2>
-        <button
+    <PanelScaffold
+      title="Identities"
+      description="Reuse secure sign-in details across your servers without entering them each time."
+      action={<button
           type="button"
           onClick={onNew}
-          className="rounded-lg bg-teal-600 shadow-sm px-3 py-1.5 text-sm font-medium text-white hover:bg-teal-700"
+          className={primaryActionClass}
         >
-          New identity
-        </button>
-      </div>
+          + New identity
+        </button>}
+    >
 
       {deleteError && (
         <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
@@ -46,15 +48,14 @@ export default function IdentitiesPanel({ onNew, onEdit }: IdentitiesPanelProps)
       )}
 
       {identities.length === 0 ? (
-        <p className="text-sm text-slate-400">
-          No identities yet. Identities bundle a username and auth method so you can reuse them
-          across hosts.
-        </p>
+        <EmptyState icon={<NavIcon icon="identities" className="h-7 w-7" />} title="No identities yet" description="Bundle a username and authentication method, then reuse it across multiple servers." action={<button type="button" onClick={onNew} className={primaryActionClass}>Create identity</button>} />
       ) : (
-        <div className="divide-y divide-slate-200 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
+        <div className={`${listCardClass} divide-y divide-slate-100 dark:divide-slate-800`}>
           {identities.map((identity) => (
-            <div key={identity.id} className="flex items-center justify-between px-4 py-2.5">
-              <div>
+            <div key={identity.id} className="flex items-center justify-between gap-4 px-5 py-4 hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/70 dark:text-indigo-300"><NavIcon icon="identities" className="h-5 w-5" /></div>
+                <div className="min-w-0">
                 <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                   {identity.label}
                 </p>
@@ -64,12 +65,13 @@ export default function IdentitiesPanel({ onNew, onEdit }: IdentitiesPanelProps)
                     identity.ssh_key_id &&
                     ` (${keys.find((k) => k.id === identity.ssh_key_id)?.label ?? "unknown key"})`}
                 </p>
+                </div>
               </div>
-              <div className="flex gap-3 text-sm">
+              <div className="flex gap-3 text-sm font-semibold">
                 <button
                   type="button"
                   onClick={() => onEdit(identity)}
-                  className="text-slate-500 hover:text-teal-600"
+                  className="text-slate-500 hover:text-indigo-600"
                 >
                   Edit
                 </button>
@@ -86,7 +88,7 @@ export default function IdentitiesPanel({ onNew, onEdit }: IdentitiesPanelProps)
         </div>
       )}
       {confirmDialog}
-    </div>
+    </PanelScaffold>
   );
 }
 

@@ -24,9 +24,9 @@ export default function AiAssistantDrawer({ host, onClose, onOpenSettings }: AiA
   const hasMessages = useAiStore((s) => (host ? s.getConversation(host.id).messages.length > 0 : false));
 
   return (
-    <aside className="fixed top-4 bottom-4 right-16 z-50 flex w-[25vw] min-w-80 max-w-120 flex-col overflow-hidden rounded-xl border border-slate-300/50 bg-white/90 shadow-2xl backdrop-blur-md dark:border-slate-700/50 dark:bg-slate-950/90">
+    <aside className="fixed top-4 bottom-4 right-18 z-50 flex w-[25vw] min-w-80 max-w-120 flex-col overflow-hidden rounded-2xl border border-white/70 bg-white/95 shadow-2xl shadow-slate-950/25 backdrop-blur-xl dark:border-slate-700 dark:bg-slate-950/95">
       <div className="flex items-center justify-between border-b border-slate-200/50 p-4 dark:border-slate-800/50">
-        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-50">AI Assistant</h2>
+        <div><h2 className="text-base font-extrabold tracking-tight text-slate-900 dark:text-slate-50">AI Assistant</h2><p className="text-[11px] text-slate-400">Context-aware server help</p></div>
         <div className="flex items-center gap-1">
           {host && hasMessages && (
             <button
@@ -56,7 +56,7 @@ export default function AiAssistantDrawer({ host, onClose, onOpenSettings }: AiA
           <button
             type="button"
             onClick={onOpenSettings}
-            className="rounded-md bg-teal-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-teal-700"
+            className="rounded-xl bg-indigo-600 px-3 py-2 text-sm font-bold text-white shadow-sm shadow-indigo-600/20 hover:bg-indigo-700"
           >
             Open Settings
           </button>

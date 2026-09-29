@@ -64,7 +64,7 @@ export default function Modal({ title, onClose, children }: ModalProps) {
   }, []);
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/60 p-4 backdrop-blur-md">
       <div className="fixed inset-0" onClick={onClose} aria-hidden="true" />
       <div
         ref={dialogRef}
@@ -72,17 +72,17 @@ export default function Modal({ title, onClose, children }: ModalProps) {
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="relative z-10 mx-auto my-8 w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-2xl outline-none dark:border-slate-800 dark:bg-slate-900"
+        className="relative z-10 mx-auto my-8 w-full max-w-md overflow-hidden rounded-2xl border border-white/70 bg-white p-6 shadow-2xl shadow-slate-950/25 outline-none dark:border-slate-700 dark:bg-slate-900"
       >
         <div className="mb-4 flex items-center justify-between">
-          <h2 id={titleId} className="text-lg font-semibold text-slate-900 dark:text-slate-50">
+          <h2 id={titleId} className="text-xl font-extrabold tracking-tight text-slate-950 dark:text-white">
             {title}
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close dialog"
-            className="rounded-lg px-2 py-1 text-sm text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-sm text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-white"
           >
             ✕
           </button>
