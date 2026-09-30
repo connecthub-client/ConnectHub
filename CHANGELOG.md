@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.2.5] — 2026-09-30
+
+### Changed
+
+- Server cards now use the full compact surface for server details. Double-click remains the direct connection action, while Edit and Delete remain available from the existing right-click context menu and server details panel.
+
 ## [2.2.4] — 2026-09-29
 
 ### Added

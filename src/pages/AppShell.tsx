@@ -103,7 +103,6 @@ export default function AppShell() {
     menu: gridContextMenu,
     confirmDialog: gridContextMenuConfirmDialog,
     deleteError: gridDeleteError,
-    handleDeleteHost: deleteGridHost,
   } = useHostContextMenu(
     (host) => {
       setSelectedHostId(host.id);
@@ -810,11 +809,6 @@ export default function AppShell() {
                   isOpen={openSessions.some((s) => s.host.id === h.id)}
                   onSelect={() => setSelectedHostId(h.id)}
                   onConnect={() => handleConnect(h)}
-                  onEdit={() => {
-                    setSelectedHostId(h.id);
-                    openModal({ kind: "host", host: h });
-                  }}
-                  onDelete={() => deleteGridHost(h)}
                   onContextMenu={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
