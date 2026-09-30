@@ -12,19 +12,6 @@ interface HostCardProps {
   onContextMenu?: (e: React.MouseEvent) => void;
 }
 
-function authLabel(identity?: Identity): string {
-  switch (identity?.auth_method) {
-    case "private_key":
-      return "Private key";
-    case "agent":
-      return "SSH agent";
-    case "password":
-      return "Password";
-    default:
-      return "No credentials";
-  }
-}
-
 export default function HostCard({
   host,
   identity,
@@ -59,15 +46,15 @@ export default function HostCard({
             ? `Double-click to connect to ${host.label}`
             : `${host.label} needs credentials before connecting`
         }
-        className="grid h-full w-full min-h-0 grid-rows-[1.625rem_1rem] content-center gap-1 overflow-hidden p-2 text-left focus-visible:outline-none"
+        className="grid h-full w-full min-h-0 grid-rows-[2rem_1.125rem] content-center gap-1.5 overflow-hidden p-2.5 text-left focus-visible:outline-none"
       >
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2.5">
           <span
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[10px] font-bold text-white shadow-sm"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white shadow-sm"
             style={{ backgroundColor: accent }}
           >
             {host.icon ? (
-              <HostIcon icon={host.icon} className="h-3.5 w-3.5" />
+              <HostIcon icon={host.icon} className="h-4 w-4" />
             ) : (
               initial
             )}
@@ -75,7 +62,7 @@ export default function HostCard({
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <h3
-                className="truncate text-xs font-bold leading-4 text-slate-900 dark:text-slate-50"
+                className="truncate text-sm font-semibold leading-5 tracking-[-0.01em] text-slate-900 dark:text-slate-50"
                 title={host.label}
               >
                 {host.label}
@@ -86,7 +73,7 @@ export default function HostCard({
               />
             </div>
             <p
-              className="truncate font-mono text-[9px] leading-3 text-slate-500 dark:text-slate-400"
+              className="truncate font-mono text-[11px] leading-4 text-slate-500 dark:text-slate-400"
               title={`${identity?.username ? `${identity.username}@` : ""}${host.hostname}:${host.port}`}
             >
               {identity?.username ? `${identity.username}@` : ""}
@@ -95,21 +82,7 @@ export default function HostCard({
           </div>
         </div>
 
-        <div className="flex h-4 flex-nowrap gap-1 overflow-hidden">
-          <Badge
-            compact
-            className="max-w-full shrink-0 truncate bg-teal-50 text-teal-700 dark:bg-teal-950/70 dark:text-teal-300"
-          >
-            {authLabel(identity)}
-          </Badge>
-          {host.vpn_profile_id && (
-            <Badge
-              compact
-              className="shrink-0 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300"
-            >
-              VPN
-            </Badge>
-          )}
+        <div className="flex h-[18px] min-w-0 flex-nowrap items-center gap-1 overflow-hidden">
           {host.tags.slice(0, 2).map((tag) => (
             <Badge
               compact
@@ -130,6 +103,14 @@ export default function HostCard({
                 .join(", ")}
             >
               +{host.tags.length - 2}
+            </Badge>
+          )}
+          {host.vpn_profile_id && (
+            <Badge
+              compact
+              className="ml-auto shrink-0 bg-emerald-50 px-1.5 font-bold text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300"
+            >
+              VPN
             </Badge>
           )}
         </div>

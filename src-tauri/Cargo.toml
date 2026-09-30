@@ -1,6 +1,6 @@
 [package]
 name = "connecthub"
-version = "2.2.5"
+version = "2.2.6"
 description = "Modern cross-platform SSH client with SSH, SFTP, SCP, per-host VPN, and workspace management."
 authors = ["ConnectHub Contributors"]
 license = "MIT"

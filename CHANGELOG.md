@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.2.6] — 2026-09-30
+
+### Added
+
+- The Servers workspace now shows the five most recently used servers in a single horizontal row and supports persistent drag-and-drop ordering for sibling groups in the main panel.
+
+### Changed
+
+- Server cards use larger, clearer typography, omit authentication-method badges, and keep the VPN indicator aligned to the right edge.
+
 ## [2.2.5] — 2026-09-30
 
 ### Changed

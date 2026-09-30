@@ -24,6 +24,7 @@ interface HostsState {
 
   createGroup: (input: GroupInput) => Promise<Group>;
   updateGroup: (id: string, input: GroupInput) => Promise<Group>;
+  reorderGroups: (groups: Group[]) => Promise<void>;
   deleteGroup: (id: string) => Promise<void>;
 
   createHost: (input: HostInput) => Promise<Host>;
@@ -83,6 +84,19 @@ export const useHostsStore = create<HostsState>((set, get) => ({
     const group = await bridge.groupUpdate(id, input);
     await get().loadAll();
     return group;
+  },
+  reorderGroups: async (groups) => {
+    try {
+      for (const [sortOrder, group] of groups.entries()) {
+        await bridge.groupUpdate(group.id, {
+          parent_id: group.parent_id,
+          name: group.name,
+          sort_order: sortOrder,
+        });
+      }
+    } finally {
+      await get().loadAll();
+    }
   },
   deleteGroup: async (id) => {
     await bridge.groupDelete(id);

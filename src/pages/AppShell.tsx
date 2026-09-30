@@ -89,12 +89,18 @@ export default function AppShell() {
   const hosts = useHostsStore((s) => s.hosts);
   const groups = useHostsStore((s) => s.groups);
   const identities = useHostsStore((s) => s.identities);
+  const reorderGroups = useHostsStore((s) => s.reorderGroups);
   const exportHostsCsv = useHostsStore((s) => s.exportHostsCsv);
   const importHostsCsv = useHostsStore((s) => s.importHostsCsv);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
     new Set(),
   );
   const [hostsGridSearch, setHostsGridSearch] = useState("");
+  const [draggedGroupId, setDraggedGroupId] = useState<string | null>(null);
+  const [groupDropTarget, setGroupDropTarget] = useState<{
+    id: string;
+    position: "before" | "after";
+  } | null>(null);
   // The same Connect/Duplicate/Edit/Delete menu HostTree.tsx's sidebar rows
   // already have, offered here too so right-click behaves identically
   // whether triggered from the sidebar or the center grid.
@@ -729,6 +735,94 @@ export default function AppShell() {
     );
   }
 
+  const recentHosts = hosts
+    .filter((host) => host.last_connected_at !== null)
+    .sort(
+      (a, b) =>
+        Date.parse(b.last_connected_at ?? "") -
+        Date.parse(a.last_connected_at ?? ""),
+    )
+    .slice(0, 5);
+
+  function renderServerCard(host: Host) {
+    return (
+      <HostCard
+        key={host.id}
+        host={host}
+        identity={identities.find(
+          (identity) => identity.id === host.identity_id,
+        )}
+        isSelected={selectedHostId === host.id}
+        isOpen={openSessions.some((session) => session.host.id === host.id)}
+        onSelect={() => setSelectedHostId(host.id)}
+        onConnect={() => handleConnect(host)}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          setSelectedHostId(host.id);
+          openGridContextMenu(host, event);
+        }}
+      />
+    );
+  }
+
+  function handleGroupDragStart(
+    event: React.DragEvent<HTMLElement>,
+    groupId: string,
+  ) {
+    setDraggedGroupId(groupId);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", groupId);
+  }
+
+  function handleGroupDragOver(
+    event: React.DragEvent<HTMLElement>,
+    target: Group,
+  ) {
+    const dragged = groups.find((group) => group.id === draggedGroupId);
+    if (!dragged || dragged.id === target.id) return;
+    if (dragged.parent_id !== target.parent_id) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "move";
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const position =
+      event.clientY < bounds.top + bounds.height / 2 ? "before" : "after";
+    setGroupDropTarget({ id: target.id, position });
+  }
+
+  async function handleGroupDrop(
+    event: React.DragEvent<HTMLElement>,
+    target: Group,
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+    const dragged = groups.find((group) => group.id === draggedGroupId);
+    if (!dragged || dragged.id === target.id) return;
+    if (dragged.parent_id !== target.parent_id) return;
+
+    const siblings = getGroupChildren(
+      groups,
+      hosts,
+      target.parent_id,
+    ).childGroups;
+    const reordered = siblings.filter((group) => group.id !== dragged.id);
+    const targetIndex = reordered.findIndex((group) => group.id === target.id);
+    const insertAt =
+      targetIndex + (groupDropTarget?.position === "after" ? 1 : 0);
+    reordered.splice(insertAt, 0, dragged);
+
+    try {
+      await reorderGroups(reordered);
+    } catch (error) {
+      notify(`Group order could not be saved: ${String(error)}`, "error");
+    } finally {
+      setDraggedGroupId(null);
+      setGroupDropTarget(null);
+    }
+  }
+
   // A group stays visible while searching if any host anywhere inside it
   // (directly, or inside a nested subgroup) matches - mirrors
   // HostTree.tsx's own groupHasMatch, so a match several levels deep isn't
@@ -765,23 +859,61 @@ export default function AppShell() {
           ).length;
           return (
             <section key={group.id} className="mb-4">
-              <button
-                type="button"
-                onClick={() => toggleGroupCollapsed(group.id)}
-                className="mb-2 flex w-full items-center gap-2 rounded-xl px-1 py-1 text-left text-xs font-bold uppercase tracking-[0.12em] text-slate-500 hover:text-teal-600 dark:text-slate-400 dark:hover:text-teal-300"
+              <div
+                draggable={!hostsGridQuery}
+                onDragStart={(event) => handleGroupDragStart(event, group.id)}
+                onDragOver={(event) => handleGroupDragOver(event, group)}
+                onDrop={(event) => handleGroupDrop(event, group)}
+                onDragEnd={() => {
+                  setDraggedGroupId(null);
+                  setGroupDropTarget(null);
+                }}
+                className={`mb-2 flex w-full items-center rounded-lg border-y-2 px-1 transition-colors ${
+                  groupDropTarget?.id === group.id &&
+                  groupDropTarget.position === "before"
+                    ? "border-t-teal-500 border-b-transparent"
+                    : groupDropTarget?.id === group.id &&
+                        groupDropTarget.position === "after"
+                      ? "border-t-transparent border-b-teal-500"
+                      : "border-transparent"
+                } ${hostsGridQuery ? "" : "cursor-grab active:cursor-grabbing"}`}
               >
-                <span className="w-3 shrink-0 text-xs text-slate-400">
-                  {isCollapsed ? "▸" : "▾"}
+                <span
+                  className="mr-1 flex h-6 w-4 shrink-0 items-center justify-center text-slate-400"
+                  title="Drag to reorder this group"
+                  aria-hidden="true"
+                >
+                  <svg
+                    viewBox="0 0 12 18"
+                    className="h-4 w-3"
+                    fill="currentColor"
+                  >
+                    <circle cx="3" cy="4" r="1.2" />
+                    <circle cx="9" cy="4" r="1.2" />
+                    <circle cx="3" cy="9" r="1.2" />
+                    <circle cx="9" cy="9" r="1.2" />
+                    <circle cx="3" cy="14" r="1.2" />
+                    <circle cx="9" cy="14" r="1.2" />
+                  </svg>
                 </span>
-                <NavIcon
-                  icon="folder"
-                  className="h-4 w-4 shrink-0 text-teal-400"
-                />
-                <span className="truncate">{group.name}</span>
-                <span className="ml-auto shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold tracking-normal text-slate-400 dark:bg-slate-800">
-                  {directCount} host{directCount === 1 ? "" : "s"}
-                </span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => toggleGroupCollapsed(group.id)}
+                  className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left text-xs font-bold uppercase tracking-[0.12em] text-slate-500 hover:text-teal-600 dark:text-slate-400 dark:hover:text-teal-300"
+                >
+                  <span className="w-3 shrink-0 text-xs text-slate-400">
+                    {isCollapsed ? "▸" : "▾"}
+                  </span>
+                  <NavIcon
+                    icon="folder"
+                    className="h-4 w-4 shrink-0 text-teal-400"
+                  />
+                  <span className="truncate">{group.name}</span>
+                  <span className="ml-auto shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold tracking-normal text-slate-400 dark:bg-slate-800">
+                    {directCount} host{directCount === 1 ? "" : "s"}
+                  </span>
+                </button>
+              </div>
               {!isCollapsed && (
                 <div className="ml-1 border-l border-slate-200 pl-4 dark:border-slate-800">
                   {renderGroupSection(group.id)}
@@ -798,25 +930,7 @@ export default function AppShell() {
               </h2>
             )}
             <div className="server-card-grid mb-4">
-              {childHosts.map((h) => (
-                <HostCard
-                  key={h.id}
-                  host={h}
-                  identity={identities.find(
-                    (identity) => identity.id === h.identity_id,
-                  )}
-                  isSelected={selectedHostId === h.id}
-                  isOpen={openSessions.some((s) => s.host.id === h.id)}
-                  onSelect={() => setSelectedHostId(h.id)}
-                  onConnect={() => handleConnect(h)}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setSelectedHostId(h.id);
-                    openGridContextMenu(h, e);
-                  }}
-                />
-              ))}
+              {childHosts.map(renderServerCard)}
             </div>
           </>
         )}
@@ -1228,6 +1342,28 @@ export default function AppShell() {
                     + Add server
                   </Button>
                 </header>
+
+                {!hostsGridQuery && recentHosts.length > 0 && (
+                  <section
+                    className="mb-5"
+                    aria-labelledby="recent-servers-heading"
+                  >
+                    <div className="mb-2 flex items-center gap-2">
+                      <h2
+                        id="recent-servers-heading"
+                        className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400"
+                      >
+                        Recently used
+                      </h2>
+                      <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                        Most recent connections
+                      </span>
+                    </div>
+                    <div className="recent-server-row pb-1">
+                      {recentHosts.map(renderServerCard)}
+                    </div>
+                  </section>
+                )}
 
                 {groups.length > 0 && hosts.length > 0 && (
                   <div className="mb-5 flex items-center justify-end gap-2 text-xs">
